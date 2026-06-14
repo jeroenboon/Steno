@@ -1,0 +1,526 @@
+/**
+ * @vitest-environment node
+ *
+ * Tests for ExtractionLoopScheduler (item 0008).
+ *
+ * All tests are fully deterministic: FakeClock controls time,
+ * FakeExtractionProvider controls provider output. No real timers,
+ * no network. (Engineering principle #11.)
+ *
+ * Test coverage mirrors the item 0008 acceptance criteria:
+ *   1. Cadence fires at the time boundary, not per-span
+ *   2. Cadence does NOT fire before the threshold
+ *   3. Turn calls proposeItems with extracted decisions/actions
+ *   4. In-flight guard prevents overlapping turns
+ *   5. Sent spans are not re-sent in the next turn (window advances)
+ *   6. Pause flush fires a turn with pending spans
+ *   7. Pause flush does nothing when no pending spans remain
+ *   8. MeetingEnded final pass fires exactly once
+ *   9. Final pass sets isFinalPass=true and persists Discussion Summaries
+ *  10. Provider error on a rolling turn is swallowed; prior items intact
+ *  11. Provider error on the final pass is swallowed gracefully
+ */
+
+import Database from 'better-sqlite3'
+import { describe, it, expect } from 'vitest'
+
+import type { AgendaItem, Meeting, MeetingId, Participant, TranscriptSpan } from '@shared/domain'
+import { FakeClock, FakeExtractionProvider } from '@shared/providers'
+import type { ExtractionRequest } from '@shared/providers'
+
+import { runMigrations } from '../db/migrate'
+import { actionRepo } from '../db/repos/actionRepo'
+import { decisionRepo } from '../db/repos/decisionRepo'
+import { discussionSummaryRepo } from '../db/repos/discussionSummaryRepo'
+import { meetingRepo } from '../db/repos/meetingRepo'
+import { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
+
+import { ExtractionLoopScheduler } from './extractionLoopScheduler'
+import type { MeetingContext } from './extractionLoopScheduler'
+import { ItemLifecycleService } from './itemLifecycleService'
+
+// ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+
+function openDb(): Database.Database {
+  const db = new Database(':memory:')
+  db.pragma('foreign_keys = ON')
+  runMigrations(db)
+  return db
+}
+
+const MTG_ID: MeetingId = 'mtg-test'
+
+const MEETING: Meeting = {
+  id: MTG_ID,
+  title: 'Sprint planning',
+  state: 'live',
+  paused: false,
+  createdAt: '2026-06-14T09:00:00.000Z',
+  primaryLanguage: 'nl',
+}
+
+const AGENDA: AgendaItem[] = [{ id: 'ai-1', title: 'Q3 review', topic: 'Review Q3 results' }]
+
+const PARTICIPANTS: Participant[] = [{ id: 'p-1', name: 'Jeroen' }]
+
+const CONTEXT: MeetingContext = {
+  agendaItems: AGENDA,
+  participants: PARTICIPANTS,
+  primaryLanguage: 'nl',
+}
+
+/** Build a TranscriptSpan with sensible defaults. */
+function span(id: string, startMs = 0, endMs = 1000): TranscriptSpan {
+  return { id, text: `Span text for ${id}`, startMs, endMs }
+}
+
+/** Build the test harness — one per test. */
+function buildHarness(cadenceMs = 20_000) {
+  const db = openDb()
+  meetingRepo(db).insert(MEETING)
+
+  const clock = new FakeClock(0)
+  const provider = new FakeExtractionProvider()
+  const itemService = new ItemLifecycleService(decisionRepo(db), actionRepo(db))
+  const dsRepo = discussionSummaryRepo(db)
+  const spanRepo = transcriptSpanRepo(db)
+
+  const scheduler = new ExtractionLoopScheduler({
+    provider,
+    itemLifecycleService: itemService,
+    discussionSummaryRepo: dsRepo,
+    spanRepo,
+    clock,
+    cadenceMs,
+  })
+
+  return { db, clock, provider, itemService, dsRepo, spanRepo, scheduler }
+}
+
+// ---------------------------------------------------------------------------
+// 1. Cadence fires at the time boundary, not per-span
+// ---------------------------------------------------------------------------
+
+describe('cadence threshold', () => {
+  it('does not fire a turn when no spans have been added', async () => {
+    const { clock, provider, scheduler } = buildHarness()
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+    expect(provider.callCount()).toBe(0)
+  })
+
+  it('does not fire before the cadence threshold', async () => {
+    const { clock, provider, scheduler } = buildHarness(20_000)
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(19_999)
+    await scheduler.tick(MTG_ID, CONTEXT)
+    expect(provider.callCount()).toBe(0)
+  })
+
+  it('fires exactly once at the cadence boundary', async () => {
+    const { clock, provider, scheduler } = buildHarness(20_000)
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+    expect(provider.callCount()).toBe(1)
+  })
+
+  it('does not double-fire on the same tick', async () => {
+    const { clock, provider, scheduler } = buildHarness(20_000)
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+    await scheduler.tick(MTG_ID, CONTEXT)
+    expect(provider.callCount()).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 2. proposeItems receives extracted decisions/actions
+// ---------------------------------------------------------------------------
+
+describe('proposeItems integration', () => {
+  it('proposed decisions from the provider appear in the DB', async () => {
+    const { db, clock, provider, scheduler } = buildHarness()
+
+    provider.scriptRollingResponse({
+      proposedDecisions: [
+        { rationale: 'Use TypeScript everywhere', sourceSpanId: 's1', agendaItemHint: 'ai-1' },
+      ],
+      proposedActions: [],
+    })
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    const decisions = decisionRepo(db).listByMeeting(MTG_ID)
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0]?.rationale).toBe('Use TypeScript everywhere')
+    expect(decisions[0]?.state).toBe('proposed')
+  })
+
+  it('proposed actions from the provider appear in the DB', async () => {
+    const { db, clock, provider, scheduler } = buildHarness()
+
+    provider.scriptRollingResponse({
+      proposedDecisions: [],
+      proposedActions: [{ description: 'Send the deck', sourceSpanId: 's1', ownerHint: 'Jeroen' }],
+    })
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    const actions = actionRepo(db).listActionsByMeeting(MTG_ID)
+    expect(actions).toHaveLength(1)
+    expect(actions[0]?.state).toBe('proposed')
+  })
+
+  it('passes agenda, participants, and primary language to the provider', async () => {
+    const { clock, provider, scheduler } = buildHarness()
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    expect(provider.callCount()).toBe(1)
+    const req = provider.calls()[0]
+    expect(req?.agendaItems).toEqual(AGENDA)
+    expect(req?.participants).toEqual(PARTICIPANTS)
+    expect(req?.primaryLanguage).toBe('nl')
+    expect(req?.isFinalPass).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 3. In-flight guard: overlapping calls do not double-propose
+// ---------------------------------------------------------------------------
+
+describe('in-flight guard', () => {
+  it('does not start a second turn while one is in flight', async () => {
+    const { clock, provider, scheduler } = buildHarness()
+
+    // Make the provider pause mid-call so we can observe the guard
+    let resolveFirst!: () => void
+    const firstCallFinished = new Promise<void>((r) => (resolveFirst = r))
+    provider.scriptRollingResponse({ proposedDecisions: [], proposedActions: [] })
+
+    // Intercept: replace the underlying extract with a slow version
+    const originalExtract = provider.extract.bind(provider)
+    let callsStarted = 0
+    provider.extract = async (req: ExtractionRequest) => {
+      callsStarted++
+      if (callsStarted === 1) {
+        // Simulate a slow first call — tick passes while it's in flight
+        await new Promise<void>((r) => setTimeout(r, 0))
+      }
+      const result = await originalExtract(req)
+      if (callsStarted === 1) resolveFirst()
+      return result
+    }
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+
+    // Start first turn (don't await yet)
+    const firstTick = scheduler.tick(MTG_ID, CONTEXT)
+    // Immediately try a second tick — the guard must block this
+    const secondTick = scheduler.tick(MTG_ID, CONTEXT)
+
+    await Promise.all([firstTick, secondTick])
+    await firstCallFinished
+
+    // Only one provider call despite two ticks
+    expect(callsStarted).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 4. Windowing: sent spans are not re-sent in the next turn
+// ---------------------------------------------------------------------------
+
+describe('span windowing', () => {
+  it('sends only new spans to the provider on the second turn', async () => {
+    const { clock, provider, scheduler } = buildHarness(10_000)
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+
+    clock.tick(10_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    // Second batch of spans
+    scheduler.addSpan(span('s2', 1001, 2000), MTG_ID)
+    scheduler.addSpan(span('s3', 2001, 3000), MTG_ID)
+
+    clock.tick(10_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    expect(provider.callCount()).toBe(2)
+    // First turn only sees s1
+    expect(provider.calls()[0]?.spans.map((s) => s.id)).toEqual(['s1'])
+    // Second turn only sees the new spans
+    expect(provider.calls()[1]?.spans.map((s) => s.id)).toEqual(['s2', 's3'])
+  })
+
+  it('does not fire a second turn if no new spans since the last turn', async () => {
+    const { clock, provider, scheduler } = buildHarness(10_000)
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+
+    clock.tick(10_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    // No new spans added — advance clock past cadence again
+    clock.tick(10_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    expect(provider.callCount()).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 5. Pause flush
+// ---------------------------------------------------------------------------
+
+describe('pause flush', () => {
+  it('fires a turn immediately when paused with pending spans', async () => {
+    const { provider, scheduler } = buildHarness(20_000)
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    // Only 5s has elapsed — below the 20s cadence
+    // But a pause should flush immediately
+    await scheduler.notifyPaused(MTG_ID, CONTEXT)
+
+    expect(provider.callCount()).toBe(1)
+  })
+
+  it('does nothing when paused with no pending spans', async () => {
+    const { provider, scheduler } = buildHarness()
+    await scheduler.notifyPaused(MTG_ID, CONTEXT)
+    expect(provider.callCount()).toBe(0)
+  })
+
+  it('resets the cadence timer after a pause flush', async () => {
+    const { clock, provider, scheduler } = buildHarness(20_000)
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    await scheduler.notifyPaused(MTG_ID, CONTEXT)
+    expect(provider.callCount()).toBe(1)
+
+    // After resume, new spans arrive — cadence should restart from the flush time
+    scheduler.addSpan(span('s2', 2000, 3000), MTG_ID)
+    clock.tick(10_000) // only 10s since the flush — not yet
+    await scheduler.tick(MTG_ID, CONTEXT)
+    expect(provider.callCount()).toBe(1) // still only 1
+
+    clock.tick(10_000) // now 20s since the flush — fires
+    await scheduler.tick(MTG_ID, CONTEXT)
+    expect(provider.callCount()).toBe(2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 6. MeetingEnded final pass — exactly once, yields Discussion Summaries
+// ---------------------------------------------------------------------------
+
+describe('final pass', () => {
+  it('fires the final pass exactly once on runFinalPass', async () => {
+    const { clock, provider, scheduler } = buildHarness()
+
+    // addSpan persists to the DB and buffers for extraction
+    const s = span('s1', 0, 1000)
+    scheduler.addSpan(s, MTG_ID)
+
+    clock.tick(5_000)
+
+    provider.scriptFinalPassResponse({
+      proposedDecisions: [],
+      proposedActions: [],
+      discussionSummaries: [{ agendaItemId: 'ai-1', text: 'Q3 was on track.' }],
+    })
+
+    const endedMeeting: Meeting = { ...MEETING, state: 'ended' }
+    await scheduler.runFinalPass(endedMeeting, CONTEXT)
+
+    // Provider called once with isFinalPass=true
+    expect(provider.callCount()).toBe(1)
+    expect(provider.calls()[0]?.isFinalPass).toBe(true)
+  })
+
+  it('runFinalPass cannot be called a second time', async () => {
+    const { provider, scheduler } = buildHarness()
+
+    const s = span('s1', 0, 1000)
+    scheduler.addSpan(s, MTG_ID)
+
+    provider.scriptFinalPassResponse({
+      proposedDecisions: [],
+      proposedActions: [],
+    })
+
+    const endedMeeting: Meeting = { ...MEETING, state: 'ended' }
+    await scheduler.runFinalPass(endedMeeting, CONTEXT)
+    await scheduler.runFinalPass(endedMeeting, CONTEXT) // second call must be a no-op
+
+    expect(provider.callCount()).toBe(1)
+  })
+
+  it('final pass sends ALL spans (not just unsent window)', async () => {
+    const { provider, scheduler } = buildHarness(20_000)
+
+    // Add and "send" span s1 via a rolling turn (addSpan persists to DB)
+    const s1 = span('s1', 0, 1000)
+    scheduler.addSpan(s1, MTG_ID)
+
+    // Do a rolling turn to advance the sent-window
+    // (bypass the cadence threshold with pause flush)
+    await scheduler.notifyPaused(MTG_ID, CONTEXT)
+    expect(provider.callCount()).toBe(1)
+
+    // Add more spans
+    const s2 = span('s2', 1001, 2000)
+    scheduler.addSpan(s2, MTG_ID)
+
+    // Final pass should include BOTH s1 and s2
+    provider.scriptFinalPassResponse({
+      proposedDecisions: [],
+      proposedActions: [],
+    })
+
+    const endedMeeting: Meeting = { ...MEETING, state: 'ended' }
+    await scheduler.runFinalPass(endedMeeting, CONTEXT)
+
+    expect(provider.calls()[1]?.isFinalPass).toBe(true)
+    expect(provider.calls()[1]?.spans.map((s) => s.id)).toEqual(['s1', 's2'])
+  })
+
+  it('persists Discussion Summaries to the DB on the final pass', async () => {
+    const { db, provider, scheduler } = buildHarness()
+
+    const s = span('s1', 0, 1000)
+    scheduler.addSpan(s, MTG_ID)
+
+    provider.scriptFinalPassResponse({
+      proposedDecisions: [{ rationale: 'Final decision', sourceSpanId: 's1' }],
+      proposedActions: [],
+      discussionSummaries: [
+        { agendaItemId: 'ai-1', text: 'We covered Q3 thoroughly.' },
+        { agendaItemId: 'ai-2', text: 'Budget discussion was brief.' },
+      ],
+    })
+
+    const endedMeeting: Meeting = { ...MEETING, state: 'ended' }
+    await scheduler.runFinalPass(endedMeeting, CONTEXT)
+
+    const summaries = discussionSummaryRepo(db).listByMeeting(MTG_ID)
+    expect(summaries).toHaveLength(2)
+    const texts = summaries.map((s) => s.text).sort()
+    expect(texts).toContain('We covered Q3 thoroughly.')
+    expect(texts).toContain('Budget discussion was brief.')
+  })
+
+  it('final pass also proposes decisions and actions', async () => {
+    const { db, provider, scheduler } = buildHarness()
+
+    const s = span('s1', 0, 1000)
+    scheduler.addSpan(s, MTG_ID)
+
+    provider.scriptFinalPassResponse({
+      proposedDecisions: [{ rationale: 'Ship it', sourceSpanId: 's1' }],
+      proposedActions: [{ description: 'Tag the release', sourceSpanId: 's1' }],
+      discussionSummaries: [],
+    })
+
+    const endedMeeting: Meeting = { ...MEETING, state: 'ended' }
+    await scheduler.runFinalPass(endedMeeting, CONTEXT)
+
+    expect(decisionRepo(db).listByMeeting(MTG_ID)).toHaveLength(1)
+    expect(actionRepo(db).listActionsByMeeting(MTG_ID)).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 7. Provider error handling
+// ---------------------------------------------------------------------------
+
+describe('provider error handling', () => {
+  it('swallows a rolling-turn error and does not crash', async () => {
+    const { clock, provider, scheduler } = buildHarness()
+
+    // Make the provider throw on the first call
+    provider.extract = () => Promise.reject(new Error('Network failure'))
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+
+    // Must NOT throw
+    await expect(scheduler.tick(MTG_ID, CONTEXT)).resolves.toBeUndefined()
+  })
+
+  it('preserves prior proposed items after a provider error', async () => {
+    const { db, clock, provider, scheduler } = buildHarness(10_000)
+
+    // First turn succeeds and proposes a decision
+    provider.scriptRollingResponse({
+      proposedDecisions: [{ rationale: 'Keep it', sourceSpanId: 's1' }],
+      proposedActions: [],
+    })
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(10_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    expect(decisionRepo(db).listByMeeting(MTG_ID)).toHaveLength(1)
+
+    // Second turn fails — the first decision must survive
+    provider.extract = () => Promise.reject(new Error('Transient failure'))
+
+    scheduler.addSpan(span('s2', 1001, 2000), MTG_ID)
+    clock.tick(10_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    // The decision from turn 1 is still there
+    expect(decisionRepo(db).listByMeeting(MTG_ID)).toHaveLength(1)
+  })
+
+  it('a rolling error does not advance the sent-spans window', async () => {
+    const { clock, provider, scheduler } = buildHarness(10_000)
+
+    // First call throws
+    provider.extract = () => Promise.reject(new Error('oops'))
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(10_000)
+    await scheduler.tick(MTG_ID, CONTEXT) // fails, window NOT advanced
+
+    // Restore provider with a recorder
+    const recorded: ExtractionRequest[] = []
+    provider.extract = (req: ExtractionRequest) => {
+      recorded.push(req)
+      return Promise.resolve({ proposedDecisions: [], proposedActions: [] })
+    }
+
+    // Advance time — the failed span must be retried
+    clock.tick(10_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    expect(recorded).toHaveLength(1)
+    expect(recorded[0]?.spans.map((s) => s.id)).toContain('s1')
+  })
+
+  it('swallows a final-pass error gracefully', async () => {
+    const { provider, scheduler } = buildHarness()
+
+    const s = span('s1', 0, 1000)
+    scheduler.addSpan(s, MTG_ID)
+
+    provider.extract = () => Promise.reject(new Error('LLM timeout'))
+
+    const endedMeeting: Meeting = { ...MEETING, state: 'ended' }
+    // Must NOT throw
+    await expect(scheduler.runFinalPass(endedMeeting, CONTEXT)).resolves.toBeUndefined()
+  })
+})
