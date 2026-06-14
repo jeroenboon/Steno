@@ -1,0 +1,310 @@
+/**
+ * @vitest-environment node
+ *
+ * Tests for MeetingLifecycleService (item 0006).
+ *
+ * Tests are written against the public interface of the service only.
+ * DB assertions go through the repo (same public surface as production code).
+ */
+import Database from 'better-sqlite3'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+import type { Meeting, MeetingId } from '@shared/domain'
+import { FakeClock } from '@shared/providers'
+
+import { runMigrations } from '../db/migrate'
+import { meetingRepo } from '../db/repos/meetingRepo'
+
+import { MeetingLifecycleService } from './meetingLifecycleService'
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function openDb(): Database.Database {
+  const db = new Database(':memory:')
+  db.pragma('foreign_keys = ON')
+  runMigrations(db)
+  return db
+}
+
+function makeMeeting(id: MeetingId, state: Meeting['state'] = 'draft'): Meeting {
+  return {
+    id,
+    title: 'Test meeting',
+    state,
+    paused: false,
+    createdAt: '2026-06-14T10:00:00.000Z',
+    primaryLanguage: 'nl',
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
+
+let db: Database.Database
+let repo: ReturnType<typeof meetingRepo>
+let clock: FakeClock
+let svc: MeetingLifecycleService
+
+beforeEach(() => {
+  db = openDb()
+  repo = meetingRepo(db)
+  clock = new FakeClock(1_000_000) // arbitrary start time
+  svc = new MeetingLifecycleService(repo, clock)
+})
+
+// ===========================================================================
+// Draft → Live
+// ===========================================================================
+
+describe('startMeeting', () => {
+  it('transitions a Draft meeting to Live', () => {
+    repo.insert(makeMeeting('m1'))
+    const result = svc.startMeeting('m1')
+    expect(result.state).toBe('live')
+  })
+
+  it('persists the state change to the DB', () => {
+    repo.insert(makeMeeting('m1'))
+    svc.startMeeting('m1')
+    const persisted = repo.findById('m1')
+    expect(persisted?.state).toBe('live')
+  })
+
+  it('sets startedAt to clock.now() as ISO timestamp', () => {
+    clock.setNow(1_750_000_000_000)
+    repo.insert(makeMeeting('m1'))
+    const result = svc.startMeeting('m1')
+    expect(result.startedAt).toBe(new Date(1_750_000_000_000).toISOString())
+  })
+
+  it('rejects starting a Live meeting', () => {
+    const live = makeMeeting('m1', 'live')
+    repo.insert(live)
+    expect(() => svc.startMeeting('m1')).toThrow(/cannot start.*live/i)
+  })
+
+  it('rejects starting an Ended meeting', () => {
+    const ended = makeMeeting('m1', 'ended')
+    repo.insert(ended)
+    expect(() => svc.startMeeting('m1')).toThrow(/cannot start.*ended/i)
+  })
+
+  it('throws if the meeting does not exist', () => {
+    expect(() => svc.startMeeting('no-such-id')).toThrow(/not found/i)
+  })
+})
+
+// ===========================================================================
+// Pause / resume within Live
+// ===========================================================================
+
+describe('pauseMeeting', () => {
+  beforeEach(() => {
+    repo.insert(makeMeeting('m1'))
+    svc.startMeeting('m1')
+  })
+
+  it('marks a Live meeting as paused', () => {
+    const result = svc.pauseMeeting('m1')
+    expect(result.paused).toBe(true)
+  })
+
+  it('keeps state as "live" when paused — no new top-level state', () => {
+    const result = svc.pauseMeeting('m1')
+    expect(result.state).toBe('live')
+  })
+
+  it('persists the paused flag to the DB', () => {
+    svc.pauseMeeting('m1')
+    const persisted = repo.findById('m1')
+    expect(persisted?.paused).toBe(true)
+  })
+
+  it('keeps the same meeting id after pause — same transcript, no new meeting', () => {
+    const result = svc.pauseMeeting('m1')
+    expect(result.id).toBe('m1')
+  })
+
+  it('rejects pausing a Draft meeting', () => {
+    repo.insert(makeMeeting('m2'))
+    expect(() => svc.pauseMeeting('m2')).toThrow(/cannot pause.*draft/i)
+  })
+
+  it('rejects pausing an Ended meeting', () => {
+    repo.insert(makeMeeting('m3', 'ended'))
+    expect(() => svc.pauseMeeting('m3')).toThrow(/cannot pause.*ended/i)
+  })
+
+  it('rejects pausing an already-paused meeting', () => {
+    svc.pauseMeeting('m1')
+    expect(() => svc.pauseMeeting('m1')).toThrow(/already paused/i)
+  })
+})
+
+describe('resumeMeeting', () => {
+  beforeEach(() => {
+    repo.insert(makeMeeting('m1'))
+    svc.startMeeting('m1')
+    svc.pauseMeeting('m1')
+  })
+
+  it('clears the paused flag on a paused Live meeting', () => {
+    const result = svc.resumeMeeting('m1')
+    expect(result.paused).toBe(false)
+  })
+
+  it('keeps state as "live" after resume', () => {
+    const result = svc.resumeMeeting('m1')
+    expect(result.state).toBe('live')
+  })
+
+  it('persists the cleared paused flag to the DB', () => {
+    svc.resumeMeeting('m1')
+    const persisted = repo.findById('m1')
+    expect(persisted?.paused).toBe(false)
+  })
+
+  it('keeps the same meeting id after resume', () => {
+    const result = svc.resumeMeeting('m1')
+    expect(result.id).toBe('m1')
+  })
+
+  it('rejects resuming a meeting that is not paused', () => {
+    // m1 is paused; start a fresh live meeting
+    repo.insert(makeMeeting('m2'))
+    svc.startMeeting('m2')
+    expect(() => svc.resumeMeeting('m2')).toThrow(/not paused/i)
+  })
+
+  it('rejects resuming a Draft meeting', () => {
+    repo.insert(makeMeeting('m3'))
+    expect(() => svc.resumeMeeting('m3')).toThrow(/not paused/i)
+  })
+
+  it('rejects resuming an Ended meeting', () => {
+    repo.insert(makeMeeting('m4', 'ended'))
+    expect(() => svc.resumeMeeting('m4')).toThrow(/not paused/i)
+  })
+})
+
+// ===========================================================================
+// Live → Ended
+// ===========================================================================
+
+describe('endMeeting', () => {
+  beforeEach(() => {
+    repo.insert(makeMeeting('m1'))
+    svc.startMeeting('m1')
+  })
+
+  it('transitions a Live meeting to Ended', () => {
+    const result = svc.endMeeting('m1')
+    expect(result.state).toBe('ended')
+  })
+
+  it('transitions a paused-Live meeting to Ended', () => {
+    svc.pauseMeeting('m1')
+    const result = svc.endMeeting('m1')
+    expect(result.state).toBe('ended')
+  })
+
+  it('persists state "ended" to the DB', () => {
+    svc.endMeeting('m1')
+    expect(repo.findById('m1')?.state).toBe('ended')
+  })
+
+  it('sets endedAt to clock.now() as ISO timestamp', () => {
+    clock.setNow(1_750_000_001_234)
+    const result = svc.endMeeting('m1')
+    expect(result.endedAt).toBe(new Date(1_750_000_001_234).toISOString())
+  })
+
+  it('persists endedAt to the DB', () => {
+    clock.setNow(1_750_000_001_234)
+    svc.endMeeting('m1')
+    expect(repo.findById('m1')?.endedAt).toBe(new Date(1_750_000_001_234).toISOString())
+  })
+
+  it('rejects ending a Draft meeting', () => {
+    repo.insert(makeMeeting('m2'))
+    expect(() => svc.endMeeting('m2')).toThrow(/cannot end.*draft/i)
+  })
+
+  it('rejects ending an already-Ended meeting', () => {
+    svc.endMeeting('m1')
+    expect(() => svc.endMeeting('m1')).toThrow(/cannot end.*ended/i)
+  })
+
+  it('throws if the meeting does not exist', () => {
+    expect(() => svc.endMeeting('no-such-id')).toThrow(/not found/i)
+  })
+})
+
+// ===========================================================================
+// MeetingEnded event
+// ===========================================================================
+
+describe('MeetingEnded event', () => {
+  beforeEach(() => {
+    repo.insert(makeMeeting('m1'))
+    svc.startMeeting('m1')
+  })
+
+  it('emits MeetingEnded exactly once when a meeting ends', () => {
+    const listener = vi.fn()
+    svc.on('MeetingEnded', listener)
+    svc.endMeeting('m1')
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  it('passes the ended Meeting to the listener', () => {
+    const listener = vi.fn()
+    svc.on('MeetingEnded', listener)
+    svc.endMeeting('m1')
+    const called = listener.mock.calls[0]?.[0] as Meeting
+    expect(called.id).toBe('m1')
+    expect(called.state).toBe('ended')
+  })
+
+  it('does NOT re-emit if endMeeting is called a second time', () => {
+    const listener = vi.fn()
+    svc.on('MeetingEnded', listener)
+    svc.endMeeting('m1')
+    // Second call should throw (terminal state) and not emit again
+    try {
+      svc.endMeeting('m1')
+    } catch {
+      // expected
+    }
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  it('supports multiple listeners', () => {
+    const a = vi.fn()
+    const b = vi.fn()
+    svc.on('MeetingEnded', a)
+    svc.on('MeetingEnded', b)
+    svc.endMeeting('m1')
+    expect(a).toHaveBeenCalledTimes(1)
+    expect(b).toHaveBeenCalledTimes(1)
+  })
+
+  it('off() unregisters a listener — does not fire after removal', () => {
+    const listener = vi.fn()
+    svc.on('MeetingEnded', listener)
+    svc.off('MeetingEnded', listener)
+    svc.endMeeting('m1')
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('emits MeetingEnded even when the meeting was paused at end time', () => {
+    const listener = vi.fn()
+    svc.on('MeetingEnded', listener)
+    svc.pauseMeeting('m1')
+    svc.endMeeting('m1')
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+})

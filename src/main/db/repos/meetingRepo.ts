@@ -13,8 +13,10 @@ interface MeetingRow {
   id: string
   title: string
   state: string
+  paused: number // SQLite stores booleans as 0/1
   created_at: string
   updated_at: string | null
+  started_at: string | null
   ended_at: string | null
   primary_language: string
 }
@@ -24,8 +26,10 @@ function rowToDomain(row: MeetingRow): Meeting {
     id: row.id,
     title: row.title,
     state: row.state,
+    paused: row.paused === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? undefined,
+    startedAt: row.started_at ?? undefined,
     endedAt: row.ended_at ?? undefined,
     primaryLanguage: row.primary_language,
   })
@@ -35,14 +39,16 @@ export function meetingRepo(db: Database.Database) {
   return {
     insert(m: Meeting): void {
       db.prepare(
-        `INSERT INTO meetings (id, title, state, created_at, updated_at, ended_at, primary_language)
-         VALUES (@id, @title, @state, @createdAt, @updatedAt, @endedAt, @primaryLanguage)`,
+        `INSERT INTO meetings (id, title, state, paused, created_at, updated_at, started_at, ended_at, primary_language)
+         VALUES (@id, @title, @state, @paused, @createdAt, @updatedAt, @startedAt, @endedAt, @primaryLanguage)`,
       ).run({
         id: m.id,
         title: m.title,
         state: m.state,
+        paused: m.paused ? 1 : 0,
         createdAt: m.createdAt,
         updatedAt: m.updatedAt ?? null,
+        startedAt: m.startedAt ?? null,
         endedAt: m.endedAt ?? null,
         primaryLanguage: m.primaryLanguage,
       })
@@ -51,14 +57,17 @@ export function meetingRepo(db: Database.Database) {
     update(m: Meeting): void {
       db.prepare(
         `UPDATE meetings
-         SET title = @title, state = @state, updated_at = @updatedAt,
+         SET title = @title, state = @state, paused = @paused,
+             updated_at = @updatedAt, started_at = @startedAt,
              ended_at = @endedAt, primary_language = @primaryLanguage
          WHERE id = @id`,
       ).run({
         id: m.id,
         title: m.title,
         state: m.state,
+        paused: m.paused ? 1 : 0,
         updatedAt: m.updatedAt ?? null,
+        startedAt: m.startedAt ?? null,
         endedAt: m.endedAt ?? null,
         primaryLanguage: m.primaryLanguage,
       })

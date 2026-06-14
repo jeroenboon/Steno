@@ -46,6 +46,8 @@ One discrete planned topic in a Meeting's agenda. Acts as the structural spine: 
 **Meeting lifecycle (Draft → Live → Ended)**:
 **Draft** = agenda being set up, no audio. **Live** = capturing audio and extracting, with pause/resume inside (pause halts audio and the cadence; resume continues the same Transcript). **Ended** = audio stopped. On the transition to Ended, a **final extraction pass** runs over the whole Transcript to catch what the rolling cadence missed; its results are still Proposed. Ended Meetings stay fully editable. The note-taker may also edit items manually during Live, not only review-and-confirm.
 
+Pause is modeled as a `paused: boolean` flag on the Meeting, not as a fourth top-level state. `state` stays `"live"` while paused; only `paused` flips to `true`. This keeps the three-state machine intact and avoids a "paused" literal in state-discriminated code. `MeetingLifecycleService` is the single place that enforces transitions and emits the `MeetingEnded` domain event that the extraction loop subscribes to for the final pass.
+
 **Action status (open / done)**:
 An Action's completion state, independent of the Meeting lifecycle. Can be flipped long after the Meeting ends; this is part of why Actions are first-class and outlive the Transcript.
 

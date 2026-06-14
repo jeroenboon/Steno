@@ -216,10 +216,19 @@ export const MeetingSchema = z.object({
   title: z.string().min(1, 'Meeting title cannot be empty'),
   /** Lifecycle state: draft (setup), live (capturing), or ended (final). */
   state: MeetingStateSchema,
+  /**
+   * Whether the meeting is currently paused. Only meaningful when state = 'live'.
+   * Pause is a sub-state within Live, not a fourth top-level state.
+   * Pause halts audio capture and the extraction cadence; resume continues the
+   * same transcript without creating a new meeting.
+   */
+  paused: z.boolean().default(false),
   /** ISO 8601 timestamp when the meeting was created. */
   createdAt: z.string().datetime(),
   /** ISO 8601 timestamp when the meeting was last modified, if applicable. */
   updatedAt: z.string().datetime().optional(),
+  /** ISO 8601 timestamp when Draft → Live transition occurred, if applicable. */
+  startedAt: z.string().datetime().optional(),
   /** ISO 8601 timestamp when the meeting ended, if applicable. */
   endedAt: z.string().datetime().optional(),
   /** The primary language for extraction/UI (e.g., 'nl', 'en'). */

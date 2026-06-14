@@ -24,6 +24,7 @@ function seedMeetingAndSpan(db: Database.Database, meetingId: string): void {
     id: meetingId,
     title: `Meeting ${meetingId}`,
     state: 'draft',
+    paused: false,
     createdAt: '2026-06-14T10:00:00.000Z',
     primaryLanguage: 'nl',
   }

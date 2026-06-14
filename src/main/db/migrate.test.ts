@@ -30,13 +30,20 @@ describe('runMigrations', () => {
   it('is idempotent — running twice produces no error and same schema', () => {
     const db = openMemory()
     runMigrations(db)
+
+    const countAfterFirst = (
+      db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get() as { n: number }
+    ).n
+
     expect(() => {
       runMigrations(db)
     }).not.toThrow()
 
-    // Still exactly one entry in schema_migrations after double-run
-    const count = db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get() as { n: number }
-    expect(count.n).toBe(1) // migration 0001 applied once
+    // Running a second time must not re-apply any migration.
+    const countAfterSecond = (
+      db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get() as { n: number }
+    ).n
+    expect(countAfterSecond).toBe(countAfterFirst)
   })
 
   it('creates all required tables', () => {
