@@ -9,7 +9,8 @@
     "exactOptionalPropertyTypes": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/shared/*"],
+      "@shared/settings/*": ["src/shared/settings/*"]
     }
   }
 }

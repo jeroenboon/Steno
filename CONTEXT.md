@@ -63,6 +63,12 @@ A reactive, dismissible prompt the agent raises about the state of the notes (e.
 **Running Summary**:
 A continuously updated, plain-language summary of the meeting so far, exposed through an "ask the meeting" panel where the note-taker can query what has been said or decided. Derived from the Transcript; never authoritative over Decisions/Actions.
 
+**Egress State**:
+A derived, serialisable value describing what data currently leaves the device and to which named vendor: `{ audio: 'local' | 'cloud:Deepgram', notes: 'cloud:Anthropic' | 'cloud:custom:<name>' }`. Computed as a pure function of the current AppSettings by `computeEgressState()`. Used by the EgressIndicator UI component (item 0013) and as the basis for point-of-choice disclosure copy (per ADR 0003). Contains no API keys or secret values. The tagged-string format (`'cloud:Deepgram'`) makes it directly renderable without a lookup table.
+
+**Disclosure Copy**:
+Human-readable text generated from the Egress State for two purposes: (1) the short badge text in the persistent EgressIndicator ("audio via Deepgram · notulen via Anthropic"), and (2) the longer point-of-choice disclosure shown when the user selects a cloud provider in settings. Produced by `buildDisclosureCopy(egressState)`. Per ADR 0003, this disclosure is a standing UI obligation, not a one-off.
+
 ## Relationships
 
 - A **Meeting** has exactly one **Transcript**

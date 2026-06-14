@@ -1,8 +1,12 @@
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'path'
 
 import { app, BrowserWindow, ipcMain, session } from 'electron'
 
+import type { IpcChannel } from '@shared/ipc'
+
 import { createIpcRegistry } from './ipc-registry'
+import { SettingsStore } from './settings/SettingsStore'
 import { createWindowOptions } from './window-options'
 
 // ---------------------------------------------------------------------------
@@ -43,12 +47,30 @@ function applyContentSecurityPolicy(): void {
 // IPC — register the typed registry on the main-process ipcMain
 // ---------------------------------------------------------------------------
 
-function registerIpcHandlers(): void {
-  const registry = createIpcRegistry()
+// The channels registered here must stay in sync with the IpcChannel union.
+const IPC_CHANNELS: IpcChannel[] = ['ping', 'settings:get', 'settings:set', 'egress:state']
 
-  ipcMain.handle('ping', (_event, payload: unknown) => {
-    return registry.dispatch('ping', payload)
+async function registerIpcHandlers(): Promise<void> {
+  const userData = app.getPath('userData')
+
+  const settingsStore = new SettingsStore({
+    userDataPath: userData,
+    readFile: (filePath) => Promise.resolve(readFileSync(filePath, 'utf8')),
+    writeFile: (filePath, content) => {
+      writeFileSync(filePath, content, 'utf8')
+      return Promise.resolve()
+    },
   })
+
+  await settingsStore.load()
+
+  const registry = createIpcRegistry({ settingsStore })
+
+  for (const channel of IPC_CHANNELS) {
+    ipcMain.handle(channel, (_event, payload: unknown) => {
+      return registry.dispatch(channel, payload)
+    })
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -74,9 +96,9 @@ function createWindow(): void {
 
 app
   .whenReady()
-  .then(() => {
+  .then(async () => {
     applyContentSecurityPolicy()
-    registerIpcHandlers()
+    await registerIpcHandlers()
     createWindow()
 
     app.on('activate', () => {
