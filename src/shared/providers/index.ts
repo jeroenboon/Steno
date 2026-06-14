@@ -1,0 +1,31 @@
+/**
+ * Public surface of the providers module (item 0005).
+ *
+ * Exports:
+ *  - ASRProvider interface
+ *  - ExtractionProvider interface
+ *  - Boundary DTOs (Zod schemas + inferred types)
+ *  - Clock abstraction (RealClock + FakeClock)
+ *  - FakeASRProvider and FakeExtractionProvider for deterministic tests
+ */
+
+export type { ASRProvider } from './ASRProvider'
+export type { ExtractionProvider } from './ExtractionProvider'
+export { FakeASRProvider } from './FakeASRProvider'
+export { FakeExtractionProvider } from './FakeExtractionProvider'
+export { FakeClock, RealClock } from './clock'
+export type { Clock } from './clock'
+export {
+  ExtractionRequestSchema,
+  ExtractionResponseSchema,
+  ProposedActionSchema,
+  ProposedDecisionSchema,
+  ProposedDiscussionSummarySchema,
+} from './dtos'
+export type {
+  ExtractionRequest,
+  ExtractionResponse,
+  ProposedAction,
+  ProposedDecision,
+  ProposedDiscussionSummary,
+} from './dtos'
