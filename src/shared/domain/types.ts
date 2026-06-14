@@ -66,6 +66,20 @@ export const TranscriptSpanSchema = z.object({
   confidence: z.number().min(0).max(1).optional(),
   /** Speaker label (e.g., "Speaker 1"), if diarization is enabled. */
   speakerLabel: z.string().optional(),
+  /**
+   * Whether this span is a final (stable) transcript result.
+   *
+   * true  = the ASR provider has committed to this text; safe to store and
+   *         feed to the extraction loop.
+   * false = interim/partial result; text will likely change as more audio
+   *         arrives. Useful for live display but not for extraction.
+   * undefined = finality not tracked by the producing provider (treat as final).
+   *
+   * Only present when the ASR provider distinguishes interim from final
+   * results (e.g. Deepgram with is_final). Local providers (Parakeet) may
+   * omit it; absence means final.
+   */
+  isFinal: z.boolean().optional(),
 })
 
 export type TranscriptSpan = z.infer<typeof TranscriptSpanSchema>

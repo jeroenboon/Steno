@@ -27,6 +27,9 @@ A named person in a Meeting, set in Draft and reusable across Meetings (a small 
 **Speaker label**:
 An optional, provider-dependent annotation on Transcript spans ("who said this"). Only present when the chosen ASR Provider returns it (some cloud ASRs do). The note-taker maps raw labels ("Speaker 1") to **Participants**, after which the Transcript shows real names. Never produced by local Parakeet V3; no local diarization model ships in V1, and the mapping UI is hidden on the local path.
 
+**Interim span / final span**:
+A distinction present only when the ASR Provider produces it (Deepgram does; local Parakeet V3 does not). An **interim span** (`isFinal: false`) is a partial hypothesis that will be revised as more audio arrives — useful for live display but not stable enough for extraction. A **final span** (`isFinal: true`) is the provider's committed result for that time segment. Spans with `isFinal` absent are treated as final by all consumers. The extraction loop must pass only `isFinal !== false` spans to the Extraction Provider. See ADR 0011.
+
 **Discussion**:
 NOT a live-extracted item. During Live, the agent only ever proposes Decisions and Actions; "what was discussed" is never a thing the note-taker grooms in real time. See **Discussion Summary** for the post-meeting form.
 
