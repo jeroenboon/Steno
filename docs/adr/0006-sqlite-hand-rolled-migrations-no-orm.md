@@ -10,12 +10,12 @@ The app needs durable local storage for meetings, participants, transcript spans
 
 Realistic options:
 
-| Option | Verdict |
-|---|---|
-| better-sqlite3 + hand-rolled SQL | Chosen |
-| better-sqlite3 + Drizzle ORM | Rejected |
-| better-sqlite3 + Prisma | Rejected |
-| SQLite via sql.js (WASM) | Rejected |
+| Option                           | Verdict  |
+| -------------------------------- | -------- |
+| better-sqlite3 + hand-rolled SQL | Chosen   |
+| better-sqlite3 + Drizzle ORM     | Rejected |
+| better-sqlite3 + Prisma          | Rejected |
+| SQLite via sql.js (WASM)         | Rejected |
 
 ## Decision
 
