@@ -1,0 +1,15 @@
+node_modules/
+out/
+dist/
+.DS_Store
+*.local
+
+# TypeScript composite build info
+*.tsbuildinfo
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
