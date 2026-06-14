@@ -524,3 +524,145 @@ describe('provider error handling', () => {
     await expect(scheduler.runFinalPass(endedMeeting, CONTEXT)).resolves.toBeUndefined()
   })
 })
+
+// ---------------------------------------------------------------------------
+// 8. Owner & agenda-item assignment (item 0009)
+// ---------------------------------------------------------------------------
+
+describe('owner and agenda-item assignment (0009)', () => {
+  it('resolves ownerHint to the matching ParticipantId on a proposed action', async () => {
+    const { db, clock, provider, scheduler } = buildHarness()
+
+    // PARTICIPANTS fixture has { id: 'p-1', name: 'Jeroen' }
+    provider.scriptRollingResponse({
+      proposedDecisions: [],
+      proposedActions: [{ description: 'Send the deck', sourceSpanId: 's1', ownerHint: 'Jeroen' }],
+    })
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    const actions = actionRepo(db).listActionsByMeeting(MTG_ID)
+    expect(actions).toHaveLength(1)
+    expect(actions[0]?.owner).toBe('p-1')
+  })
+
+  it('leaves owner undefined when ownerHint does not match any participant', async () => {
+    const { db, clock, provider, scheduler } = buildHarness()
+
+    provider.scriptRollingResponse({
+      proposedDecisions: [],
+      proposedActions: [
+        { description: 'Do something', sourceSpanId: 's1', ownerHint: 'Unknown Ghost' },
+      ],
+    })
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    const actions = actionRepo(db).listActionsByMeeting(MTG_ID)
+    expect(actions).toHaveLength(1)
+    expect(actions[0]?.owner).toBeUndefined()
+  })
+
+  it('leaves owner undefined when ownerHint is absent', async () => {
+    const { db, clock, provider, scheduler } = buildHarness()
+
+    provider.scriptRollingResponse({
+      proposedDecisions: [],
+      proposedActions: [{ description: 'Do something', sourceSpanId: 's1' }],
+    })
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    const actions = actionRepo(db).listActionsByMeeting(MTG_ID)
+    expect(actions).toHaveLength(1)
+    expect(actions[0]?.owner).toBeUndefined()
+  })
+
+  it('resolves agendaItemHint to the matching AgendaItemId on a proposed decision', async () => {
+    const { db, clock, provider, scheduler } = buildHarness()
+
+    // AGENDA fixture has { id: 'ai-1', title: 'Q3 review', topic: 'Review Q3 results' }
+    provider.scriptRollingResponse({
+      proposedDecisions: [
+        { rationale: 'Use TypeScript', sourceSpanId: 's1', agendaItemHint: 'Q3 review' },
+      ],
+      proposedActions: [],
+    })
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    const decisions = decisionRepo(db).listByMeeting(MTG_ID)
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0]?.agendaItemId).toBe('ai-1')
+  })
+
+  it('falls back to OffAgenda when agendaItemHint does not match any agenda item', async () => {
+    const { db, clock, provider, scheduler } = buildHarness()
+
+    provider.scriptRollingResponse({
+      proposedDecisions: [
+        { rationale: 'Random decision', sourceSpanId: 's1', agendaItemHint: 'Unrelated topic' },
+      ],
+      proposedActions: [],
+    })
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    const decisions = decisionRepo(db).listByMeeting(MTG_ID)
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0]?.agendaItemId).toBe('__off-agenda__')
+  })
+
+  it('falls back to OffAgenda when agendaItemHint is absent', async () => {
+    const { db, clock, provider, scheduler } = buildHarness()
+
+    provider.scriptRollingResponse({
+      proposedDecisions: [{ rationale: 'Another decision', sourceSpanId: 's1' }],
+      proposedActions: [],
+    })
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    const decisions = decisionRepo(db).listByMeeting(MTG_ID)
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0]?.agendaItemId).toBe('__off-agenda__')
+  })
+
+  it('resolves agendaItemHint on a proposed action too', async () => {
+    const { db, clock, provider, scheduler } = buildHarness()
+
+    provider.scriptRollingResponse({
+      proposedDecisions: [],
+      proposedActions: [
+        {
+          description: 'Prepare slides',
+          sourceSpanId: 's1',
+          agendaItemHint: 'Review Q3 results',
+          ownerHint: 'Jeroen',
+        },
+      ],
+    })
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    clock.tick(20_000)
+    await scheduler.tick(MTG_ID, CONTEXT)
+
+    const actions = actionRepo(db).listActionsByMeeting(MTG_ID)
+    expect(actions).toHaveLength(1)
+    // Topic match → ai-1
+    expect(actions[0]?.agendaItemId).toBe('ai-1')
+    expect(actions[0]?.owner).toBe('p-1')
+  })
+})

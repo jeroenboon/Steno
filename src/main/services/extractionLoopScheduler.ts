@@ -41,19 +41,18 @@
  * never happened: `_sentUpTo` is NOT advanced, so spans are retried next tick.
  * Previously proposed items are unaffected. The same applies to the final pass.
  *
- * ## 0009 seam
+ * ## Owner and agenda-item assignment (item 0009)
  *
- * Owner hints and agenda-item hints from the provider are passed through as-is
- * to `proposeItems`. Item 0009 will add the fuzzy-matching logic that resolves
- * hints against the real Participant list and AgendaItems. For now,
- * `agendaItemId` defaults to the Off-agenda sentinel and `owner` is left unset
- * when hints are not used.
+ * Owner hints and agenda-item hints from the provider are resolved by the pure
+ * functions in `src/shared/assignment` before being passed to `proposeItems`.
+ * Unknown or ambiguous hints fall back to undefined (owner) or Off-agenda
+ * (agenda item). Participants are never invented.
  */
 
 import { randomUUID } from 'crypto'
 
+import { resolveAgendaItem, resolveOwner } from '@shared/assignment'
 import type { AgendaItem, Meeting, MeetingId, Participant, TranscriptSpan } from '@shared/domain'
-import { OffAgenda } from '@shared/domain'
 import type {
   Clock,
   ExtractionProvider,
@@ -235,7 +234,7 @@ export class ExtractionLoopScheduler {
     }
 
     // Propose decisions/actions from the final pass
-    this._proposeItems(meeting.id, response.proposedDecisions, response.proposedActions)
+    this._proposeItems(meeting.id, response.proposedDecisions, response.proposedActions, context)
   }
 
   // -------------------------------------------------------------------------
@@ -265,7 +264,7 @@ export class ExtractionLoopScheduler {
         isFinalPass: false,
       })
 
-      this._proposeItems(meetingId, response.proposedDecisions, response.proposedActions)
+      this._proposeItems(meetingId, response.proposedDecisions, response.proposedActions, context)
       succeeded = true
     } catch (err) {
       logProviderError('rolling turn', err)
@@ -284,37 +283,38 @@ export class ExtractionLoopScheduler {
   /**
    * Map provider DTOs to domain inputs and call proposeItems.
    *
-   * Owner hints and agenda-item hints are passed through as-is; item 0009 will
-   * add the fuzzy-matching layer that resolves them. For now:
-   *   - `agendaItemId` falls back to the Off-agenda sentinel when no hint is
-   *     given (matching the CONTEXT.md rule: "A built-in Off-agenda bucket
-   *     catches Decisions and Actions that map to no planned item").
-   *   - `owner` is left undefined when no hint is given.
+   * Owner hints and agenda-item hints from the provider are resolved against
+   * the real Participant list and AgendaItems using the pure resolvers from
+   * item 0009 (src/shared/assignment).
+   *
+   *   - `agendaItemId` resolves to the matched AgendaItem's id or Off-agenda.
+   *   - `owner` resolves to the matched ParticipantId, or is omitted when the
+   *     hint is absent/unmatched/ambiguous. Never invent a participant.
    */
   private _proposeItems(
     meetingId: MeetingId,
     proposedDecisions: ProposedDecision[],
     proposedActions: ProposedAction[],
+    context: MeetingContext,
   ): void {
     const decisions: NewDecisionInput[] = proposedDecisions.map((d) => ({
       id: randomUUID(),
       rationale: d.rationale,
       sourceSpanId: d.sourceSpanId,
-      // 0009 seam: agendaItemHint is a raw string hint; use Off-agenda until 0009 resolves it
-      agendaItemId: d.agendaItemHint ?? OffAgenda.id,
+      agendaItemId: resolveAgendaItem(d.agendaItemHint, context.agendaItems),
     }))
 
-    const actions: NewActionInput[] = proposedActions.map((a) => ({
-      id: randomUUID(),
-      // Note: ProposedAction carries `description` from the provider, but the
-      // domain Action has no description field (it is identified by sourceSpanId).
-      // Item 0009 may extend the domain model; for now we map only what exists.
-      sourceSpanId: a.sourceSpanId,
-      agendaItemId: a.agendaItemHint ?? OffAgenda.id,
-      // 0009 seam: ownerHint is a raw name hint; owner left absent until 0009 resolves it.
+    const actions: NewActionInput[] = proposedActions.map((a) => {
+      const resolvedOwner = resolveOwner(a.ownerHint, context.participants)
+      const base = {
+        id: randomUUID(),
+        sourceSpanId: a.sourceSpanId,
+        agendaItemId: resolveAgendaItem(a.agendaItemHint, context.agendaItems),
+        status: 'open' as const,
+      }
       // Do NOT write `owner: undefined` — exactOptionalPropertyTypes forbids it.
-      status: 'open' as const,
-    }))
+      return resolvedOwner !== undefined ? { ...base, owner: resolvedOwner } : base
+    })
 
     this._itemService.proposeItems(meetingId, { decisions, actions })
   }
