@@ -1,0 +1,199 @@
+/**
+ * @vitest-environment node
+ */
+import Database from 'better-sqlite3'
+import { describe, it, expect, beforeEach } from 'vitest'
+
+import type { Meeting, TranscriptSpan, Action } from '@shared/domain'
+
+import { runMigrations } from '../migrate'
+
+import { actionRepo } from './actionRepo'
+import { meetingRepo } from './meetingRepo'
+import { transcriptSpanRepo } from './transcriptSpanRepo'
+
+function openDb(): Database.Database {
+  const db = new Database(':memory:')
+  db.pragma('foreign_keys = ON')
+  runMigrations(db)
+  return db
+}
+
+function seedMeetingAndSpan(db: Database.Database, meetingId: string): void {
+  const m: Meeting = {
+    id: meetingId,
+    title: `Meeting ${meetingId}`,
+    state: 'draft',
+    createdAt: '2026-06-14T10:00:00.000Z',
+    primaryLanguage: 'nl',
+  }
+  const s: TranscriptSpan = {
+    id: `span-${meetingId}`,
+    text: 'Some speech',
+    startMs: 0,
+    endMs: 1000,
+  }
+  meetingRepo(db).insert(m)
+  transcriptSpanRepo(db).insert(s, meetingId)
+}
+
+describe('actionRepo', () => {
+  let db: Database.Database
+
+  beforeEach(() => {
+    db = openDb()
+    seedMeetingAndSpan(db, 'mtg-1')
+  })
+
+  it('inserts and retrieves an action by id', () => {
+    const repo = actionRepo(db)
+    const action: Action = {
+      id: 'act-1',
+      agendaItemId: 'ai-1',
+      sourceSpanId: 'span-mtg-1',
+      status: 'open',
+      state: 'proposed',
+    }
+    repo.insert(action, 'mtg-1')
+    const found = repo.findById('act-1')
+    expect(found?.id).toBe('act-1')
+    expect(found?.status).toBe('open')
+    expect(found?.state).toBe('proposed')
+    expect(found?.owner).toBeUndefined()
+    expect(found?.dueDate).toBeUndefined()
+  })
+
+  it('persists optional fields owner and dueDate', () => {
+    const repo = actionRepo(db)
+    const action: Action = {
+      id: 'act-2',
+      agendaItemId: 'ai-1',
+      sourceSpanId: 'span-mtg-1',
+      owner: 'p-1',
+      dueDate: '2026-07-01T00:00:00.000Z',
+      status: 'open',
+      state: 'confirmed',
+    }
+    repo.insert(action, 'mtg-1')
+    const found = repo.findById('act-2')
+    expect(found?.owner).toBe('p-1')
+    expect(found?.dueDate).toBe('2026-07-01T00:00:00.000Z')
+  })
+
+  it('updates an action', () => {
+    const repo = actionRepo(db)
+    const action: Action = {
+      id: 'act-3',
+      agendaItemId: 'ai-1',
+      sourceSpanId: 'span-mtg-1',
+      status: 'open',
+      state: 'proposed',
+    }
+    repo.insert(action, 'mtg-1')
+    repo.update({ ...action, status: 'done', state: 'confirmed', owner: 'p-2' })
+    const found = repo.findById('act-3')
+    expect(found?.status).toBe('done')
+    expect(found?.state).toBe('confirmed')
+    expect(found?.owner).toBe('p-2')
+  })
+
+  it('listActionsByMeeting returns all actions for a meeting', () => {
+    const repo = actionRepo(db)
+    repo.insert(
+      {
+        id: 'act-1',
+        agendaItemId: 'ai-1',
+        sourceSpanId: 'span-mtg-1',
+        status: 'open',
+        state: 'proposed',
+      },
+      'mtg-1',
+    )
+    repo.insert(
+      {
+        id: 'act-2',
+        agendaItemId: 'ai-1',
+        sourceSpanId: 'span-mtg-1',
+        status: 'open',
+        state: 'confirmed',
+      },
+      'mtg-1',
+    )
+    expect(repo.listActionsByMeeting('mtg-1')).toHaveLength(2)
+  })
+
+  it('listOpenActionsByOwner returns open actions for an owner across meetings', () => {
+    // Set up a second meeting
+    seedMeetingAndSpan(db, 'mtg-2')
+    const repo = actionRepo(db)
+
+    // Open action by p-1 in meeting 1
+    repo.insert(
+      {
+        id: 'act-1',
+        agendaItemId: 'ai-1',
+        sourceSpanId: 'span-mtg-1',
+        owner: 'p-1',
+        status: 'open',
+        state: 'confirmed',
+      },
+      'mtg-1',
+    )
+    // Done action by p-1 in meeting 1 — should NOT appear
+    repo.insert(
+      {
+        id: 'act-2',
+        agendaItemId: 'ai-1',
+        sourceSpanId: 'span-mtg-1',
+        owner: 'p-1',
+        status: 'done',
+        state: 'confirmed',
+      },
+      'mtg-1',
+    )
+    // Open action by p-1 in meeting 2 — should appear
+    repo.insert(
+      {
+        id: 'act-3',
+        agendaItemId: 'ai-1',
+        sourceSpanId: 'span-mtg-2',
+        owner: 'p-1',
+        status: 'open',
+        state: 'confirmed',
+      },
+      'mtg-2',
+    )
+    // Open action by p-2 — should NOT appear
+    repo.insert(
+      {
+        id: 'act-4',
+        agendaItemId: 'ai-1',
+        sourceSpanId: 'span-mtg-2',
+        owner: 'p-2',
+        status: 'open',
+        state: 'confirmed',
+      },
+      'mtg-2',
+    )
+
+    const open = repo.listOpenActionsByOwner('p-1')
+    expect(open).toHaveLength(2)
+    expect(open.map((a) => a.id).sort()).toEqual(['act-1', 'act-3'])
+  })
+
+  it('cascades delete when meeting is deleted', () => {
+    const repo = actionRepo(db)
+    repo.insert(
+      {
+        id: 'act-1',
+        agendaItemId: 'ai-1',
+        sourceSpanId: 'span-mtg-1',
+        status: 'open',
+        state: 'proposed',
+      },
+      'mtg-1',
+    )
+    meetingRepo(db).delete('mtg-1')
+    expect(repo.findById('act-1')).toBeNull()
+  })
+})
