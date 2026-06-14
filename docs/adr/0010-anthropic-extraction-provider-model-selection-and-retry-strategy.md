@@ -20,7 +20,7 @@ Privacy principle #12 is non-negotiable: transcript text, prompts, API responses
 
 | Turn type    | Default model       | Rationale                                                           |
 | ------------ | ------------------- | ------------------------------------------------------------------- |
-| Rolling turn | `claude-haiku-4-5`  | 200K context, $1/$5 per MTok, low latency — fits a 15-30s cadence  |
+| Rolling turn | `claude-haiku-4-5`  | 200K context, $1/$5 per MTok, low latency — fits a 15-30s cadence   |
 | Final pass   | `claude-sonnet-4-6` | 1M context, $3/$15 per MTok, stronger reasoning for full transcript |
 
 Both models are injectable via constructor params (`rollingModel`, `finalPassModel`), so they can be overridden without subclassing. No date suffixes — model strings are exact and stable.
@@ -32,6 +32,7 @@ The adapter defines a single Anthropic tool called `extract_meeting_notes` whose
 The response content is then validated with `ExtractionResponseSchema.safeParse()`. Zod is the single source of truth for what shape is acceptable; the JSON schema in the tool definition is a structural hint for the model, not an authority.
 
 We chose forced tool use over `output_config.format` (structured output) because:
+
 - Tool use is available on all model versions including Haiku 4.5
 - The `tool_choice: { type: "tool" }` constraint is simpler and more predictable than output format negotiation
 - The tool-input block is always parseable JSON, regardless of stop reason
