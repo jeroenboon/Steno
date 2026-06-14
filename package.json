@@ -16,6 +16,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.55.1",
     "better-sqlite3": "^11.10.0",
     "electron-updater": "^6.3.9",
     "react": "^18.3.1",
