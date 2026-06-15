@@ -37,6 +37,10 @@ import {
   ParticipantRemoveResponseSchema,
   MeetingStartRequestSchema,
   MeetingStartResponseSchema,
+  AudioStartRequestSchema,
+  AudioStartResponseSchema,
+  AudioStopRequestSchema,
+  AudioStopResponseSchema,
 } from '@shared/ipc'
 import type {
   IpcChannel,
@@ -50,9 +54,12 @@ import type {
   ParticipantAddResponse,
   ParticipantRemoveResponse,
   MeetingStartResponse,
+  AudioStartResponse,
+  AudioStopResponse,
 } from '@shared/ipc'
 import type { Clock } from '@shared/providers'
 
+import type { AudioCaptureBridge } from './audio/AudioCaptureBridge'
 import { computeEgressState } from './settings/egressState'
 import type { SettingsStore } from './settings/SettingsStore'
 
@@ -71,6 +78,12 @@ export interface IpcRegistryDependencies {
   db?: unknown
   /** Clock for generating timestamps. */
   clock?: Clock
+  /**
+   * Audio capture bridge (item 0015).
+   * Optional: when absent, audio:start / audio:stop return ok but are no-ops.
+   * Injected in production after the window is created.
+   */
+  audioBridge?: AudioCaptureBridge
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +209,22 @@ function makeHandleMeetingStart(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleAudioStart(deps: IpcRegistryDependencies) {
+  return function handleAudioStart(raw: unknown): AudioStartResponse {
+    AudioStartRequestSchema.parse(raw)
+    deps.audioBridge?.start()
+    return AudioStartResponseSchema.parse({ ok: true })
+  }
+}
+
+function makeHandleAudioStop(deps: IpcRegistryDependencies) {
+  return function handleAudioStop(raw: unknown): AudioStopResponse {
+    AudioStopRequestSchema.parse(raw)
+    deps.audioBridge?.stop()
+    return AudioStopResponseSchema.parse({ ok: true })
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -213,6 +242,8 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'participant:add': makeHandleParticipantAdd(),
     'participant:remove': makeHandleParticipantRemove(),
     'meeting:start': makeHandleMeetingStart(deps),
+    'audio:start': makeHandleAudioStart(deps),
+    'audio:stop': makeHandleAudioStop(deps),
   }
 
   return {

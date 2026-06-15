@@ -29,6 +29,11 @@ vi.stubGlobal('api', {
   settingsGet: vi.fn().mockResolvedValue({}),
   settingsSet: vi.fn().mockResolvedValue({ ok: true }),
   egressState: vi.fn().mockResolvedValue(mockEgressState),
+  // Audio capture (item 0015)
+  audioStart: vi.fn().mockResolvedValue({ ok: true }),
+  audioStop: vi.fn().mockResolvedValue({ ok: true }),
+  audioSendFrame: vi.fn(),
+  onTranscriptSpan: vi.fn().mockReturnValue(() => undefined), // returns unsubscribe fn
 })
 
 // ---------------------------------------------------------------------------
@@ -48,7 +53,12 @@ function renderApp(): ReturnType<typeof render> {
 
 // Reset store between tests
 beforeEach(() => {
-  useAppStore.setState({ route: 'draft', activeMeeting: null })
+  useAppStore.setState({
+    route: 'draft',
+    activeMeeting: null,
+    micPermission: 'unknown',
+    transcriptSpans: [],
+  })
 })
 
 // ---------------------------------------------------------------------------

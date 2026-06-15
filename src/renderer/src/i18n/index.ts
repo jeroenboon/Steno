@@ -51,6 +51,15 @@ const nl = {
   'draft.start.button': 'Starten',
   'draft.start.disabled.reason': 'Voeg een titel in om te kunnen starten',
 
+  // Live screen — audio capture (item 0015)
+  'live.mic.starting': 'Microfoon starten...',
+  'live.mic.active': 'Microfoon actief',
+  'live.mic.denied':
+    'Toegang tot microfoon geweigerd. Controleer de machtigingen en herstart de app.',
+  'live.transcript.heading': 'Transcriptie',
+  'live.transcript.empty': 'Zodra je praat verschijnt de transcriptie hier.',
+  'live.transcript.interim': '(wordt bijgewerkt)',
+
   // Generic
   'app.name': 'LiveTranscriber',
 } as const

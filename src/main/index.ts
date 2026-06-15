@@ -4,7 +4,9 @@ import { join } from 'path'
 import { app, BrowserWindow, ipcMain, session } from 'electron'
 
 import type { IpcChannel } from '@shared/ipc'
+import { FakeASRProvider } from '@shared/providers'
 
+import { AudioCaptureBridge } from './audio/AudioCaptureBridge'
 import { createIpcRegistry } from './ipc-registry'
 import { SettingsStore } from './settings/SettingsStore'
 import { createWindowOptions } from './window-options'
@@ -48,9 +50,22 @@ function applyContentSecurityPolicy(): void {
 // ---------------------------------------------------------------------------
 
 // The channels registered here must stay in sync with the IpcChannel union.
-const IPC_CHANNELS: IpcChannel[] = ['ping', 'settings:get', 'settings:set', 'egress:state']
+const IPC_CHANNELS: IpcChannel[] = [
+  'ping',
+  'settings:get',
+  'settings:set',
+  'egress:state',
+  'meeting:create',
+  'agendaItem:add',
+  'agendaItem:remove',
+  'participant:add',
+  'participant:remove',
+  'meeting:start',
+  'audio:start',
+  'audio:stop',
+]
 
-async function registerIpcHandlers(): Promise<void> {
+async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   const userData = app.getPath('userData')
 
   const settingsStore = new SettingsStore({
@@ -64,7 +79,24 @@ async function registerIpcHandlers(): Promise<void> {
 
   await settingsStore.load()
 
-  const registry = createIpcRegistry({ settingsStore })
+  // ---------------------------------------------------------------------------
+  // Audio capture bridge (item 0015)
+  //
+  // For V1 we use a FakeASRProvider until the settings-based provider is wired
+  // after the real DeepgramAsrProvider keys are available. When settings include
+  // a valid Deepgram key, replace FakeASRProvider with buildProviders().asr.
+  // ---------------------------------------------------------------------------
+  const audioBridge = new AudioCaptureBridge({
+    asrProvider: new FakeASRProvider(),
+    sender: mainWindow.webContents,
+  })
+
+  // One-way channel: renderer sends PCM frames; no invoke/response.
+  ipcMain.on('audio:frame', (_event, frame: Uint8Array) => {
+    audioBridge.pushAudioFrame(frame)
+  })
+
+  const registry = createIpcRegistry({ settingsStore, audioBridge })
 
   for (const channel of IPC_CHANNELS) {
     ipcMain.handle(channel, (_event, payload: unknown) => {
@@ -77,7 +109,7 @@ async function registerIpcHandlers(): Promise<void> {
 // Window
 // ---------------------------------------------------------------------------
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   const preloadPath = join(__dirname, '../preload/index.js')
   const opts = createWindowOptions(preloadPath)
   const mainWindow = new BrowserWindow(opts)
@@ -88,6 +120,8 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return mainWindow
 }
 
 // ---------------------------------------------------------------------------
@@ -98,8 +132,9 @@ app
   .whenReady()
   .then(async () => {
     applyContentSecurityPolicy()
-    await registerIpcHandlers()
-    createWindow()
+    // Create window first so registerIpcHandlers can bind to its webContents.
+    const mainWindow = createWindow()
+    await registerIpcHandlers(mainWindow)
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {

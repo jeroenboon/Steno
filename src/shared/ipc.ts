@@ -152,6 +152,37 @@ export type MeetingStartRequest = z.infer<typeof MeetingStartRequestSchema>
 export type MeetingStartResponse = z.infer<typeof MeetingStartResponseSchema>
 
 // ---------------------------------------------------------------------------
+// audio:start — tell main to open an ASR session (item 0015)
+// ---------------------------------------------------------------------------
+
+export const AudioStartRequestSchema = z.object({})
+export const AudioStartResponseSchema = z.object({ ok: z.literal(true) })
+
+export type AudioStartRequest = z.infer<typeof AudioStartRequestSchema>
+export type AudioStartResponse = z.infer<typeof AudioStartResponseSchema>
+
+// ---------------------------------------------------------------------------
+// audio:stop — tell main to close the active ASR session (item 0015)
+// ---------------------------------------------------------------------------
+
+export const AudioStopRequestSchema = z.object({})
+export const AudioStopResponseSchema = z.object({ ok: z.literal(true) })
+
+export type AudioStopRequest = z.infer<typeof AudioStopRequestSchema>
+export type AudioStopResponse = z.infer<typeof AudioStopResponseSchema>
+
+// ---------------------------------------------------------------------------
+// transcript:span — main → renderer event (item 0015)
+//
+// NOT an invoke channel. Main pushes spans via webContents.send; the preload
+// exposes onTranscriptSpan(cb) / offTranscriptSpan(cb) for the renderer.
+// We validate the incoming payload with this schema on the renderer side.
+// ---------------------------------------------------------------------------
+
+export { TranscriptSpanSchema } from './domain/types'
+export type { TranscriptSpan } from './domain/types'
+
+// ---------------------------------------------------------------------------
 // Channel registry — exhaustive union of all channel names
 // ---------------------------------------------------------------------------
 
@@ -166,10 +197,21 @@ export type IpcChannel =
   | 'participant:add'
   | 'participant:remove'
   | 'meeting:start'
+  | 'audio:start'
+  | 'audio:stop'
+
+/**
+ * One-way channels: renderer sends, main receives (no invoke/response).
+ * These are registered via ipcMain.on, not ipcMain.handle.
+ */
+export type IpcOnewayChannel = 'audio:frame'
 
 // ---------------------------------------------------------------------------
 // Typed preload API surface exposed to the renderer via contextBridge
 // ---------------------------------------------------------------------------
+
+/** Cleanup function returned by onTranscriptSpan; call to remove the listener. */
+export type UnsubscribeFn = () => void
 
 export interface RendererApi {
   /** Send a ping to main; resolves with { pong: true }. */
@@ -192,4 +234,26 @@ export interface RendererApi {
   participantRemove: (req: ParticipantRemoveRequest) => Promise<ParticipantRemoveResponse>
   /** Start a meeting (Draft → Live). */
   meetingStart: (req: MeetingStartRequest) => Promise<MeetingStartResponse>
+  /**
+   * Tell main to open an ASR session. Call before sending audio frames.
+   * (item 0015)
+   */
+  audioStart: () => Promise<AudioStartResponse>
+  /**
+   * Tell main to close the active ASR session.
+   * (item 0015)
+   */
+  audioStop: () => Promise<AudioStopResponse>
+  /**
+   * Send a raw PCM audio frame (Int16 LE, Uint8Array) to main.
+   * Fire-and-forget: no response. Uses ipcRenderer.send, not invoke.
+   * (item 0015)
+   */
+  audioSendFrame: (frame: Uint8Array) => void
+  /**
+   * Subscribe to transcript spans pushed from main.
+   * Returns an unsubscribe function.
+   * (item 0015)
+   */
+  onTranscriptSpan: (cb: (span: import('./domain/types').TranscriptSpan) => void) => UnsubscribeFn
 }

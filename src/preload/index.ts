@@ -11,6 +11,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron'
 
+import type { TranscriptSpan } from '@shared/domain/types'
 import type {
   RendererApi,
   SettingsSetRequest,
@@ -29,6 +30,9 @@ import type {
   ParticipantRemoveResponse,
   MeetingStartRequest,
   MeetingStartResponse,
+  AudioStartResponse,
+  AudioStopResponse,
+  UnsubscribeFn,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -49,6 +53,35 @@ const api: RendererApi = {
     ipcRenderer.invoke('participant:remove', req) as Promise<ParticipantRemoveResponse>,
   meetingStart: (req: MeetingStartRequest) =>
     ipcRenderer.invoke('meeting:start', req) as Promise<MeetingStartResponse>,
+
+  // ---------------------------------------------------------------------------
+  // Audio capture (item 0015)
+  // ---------------------------------------------------------------------------
+
+  audioStart: () => ipcRenderer.invoke('audio:start', {}) as Promise<AudioStartResponse>,
+  audioStop: () => ipcRenderer.invoke('audio:stop', {}) as Promise<AudioStopResponse>,
+
+  /**
+   * Fire-and-forget: send a PCM frame to main without waiting for a response.
+   * Uses ipcRenderer.send (one-way), not invoke, to minimise per-frame overhead.
+   */
+  audioSendFrame: (frame: Uint8Array) => {
+    ipcRenderer.send('audio:frame', frame)
+  },
+
+  /**
+   * Subscribe to transcript spans pushed by main via webContents.send.
+   * Returns an unsubscribe function (the preload holds no global listener state).
+   */
+  onTranscriptSpan: (cb: (span: TranscriptSpan) => void): UnsubscribeFn => {
+    const listener = (_event: Electron.IpcRendererEvent, span: TranscriptSpan) => {
+      cb(span)
+    }
+    ipcRenderer.on('transcript:span', listener)
+    return () => {
+      ipcRenderer.removeListener('transcript:span', listener)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)
