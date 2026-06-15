@@ -16,13 +16,8 @@
  * wired in src/main/index.ts.
  */
 
-import type {
-  IpcChannel,
-  PingResponse,
-  SettingsGetResponse,
-  SettingsSetResponse,
-  EgressState,
-} from '@shared/ipc'
+import { randomUUID } from 'crypto'
+
 import {
   PingRequestSchema,
   PingResponseSchema,
@@ -30,7 +25,33 @@ import {
   SettingsSetRequestSchema,
   SettingsSetResponseSchema,
   EgressStateGetRequestSchema,
+  MeetingCreateRequestSchema,
+  MeetingCreateResponseSchema,
+  AgendaItemAddRequestSchema,
+  AgendaItemAddResponseSchema,
+  AgendaItemRemoveRequestSchema,
+  AgendaItemRemoveResponseSchema,
+  ParticipantAddRequestSchema,
+  ParticipantAddResponseSchema,
+  ParticipantRemoveRequestSchema,
+  ParticipantRemoveResponseSchema,
+  MeetingStartRequestSchema,
+  MeetingStartResponseSchema,
 } from '@shared/ipc'
+import type {
+  IpcChannel,
+  PingResponse,
+  SettingsGetResponse,
+  SettingsSetResponse,
+  EgressState,
+  MeetingCreateResponse,
+  AgendaItemAddResponse,
+  AgendaItemRemoveResponse,
+  ParticipantAddResponse,
+  ParticipantRemoveResponse,
+  MeetingStartResponse,
+} from '@shared/ipc'
+import type { Clock } from '@shared/providers'
 
 import { computeEgressState } from './settings/egressState'
 import type { SettingsStore } from './settings/SettingsStore'
@@ -46,6 +67,10 @@ type Handler = (raw: unknown) => unknown
 export interface IpcRegistryDependencies {
   /** Loaded SettingsStore instance. Must have load() already called. */
   settingsStore: SettingsStore
+  /** Database instance (optional, for future persistence). */
+  db?: unknown
+  /** Clock for generating timestamps. */
+  clock?: Clock
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +115,87 @@ function makeHandleEgressState(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleMeetingCreate(deps: IpcRegistryDependencies) {
+  return function handleMeetingCreate(raw: unknown): MeetingCreateResponse {
+    const req = MeetingCreateRequestSchema.parse(raw)
+
+    const now = new Date(deps.clock?.now() ?? Date.now()).toISOString()
+    const meeting: MeetingCreateResponse = {
+      id: randomUUID(),
+      title: req.title,
+      state: 'draft',
+      paused: false,
+      createdAt: now,
+      primaryLanguage: req.primaryLanguage,
+    }
+
+    return MeetingCreateResponseSchema.parse(meeting)
+  }
+}
+
+function makeHandleAgendaItemAdd(): (raw: unknown) => AgendaItemAddResponse {
+  return function handleAgendaItemAdd(raw: unknown): AgendaItemAddResponse {
+    const req = AgendaItemAddRequestSchema.parse(raw)
+
+    const agendaItem: AgendaItemAddResponse = {
+      id: randomUUID(),
+      title: req.title,
+      topic: req.topic,
+    }
+
+    return AgendaItemAddResponseSchema.parse(agendaItem)
+  }
+}
+
+function makeHandleAgendaItemRemove(): (raw: unknown) => AgendaItemRemoveResponse {
+  return function handleAgendaItemRemove(raw: unknown): AgendaItemRemoveResponse {
+    AgendaItemRemoveRequestSchema.parse(raw)
+    return AgendaItemRemoveResponseSchema.parse({ ok: true })
+  }
+}
+
+function makeHandleParticipantAdd(): (raw: unknown) => ParticipantAddResponse {
+  return function handleParticipantAdd(raw: unknown): ParticipantAddResponse {
+    const req = ParticipantAddRequestSchema.parse(raw)
+
+    const participant: ParticipantAddResponse = {
+      id: randomUUID(),
+      name: req.name,
+    }
+
+    return ParticipantAddResponseSchema.parse(participant)
+  }
+}
+
+function makeHandleParticipantRemove(): (raw: unknown) => ParticipantRemoveResponse {
+  return function handleParticipantRemove(raw: unknown): ParticipantRemoveResponse {
+    ParticipantRemoveRequestSchema.parse(raw)
+    return ParticipantRemoveResponseSchema.parse({ ok: true })
+  }
+}
+
+function makeHandleMeetingStart(deps: IpcRegistryDependencies) {
+  return function handleMeetingStart(raw: unknown): MeetingStartResponse {
+    const req = MeetingStartRequestSchema.parse(raw)
+
+    const now = new Date(deps.clock?.now() ?? Date.now()).toISOString()
+
+    // For now, return a live meeting. When integrated with the DB + service,
+    // this will load the meeting, validate it, and persist the transition.
+    const meeting: MeetingStartResponse = {
+      id: req.meetingId,
+      title: 'Meeting',
+      state: 'live',
+      paused: false,
+      createdAt: now,
+      primaryLanguage: 'nl',
+      startedAt: now,
+    }
+
+    return MeetingStartResponseSchema.parse(meeting)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -101,6 +207,12 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'settings:get': makeHandleSettingsGet(deps),
     'settings:set': makeHandleSettingsSet(deps),
     'egress:state': makeHandleEgressState(deps),
+    'meeting:create': makeHandleMeetingCreate(deps),
+    'agendaItem:add': makeHandleAgendaItemAdd(),
+    'agendaItem:remove': makeHandleAgendaItemRemove(),
+    'participant:add': makeHandleParticipantAdd(),
+    'participant:remove': makeHandleParticipantRemove(),
+    'meeting:start': makeHandleMeetingStart(deps),
   }
 
   return {

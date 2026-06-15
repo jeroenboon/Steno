@@ -36,6 +36,21 @@ const nl = {
   // Egress indicator
   'egress.indicator.label': 'Gegevensverwerking',
 
+  // Draft screen (item 0014)
+  'draft.meeting.title.label': 'Vergaderingtitel',
+  'draft.meeting.title.placeholder': 'Bijv. Q3 Planning',
+  'draft.agenda.heading': 'Agenda items',
+  'draft.agenda.add.placeholder': 'Agenda item toevoegen',
+  'draft.agenda.remove': 'Verwijderen',
+  'draft.participants.heading': 'Deelnemers',
+  'draft.participants.add.placeholder': 'Deelnemersnaam toevoegen',
+  'draft.participants.remove': 'Verwijderen',
+  'draft.language.label': 'Taal',
+  'draft.language.nl': 'Nederlands',
+  'draft.language.en': 'English',
+  'draft.start.button': 'Starten',
+  'draft.start.disabled.reason': 'Voeg een titel in om te kunnen starten',
+
   // Generic
   'app.name': 'LiveTranscriber',
 } as const

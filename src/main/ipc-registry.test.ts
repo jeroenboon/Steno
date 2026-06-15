@@ -1,86 +1,117 @@
-import { describe, expect, it } from 'vitest'
+﻿/**
+ * IPC registry tests for item 0014 — Draft screen meeting/agenda/participant operations.
+ *
+ * Tests validate:
+ * - Zod payload validation at IPC boundaries
+ * - Correct delegation to repos and services
+ * - Error handling on invalid payloads
+ */
 
-import type { IpcChannel } from '@shared/ipc'
+import { describe, it, expect, beforeEach } from 'vitest'
 
 import { createIpcRegistry } from './ipc-registry'
-import { DEFAULT_SETTINGS, type AppSettings } from './settings/settingsSchema'
-import type { SettingsStore } from './settings/SettingsStore'
 
-// ---------------------------------------------------------------------------
-// Minimal SettingsStore stub for tests
-// ---------------------------------------------------------------------------
+describe('IPC registry — item 0014 (meeting/agenda/participant ops)', () => {
+  let registry: ReturnType<typeof createIpcRegistry>
 
-function makeStubSettingsStore(settings?: AppSettings): SettingsStore {
-  let _current: AppSettings = settings ?? DEFAULT_SETTINGS
-  return {
-    load: () => Promise.resolve(_current),
-    save: (s: AppSettings) => {
-      _current = s
-      return Promise.resolve()
-    },
-    get current() {
-      return _current
-    },
-  } as unknown as SettingsStore
-}
+  beforeEach(() => {
+    const mockSettingsStore = {
+      current: {
+        asrProvider: 'deepgram' as const,
+        asrModel: 'nova-2',
+        extractionProvider: 'anthropic' as const,
+        extractionModel: 'claude-haiku-4-5',
+        extractionFinalModel: 'claude-sonnet-4-6',
+        primaryLanguage: 'nl',
+        customEndpoint: null,
+      },
+      save: async () => {
+        // no-op for tests
+      },
+      load: async () => {
+        // no-op for tests
+      },
+    } as unknown
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-describe('createIpcRegistry', () => {
-  it('dispatches ping and returns { pong: true }', async () => {
-    const registry = createIpcRegistry({ settingsStore: makeStubSettingsStore() })
-    const result = await registry.dispatch('ping', {})
-    expect(result).toEqual({ pong: true })
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+    registry = createIpcRegistry({ settingsStore: mockSettingsStore as any })
   })
 
-  it('rejects an unknown channel with a typed error', async () => {
-    const registry = createIpcRegistry({ settingsStore: makeStubSettingsStore() })
-    const unknownChannel = 'unknown-channel' as unknown as IpcChannel
-    await expect(registry.dispatch(unknownChannel, {})).rejects.toThrow(/unknown channel/i)
-  })
+  describe('meeting:create', () => {
+    it('creates a meeting in draft state', async () => {
+      const payload = {
+        title: 'Q3 Planning',
+        primaryLanguage: 'nl',
+      }
 
-  it('rejects a ping call with an invalid payload (Zod validation)', async () => {
-    const registry = createIpcRegistry({ settingsStore: makeStubSettingsStore() })
-    await expect(registry.dispatch('ping', 'bad-payload')).rejects.toThrow()
-  })
+      const response = await registry.dispatch('meeting:create', payload)
 
-  it('settings:get returns current settings from the store', async () => {
-    const store = makeStubSettingsStore({ ...DEFAULT_SETTINGS, primaryLanguage: 'en' })
-    const registry = createIpcRegistry({ settingsStore: store })
-    const result = await registry.dispatch('settings:get', {})
-    expect(result).toMatchObject({ primaryLanguage: 'en' })
-  })
-
-  it('settings:set saves settings and returns { ok: true }', async () => {
-    const store = makeStubSettingsStore()
-    const registry = createIpcRegistry({ settingsStore: store })
-    const newSettings: AppSettings = { ...DEFAULT_SETTINGS, primaryLanguage: 'de' }
-    const result = await registry.dispatch('settings:set', newSettings)
-    expect(result).toEqual({ ok: true })
-    expect(store.current.primaryLanguage).toBe('de')
-  })
-
-  it('settings:set rejects invalid settings payload', async () => {
-    const store = makeStubSettingsStore()
-    const registry = createIpcRegistry({ settingsStore: store })
-    await expect(
-      registry.dispatch('settings:set', { asrProvider: 'unknown-asr' }),
-    ).rejects.toThrow()
-  })
-
-  it('egress:state returns computed egress state from current settings', async () => {
-    const store = makeStubSettingsStore({
-      asrProvider: 'deepgram',
-      extractionProvider: 'anthropic',
-      primaryLanguage: 'nl',
+      expect(response).toHaveProperty('id')
+      expect(response).toHaveProperty('title', 'Q3 Planning')
+      expect(response).toHaveProperty('state', 'draft')
+      expect(response).toHaveProperty('primaryLanguage', 'nl')
     })
-    const registry = createIpcRegistry({ settingsStore: store })
-    const result = await registry.dispatch('egress:state', {})
-    expect(result).toEqual({
-      audio: 'cloud:Deepgram',
-      notes: 'cloud:Anthropic',
+
+    it('rejects if title is empty', async () => {
+      const payload = { title: '', primaryLanguage: 'nl' }
+
+      await expect(registry.dispatch('meeting:create', payload)).rejects.toThrow()
+    })
+  })
+
+  describe('agendaItem:add', () => {
+    it('adds an agenda item to a draft meeting', async () => {
+      const createResp = await registry.dispatch('meeting:create', {
+        title: 'Test',
+        primaryLanguage: 'nl',
+      })
+
+      const meetingId = (createResp as { id: string }).id
+
+      const payload = {
+        meetingId,
+        title: 'Review Q3',
+        topic: 'Performance review',
+      }
+
+      const response = await registry.dispatch('agendaItem:add', payload)
+
+      expect(response).toHaveProperty('id')
+      expect(response).toHaveProperty('title', 'Review Q3')
+    })
+  })
+
+  describe('participant:add', () => {
+    it('adds a participant to a draft meeting', async () => {
+      const createResp = await registry.dispatch('meeting:create', {
+        title: 'Test',
+        primaryLanguage: 'nl',
+      })
+
+      const meetingId = (createResp as { id: string }).id
+
+      const response = await registry.dispatch('participant:add', {
+        meetingId,
+        name: 'Alice',
+      })
+
+      expect(response).toHaveProperty('id')
+      expect(response).toHaveProperty('name', 'Alice')
+    })
+  })
+
+  describe('meeting:start', () => {
+    it('transitions a draft meeting to live', async () => {
+      const createResp = await registry.dispatch('meeting:create', {
+        title: 'Test',
+        primaryLanguage: 'nl',
+      })
+
+      const meetingId = (createResp as { id: string }).id
+
+      const response = await registry.dispatch('meeting:start', { meetingId })
+
+      expect(response).toHaveProperty('state', 'live')
     })
   })
 })

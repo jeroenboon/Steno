@@ -17,6 +17,18 @@ import type {
   EgressState,
   SettingsGetResponse,
   SettingsSetResponse,
+  MeetingCreateRequest,
+  MeetingCreateResponse,
+  AgendaItemAddRequest,
+  AgendaItemAddResponse,
+  AgendaItemRemoveRequest,
+  AgendaItemRemoveResponse,
+  ParticipantAddRequest,
+  ParticipantAddResponse,
+  ParticipantRemoveRequest,
+  ParticipantRemoveResponse,
+  MeetingStartRequest,
+  MeetingStartResponse,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -25,6 +37,18 @@ const api: RendererApi = {
   settingsSet: (settings: SettingsSetRequest) =>
     ipcRenderer.invoke('settings:set', settings) as Promise<SettingsSetResponse>,
   egressState: () => ipcRenderer.invoke('egress:state', {}) as Promise<EgressState>,
+  meetingCreate: (req: MeetingCreateRequest) =>
+    ipcRenderer.invoke('meeting:create', req) as Promise<MeetingCreateResponse>,
+  agendaItemAdd: (req: AgendaItemAddRequest) =>
+    ipcRenderer.invoke('agendaItem:add', req) as Promise<AgendaItemAddResponse>,
+  agendaItemRemove: (req: AgendaItemRemoveRequest) =>
+    ipcRenderer.invoke('agendaItem:remove', req) as Promise<AgendaItemRemoveResponse>,
+  participantAdd: (req: ParticipantAddRequest) =>
+    ipcRenderer.invoke('participant:add', req) as Promise<ParticipantAddResponse>,
+  participantRemove: (req: ParticipantRemoveRequest) =>
+    ipcRenderer.invoke('participant:remove', req) as Promise<ParticipantRemoveResponse>,
+  meetingStart: (req: MeetingStartRequest) =>
+    ipcRenderer.invoke('meeting:start', req) as Promise<MeetingStartResponse>,
 }
 
 contextBridge.exposeInMainWorld('api', api)

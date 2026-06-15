@@ -11,6 +11,7 @@
 
 import { z } from 'zod'
 
+import { MeetingSchema, AgendaItemSchema, ParticipantSchema } from './domain'
 import { type EgressState } from './settings/egressState'
 import { AppSettingsSchema } from './settings/settingsSchema'
 
@@ -69,10 +70,102 @@ export type EgressStateGetRequest = z.infer<typeof EgressStateGetRequestSchema>
 export type { EgressState }
 
 // ---------------------------------------------------------------------------
+// meeting:create — create a new meeting in draft state (item 0014)
+// ---------------------------------------------------------------------------
+
+export const MeetingCreateRequestSchema = z.object({
+  title: z.string().min(1, 'Meeting title cannot be empty'),
+  primaryLanguage: z.string().min(1, 'Primary language cannot be empty'),
+})
+
+export const MeetingCreateResponseSchema = MeetingSchema
+
+export type MeetingCreateRequest = z.infer<typeof MeetingCreateRequestSchema>
+export type MeetingCreateResponse = z.infer<typeof MeetingCreateResponseSchema>
+
+// ---------------------------------------------------------------------------
+// agendaItem:add — add an agenda item to a meeting (item 0014)
+// ---------------------------------------------------------------------------
+
+export const AgendaItemAddRequestSchema = z.object({
+  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
+  title: z.string().min(1, 'Agenda item title cannot be empty'),
+  topic: z.string().min(1, 'Agenda item topic cannot be empty'),
+})
+
+export const AgendaItemAddResponseSchema = AgendaItemSchema
+
+export type AgendaItemAddRequest = z.infer<typeof AgendaItemAddRequestSchema>
+export type AgendaItemAddResponse = z.infer<typeof AgendaItemAddResponseSchema>
+
+// ---------------------------------------------------------------------------
+// agendaItem:remove — remove an agenda item (item 0014)
+// ---------------------------------------------------------------------------
+
+export const AgendaItemRemoveRequestSchema = z.object({
+  agendaItemId: z.string().min(1, 'Agenda item ID cannot be empty'),
+})
+
+export const AgendaItemRemoveResponseSchema = z.object({ ok: z.literal(true) })
+
+export type AgendaItemRemoveRequest = z.infer<typeof AgendaItemRemoveRequestSchema>
+export type AgendaItemRemoveResponse = z.infer<typeof AgendaItemRemoveResponseSchema>
+
+// ---------------------------------------------------------------------------
+// participant:add — add a participant to a meeting (item 0014)
+// ---------------------------------------------------------------------------
+
+export const ParticipantAddRequestSchema = z.object({
+  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
+  name: z.string().min(1, 'Participant name cannot be empty'),
+})
+
+export const ParticipantAddResponseSchema = ParticipantSchema
+
+export type ParticipantAddRequest = z.infer<typeof ParticipantAddRequestSchema>
+export type ParticipantAddResponse = z.infer<typeof ParticipantAddResponseSchema>
+
+// ---------------------------------------------------------------------------
+// participant:remove — remove a participant (item 0014)
+// ---------------------------------------------------------------------------
+
+export const ParticipantRemoveRequestSchema = z.object({
+  participantId: z.string().min(1, 'Participant ID cannot be empty'),
+})
+
+export const ParticipantRemoveResponseSchema = z.object({ ok: z.literal(true) })
+
+export type ParticipantRemoveRequest = z.infer<typeof ParticipantRemoveRequestSchema>
+export type ParticipantRemoveResponse = z.infer<typeof ParticipantRemoveResponseSchema>
+
+// ---------------------------------------------------------------------------
+// meeting:start — transition a draft meeting to live (item 0014)
+// ---------------------------------------------------------------------------
+
+export const MeetingStartRequestSchema = z.object({
+  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
+})
+
+export const MeetingStartResponseSchema = MeetingSchema
+
+export type MeetingStartRequest = z.infer<typeof MeetingStartRequestSchema>
+export type MeetingStartResponse = z.infer<typeof MeetingStartResponseSchema>
+
+// ---------------------------------------------------------------------------
 // Channel registry — exhaustive union of all channel names
 // ---------------------------------------------------------------------------
 
-export type IpcChannel = 'ping' | 'settings:get' | 'settings:set' | 'egress:state'
+export type IpcChannel =
+  | 'ping'
+  | 'settings:get'
+  | 'settings:set'
+  | 'egress:state'
+  | 'meeting:create'
+  | 'agendaItem:add'
+  | 'agendaItem:remove'
+  | 'participant:add'
+  | 'participant:remove'
+  | 'meeting:start'
 
 // ---------------------------------------------------------------------------
 // Typed preload API surface exposed to the renderer via contextBridge
@@ -87,4 +180,16 @@ export interface RendererApi {
   settingsSet: (settings: SettingsSetRequest) => Promise<SettingsSetResponse>
   /** Get the current egress state derived from settings. */
   egressState: () => Promise<EgressState>
+  /** Create a new meeting in draft state. */
+  meetingCreate: (req: MeetingCreateRequest) => Promise<MeetingCreateResponse>
+  /** Add an agenda item to a meeting. */
+  agendaItemAdd: (req: AgendaItemAddRequest) => Promise<AgendaItemAddResponse>
+  /** Remove an agenda item. */
+  agendaItemRemove: (req: AgendaItemRemoveRequest) => Promise<AgendaItemRemoveResponse>
+  /** Add a participant to a meeting. */
+  participantAdd: (req: ParticipantAddRequest) => Promise<ParticipantAddResponse>
+  /** Remove a participant. */
+  participantRemove: (req: ParticipantRemoveRequest) => Promise<ParticipantRemoveResponse>
+  /** Start a meeting (Draft → Live). */
+  meetingStart: (req: MeetingStartRequest) => Promise<MeetingStartResponse>
 }
