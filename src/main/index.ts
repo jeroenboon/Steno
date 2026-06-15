@@ -7,6 +7,7 @@ import type { IpcChannel } from '@shared/ipc'
 import { FakeASRProvider } from '@shared/providers'
 
 import { AudioCaptureBridge } from './audio/AudioCaptureBridge'
+import { buildContentSecurityPolicy } from './csp'
 import { createIpcRegistry } from './ipc-registry'
 import { tryBuildProviders } from './settings/providerFactory'
 import { ElectronSecretStorage } from './settings/SecretStorage'
@@ -22,26 +23,19 @@ import { createWindowOptions } from './window-options'
 // is the correct place for this in Electron because it applies to every
 // navigation, including dev-mode HMR reloads, without needing the built HTML
 // to carry the header. See ADR 0005.
+//
+// The policy is dev-aware (see csp.ts): strict in production, relaxed in dev so
+// the Vite dev server's inline Fast-Refresh script and HMR websocket can run.
 // ---------------------------------------------------------------------------
 
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'", // Vite injects inline styles during dev
-  "img-src 'self' data:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join('; ')
-
 function applyContentSecurityPolicy(): void {
+  const isDev = process.env.ELECTRON_RENDERER_URL !== undefined
+  const csp = buildContentSecurityPolicy(isDev)
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': [CSP],
+        'Content-Security-Policy': [csp],
       },
     })
   })

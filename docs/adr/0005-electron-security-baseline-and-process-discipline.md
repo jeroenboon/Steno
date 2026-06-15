@@ -36,9 +36,23 @@ A strict Content Security Policy is applied via `session.webRequest.onHeadersRec
 rather than a `<meta>` tag. The session hook fires before any script runs and
 applies to every navigation, including HMR reloads in dev. A `<meta>` tag would
 only activate after the document is parsed — too late if the document itself
-carries injected content. The policy is `default-src 'self'` with
-`style-src 'self' 'unsafe-inline'` to permit Vite's dev-mode inline style
-injection (acceptable in dev; production only loads from `'self'`).
+carries injected content.
+
+The policy is **dev-aware** (`src/main/csp.ts`, `buildContentSecurityPolicy(isDev)`):
+
+- **Production:** `default-src 'self'`, `script-src 'self'` — no inline scripts,
+  no `eval`. This is the real security posture and the only one that ships.
+- **Development:** `script-src` additionally allows `'unsafe-inline'` and
+  `'unsafe-eval'`, and `connect-src` allows `ws:`/`wss:`. This is required, not
+  cosmetic: electron-vite serves the renderer from a local dev server and the
+  React Fast-Refresh plugin injects an **inline** module script and uses `eval`
+  for HMR. Under the production policy that inline bootstrap is blocked and the
+  window renders blank white (discovered during item 0017 verification — the
+  build/test gate could not catch it because it only manifests under
+  `electron-vite dev`). `isDev` is detected via `process.env.ELECTRON_RENDERER_URL`.
+
+`style-src 'self' 'unsafe-inline'` is permitted in both modes for Vite's inline
+style injection.
 
 ## Process discipline
 
