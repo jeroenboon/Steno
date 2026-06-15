@@ -226,15 +226,23 @@ _Why:_ a blanket "nothing leaves the device" promise is false with cloud provide
 **TDD:** the framing/resampling logic is pure → unit-test it (correct frame size, sample rate). IPC streaming tested with a fake audio source; permission-denied path tested.
 **DoD:** gate green; live transcript spans appear from mic in a manual smoke check. **Reflect:** —
 
-### 0016 — Audio capture: system loopback + mixing
+### 0016 — Settings screen: provider selection, API keys, disclosure + provider wiring
 
-**Depends on:** 0015.
+**Depends on:** 0012, 0013.
+**Goal:** A user-facing Settings screen to choose the ASR + extraction providers, enter/store API keys, set the primary language, and see egress disclosure — and the wiring that makes a chosen provider actually run. (Added mid-build: the plan had the settings _backend_ in 0012 and the egress _indicator_ in 0013, but no screen to configure providers, so real end-to-end audio/extraction could never be exercised.)
+**What & how:** Renderer Settings screen (using 0013 tokens + i18n, Dutch) calling the `settings:get`/`settings:set` IPC from 0012: pick ASR provider (Deepgram preset; local-parakeet shown but disabled until 0024) and extraction provider (Anthropic preset, or custom OpenAI-compatible: base URL + model + key); API-key fields that write to `safeStorage` via main (keys never round-trip to the renderer in plaintext beyond entry). Show **disclosure copy at the point of choice** (`buildDisclosureCopy` from 0012) when a cloud provider is selected, per [ADR 0003](docs/adr/0003-privacy-is-provider-dependent-with-explicit-egress.md). Then **wire `buildProviders()` (from 0012) into app startup / the AudioCaptureBridge** so the real configured ASR provider (not `FakeASRProvider`) feeds the capture pipeline, and the configured ExtractionProvider feeds the extraction loop. Handle "no key configured yet" gracefully (the app must not crash; surface a prompt to open Settings).
+**TDD:** component tests (mock the bridge): selecting a provider persists via `settings:set`; entering a key calls the key-store IPC; disclosure copy appears when a cloud provider is chosen; the custom-OpenAI fields validate. Main-side: a key entered is stored via the (faked) safeStorage and never written to the settings JSON; `buildProviders()` is invoked with the persisted settings; missing-key path yields a clear error, not a crash.
+**DoD:** gate green. **Reflect:** update CONTEXT only if a precise new term emerged. ADR only if a real surprising trade-off arose (e.g. how keys move from renderer entry into safeStorage without lingering in the renderer).
+
+### 0017 — Audio capture: system loopback + mixing
+
+**Depends on:** 0015, 0016.
 **Goal:** Add WASAPI system-audio loopback (`getDisplayMedia` with audio on Windows), mix with the mic into one stream feeding ASR. Per [ADR 0002](docs/adr/0002-dual-stream-audio-capture.md).
 **What & how:** Capture loopback, mix with mic in an AudioWorklet (sum + clamp/normalize), single stream to ASR. In-person mic-only is the no-loopback degenerate case (toggle).
 **TDD:** the mixing function is pure → unit-test (two signals sum/clamp correctly; mono path when loopback absent). Capture wiring smoke-checked manually.
 **DoD:** gate green. **Reflect:** note any platform caveat discovered (could amend ADR 0002).
 
-### 0017 — Live screen: proposed items, agenda grouping, source spans, keyboard flow
+### 0018 — Live screen: proposed items, agenda grouping, source spans, keyboard flow
 
 **Depends on:** 0008, 0009, 0014.
 **Goal:** The core live UI. Proposed Decisions/Actions stream in, grouped by Agenda Item, each showing its source span; note-taker confirms/edits/dismisses with keyboard-first flow; manual add; collapsed read-only transcript pane.
@@ -242,38 +250,38 @@ _Why:_ a blanket "nothing leaves the device" promise is false with cloud provide
 **TDD:** component tests with mocked IPC: proposed item renders with source span; confirm/dismiss/edit dispatch the right calls; retraction animates out; keyboard shortcuts work; transcript collapsed by default.
 **DoD:** gate green. **Reflect:** UI may reveal a missing term (e.g. "current agenda item") → update CONTEXT.
 
-### 0018 — Nudges
+### 0019 — Nudges
 
-**Depends on:** 0017.
+**Depends on:** 0018.
 **Goal:** Reactive, dismissible nudges (Action without owner, contradicting Decisions, empty agenda item).
 **What & how:** Pure nudge-derivation functions over current meeting state; render as dismissible prompts; never mutate on their own.
 **TDD:** each nudge rule unit-tested (fires/doesn't); dismiss hides without changing data.
 **DoD:** gate green. **Reflect:** confirm "Nudge" usage matches CONTEXT.
 
-### 0019 — Running Summary / "ask the meeting" panel (L3)
+### 0020 — Running Summary / "ask the meeting" panel (L3)
 
-**Depends on:** 0010, 0017.
+**Depends on:** 0010, 0018.
 **Goal:** Live updating whole-meeting summary + a query box answered from the transcript.
 **What & how:** Periodic summary via the extraction/LLM provider (separate from item extraction); a Q&A call grounded in transcript so far. Clearly non-authoritative over Decisions/Actions.
 **TDD:** with fake provider: summary refreshes on cadence; a query returns a grounded answer; failures degrade gracefully.
 **DoD:** gate green. **Reflect:** confirm Running Summary vs Discussion Summary boundary still holds in CONTEXT.
 
-### 0020 — End meeting, final pass, review & edit, Discussion Summaries
+### 0021 — End meeting, final pass, review & edit, Discussion Summaries
 
-**Depends on:** 0008, 0017.
+**Depends on:** 0008, 0018.
 **Goal:** Stop → final extraction pass → review screen showing per-Agenda-Item Discussion Summary + Decisions + Actions, all editable.
 **TDD:** ending triggers the final pass once (uses 0008); review screen renders summaries + items; edits persist; Ended meeting remains fully editable.
 **DoD:** gate green. **Reflect:** —
 
-### 0021 — Export: Markdown (primary) + JSON
+### 0022 — Export: Markdown (primary) + JSON
 
-**Depends on:** 0020.
+**Depends on:** 0021.
 **Goal:** Export a meeting to Markdown (agenda headings, Discussion Summary + Decisions + Actions per item, owners/due dates inline, off-agenda last) and to JSON. "Copy as Markdown" too.
 **What & how:** Pure serializers domain → Markdown / JSON. Plain text only, no Office formats (per user preference).
 **TDD:** golden-file tests for Markdown structure; JSON validates against a Zod schema; off-agenda placement; empty-meeting edge case.
 **DoD:** gate green. **Reflect:** —
 
-### 0022 — Meeting history / home
+### 0023 — Meeting history / home
 
 **Depends on:** 0004, 0013.
 **Goal:** Home screen: "New meeting" + list of past meetings to reopen. Single-meeting v1; no cross-meeting dashboard (data model already supports it).
@@ -284,7 +292,7 @@ _Why:_ a blanket "nothing leaves the device" promise is false with cloud provide
 
 ## Phase 3 — Upgrades (deferred, post-core)
 
-### 0023 — Local Parakeet V3 via ONNX + DirectML (spike → adapter)
+### 0024 — Local Parakeet V3 via ONNX + DirectML (spike → adapter)
 
 **Depends on:** 0011 (proves the ASR seam).
 **Goal:** Bring up local streaming Parakeet behind `ASRProvider` as an upgrade to the cloud default. Per [ADR 0001](docs/adr/0001-electron-shell-with-onnx-local-asr.md), this is the deferred high-risk path.
@@ -292,9 +300,9 @@ _Why:_ a blanket "nothing leaves the device" promise is false with cloud provide
 **TDD:** adapter conforms to ASRProvider against recorded fixtures; download/cache logic tested with a mocked fetch.
 **DoD:** gate green (the spike's go/no-go is recorded even if the adapter doesn't ship). **Reflect:** **amend ADR 0001** with the spike outcome.
 
-### 0024 — Speaker-label mapping UI (cloud diarizer only)
+### 0025 — Speaker-label mapping UI (cloud diarizer only)
 
-**Depends on:** 0011, 0017.
+**Depends on:** 0011, 0018.
 **Goal:** When a diarizing ASR is active, let the note-taker map raw speaker labels to Participants; hidden on the local path.
 **TDD:** mapping persists; transcript re-renders with real names; UI hidden when provider gives no labels.
 **DoD:** gate green. **Reflect:** confirm "Speaker label" term in CONTEXT still accurate.
