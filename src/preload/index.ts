@@ -18,6 +18,10 @@ import type {
   EgressState,
   SettingsGetResponse,
   SettingsSetResponse,
+  SecretSetRequest,
+  SecretSetResponse,
+  SecretHasRequest,
+  SecretHasResponse,
   MeetingCreateRequest,
   MeetingCreateResponse,
   AgendaItemAddRequest,
@@ -53,6 +57,15 @@ const api: RendererApi = {
     ipcRenderer.invoke('participant:remove', req) as Promise<ParticipantRemoveResponse>,
   meetingStart: (req: MeetingStartRequest) =>
     ipcRenderer.invoke('meeting:start', req) as Promise<MeetingStartResponse>,
+
+  // ---------------------------------------------------------------------------
+  // Secrets (item 0016) — write-only; no secret:get channel
+  // ---------------------------------------------------------------------------
+
+  secretSet: (req: SecretSetRequest) =>
+    ipcRenderer.invoke('secret:set', req) as Promise<SecretSetResponse>,
+  secretHas: (req: SecretHasRequest) =>
+    ipcRenderer.invoke('secret:has', req) as Promise<SecretHasResponse>,
 
   // ---------------------------------------------------------------------------
   // Audio capture (item 0015)

@@ -1,13 +1,15 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'path'
 
-import { app, BrowserWindow, ipcMain, session } from 'electron'
+import { app, BrowserWindow, ipcMain, safeStorage, session } from 'electron'
 
 import type { IpcChannel } from '@shared/ipc'
 import { FakeASRProvider } from '@shared/providers'
 
 import { AudioCaptureBridge } from './audio/AudioCaptureBridge'
 import { createIpcRegistry } from './ipc-registry'
+import { tryBuildProviders } from './settings/providerFactory'
+import { ElectronSecretStorage } from './settings/SecretStorage'
 import { SettingsStore } from './settings/SettingsStore'
 import { createWindowOptions } from './window-options'
 
@@ -55,6 +57,8 @@ const IPC_CHANNELS: IpcChannel[] = [
   'settings:get',
   'settings:set',
   'egress:state',
+  'secret:set',
+  'secret:has',
   'meeting:create',
   'agendaItem:add',
   'agendaItem:remove',
@@ -80,14 +84,53 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   await settingsStore.load()
 
   // ---------------------------------------------------------------------------
-  // Audio capture bridge (item 0015)
+  // SecretStorage (item 0016)
   //
-  // For V1 we use a FakeASRProvider until the settings-based provider is wired
-  // after the real DeepgramAsrProvider keys are available. When settings include
-  // a valid Deepgram key, replace FakeASRProvider with buildProviders().asr.
+  // ElectronSecretStorage wraps safeStorage (DPAPI on Windows) and a JSON file
+  // in userData. It is only safe to instantiate after app.whenReady().
   // ---------------------------------------------------------------------------
+  const secretStorage = new ElectronSecretStorage({
+    userDataPath: userData,
+    safeStorage: {
+      encryptString: (plain) => safeStorage.encryptString(plain),
+      decryptString: (buf) => safeStorage.decryptString(buf),
+    },
+    readFileSync: (filePath) => readFileSync(filePath, 'utf8'),
+    writeFileSync: (filePath, data) => {
+      writeFileSync(filePath, data, 'utf8')
+    },
+  })
+
+  // ---------------------------------------------------------------------------
+  // ASR provider (item 0016 — replaces FakeASRProvider from item 0015)
+  //
+  // tryBuildProviders does not throw; if keys are missing it returns an error
+  // result and we fall back to FakeASRProvider so the app stays alive. The
+  // renderer will display a "no key configured" banner guiding the user to
+  // Settings (via secret:has → App.tsx keysConfigured state).
+  //
+  // Extraction provider seam: tryBuildProviders also constructs the configured
+  // ExtractionProvider. It is available via buildResult.providers.extraction
+  // for the extraction loop when item 0018 wires that up. For now we construct
+  // it here to prove the factory works; the live extraction startup is item 0018.
+  // ---------------------------------------------------------------------------
+  const buildResult = tryBuildProviders(settingsStore.current, secretStorage)
+
+  const asrProvider = buildResult.ok ? buildResult.providers.asr : new FakeASRProvider()
+
+  if (!buildResult.ok) {
+    console.warn(
+      '[LiveTranscriber] Providers not ready — keys not configured yet. ' +
+        'Using FakeASRProvider until keys are set in Settings. ' +
+        `Reason: ${buildResult.error}`,
+    )
+  }
+
+  // Extraction provider seam (item 0018 will wire this into the extraction loop):
+  // const extractionProvider = buildResult.ok ? buildResult.providers.extraction : null
+
   const audioBridge = new AudioCaptureBridge({
-    asrProvider: new FakeASRProvider(),
+    asrProvider,
     sender: mainWindow.webContents,
   })
 
@@ -96,7 +139,7 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     audioBridge.pushAudioFrame(frame)
   })
 
-  const registry = createIpcRegistry({ settingsStore, audioBridge })
+  const registry = createIpcRegistry({ settingsStore, secretStorage, audioBridge })
 
   for (const channel of IPC_CHANNELS) {
     ipcMain.handle(channel, (_event, payload: unknown) => {

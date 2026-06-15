@@ -162,6 +162,44 @@ export type AudioStartRequest = z.infer<typeof AudioStartRequestSchema>
 export type AudioStartResponse = z.infer<typeof AudioStartResponseSchema>
 
 // ---------------------------------------------------------------------------
+// secret:set — write an API key into safeStorage (item 0016)
+//
+// The renderer sends the key value exactly once during the user's key-entry
+// flow. Main encrypts it via safeStorage and stores it; the value is never
+// sent back to the renderer. There is deliberately NO secret:get channel.
+// ---------------------------------------------------------------------------
+
+export const SecretSetRequestSchema = z.object({
+  /** Stable key name used to look up the secret (e.g. 'deepgram', 'anthropic'). */
+  key: z.string().min(1),
+  /** The raw API key value — encrypted by main, never stored in settings JSON. */
+  value: z.string().min(1),
+})
+
+export const SecretSetResponseSchema = z.object({ ok: z.literal(true) })
+
+export type SecretSetRequest = z.infer<typeof SecretSetRequestSchema>
+export type SecretSetResponse = z.infer<typeof SecretSetResponseSchema>
+
+// ---------------------------------------------------------------------------
+// secret:has — check whether a key is present in safeStorage (item 0016)
+//
+// Returns a boolean presence flag. Never returns the key value.
+// ---------------------------------------------------------------------------
+
+export const SecretHasRequestSchema = z.object({
+  key: z.string().min(1),
+})
+
+export const SecretHasResponseSchema = z.object({
+  /** true if a secret is stored for this key, false otherwise. */
+  has: z.boolean(),
+})
+
+export type SecretHasRequest = z.infer<typeof SecretHasRequestSchema>
+export type SecretHasResponse = z.infer<typeof SecretHasResponseSchema>
+
+// ---------------------------------------------------------------------------
 // audio:stop — tell main to close the active ASR session (item 0015)
 // ---------------------------------------------------------------------------
 
@@ -191,6 +229,8 @@ export type IpcChannel =
   | 'settings:get'
   | 'settings:set'
   | 'egress:state'
+  | 'secret:set'
+  | 'secret:has'
   | 'meeting:create'
   | 'agendaItem:add'
   | 'agendaItem:remove'
@@ -234,6 +274,18 @@ export interface RendererApi {
   participantRemove: (req: ParticipantRemoveRequest) => Promise<ParticipantRemoveResponse>
   /** Start a meeting (Draft → Live). */
   meetingStart: (req: MeetingStartRequest) => Promise<MeetingStartResponse>
+  /**
+   * Write an API key into safeStorage. The key value is transmitted to main
+   * exactly once during entry and is never returned to the renderer.
+   * (item 0016)
+   */
+  secretSet: (req: SecretSetRequest) => Promise<SecretSetResponse>
+  /**
+   * Check whether an API key is stored for the given name.
+   * Returns a boolean presence flag — never the key value.
+   * (item 0016)
+   */
+  secretHas: (req: SecretHasRequest) => Promise<SecretHasResponse>
   /**
    * Tell main to open an ASR session. Call before sending audio frames.
    * (item 0015)

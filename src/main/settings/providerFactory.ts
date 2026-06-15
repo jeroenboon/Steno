@@ -37,13 +37,22 @@ import type { SecretStorage } from './SecretStorage'
 import type { AppSettings } from './settingsSchema'
 
 // ---------------------------------------------------------------------------
-// Output type
+// Output types
 // ---------------------------------------------------------------------------
 
 export interface BuiltProviders {
   asr: ASRProvider
   extraction: ExtractionProvider
 }
+
+/**
+ * Result type for tryBuildProviders — avoids throwing on missing keys.
+ * On success: { ok: true, providers }
+ * On failure: { ok: false, error: <human-readable reason> }
+ */
+export type BuildProvidersResult =
+  | { ok: true; providers: BuiltProviders }
+  | { ok: false; error: string }
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -63,6 +72,30 @@ export function buildProviders(settings: AppSettings, storage: SecretStorage): B
   const asr = buildAsrProvider(settings, storage)
   const extraction = buildExtractionProvider(settings, storage)
   return { asr, extraction }
+}
+
+/**
+ * Non-throwing variant of buildProviders.
+ *
+ * Returns a discriminated result type so callers can handle the missing-key
+ * case without a try/catch. Used in src/main/index.ts to degrade gracefully
+ * when the user hasn't configured their API keys yet (principle: the app must
+ * not crash on startup if no key is set).
+ *
+ * @param settings  - Validated AppSettings.
+ * @param storage   - SecretStorage instance.
+ */
+export function tryBuildProviders(
+  settings: AppSettings,
+  storage: SecretStorage,
+): BuildProvidersResult {
+  try {
+    const providers = buildProviders(settings, storage)
+    return { ok: true, providers }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { ok: false, error: message }
+  }
 }
 
 // ---------------------------------------------------------------------------

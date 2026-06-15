@@ -25,6 +25,10 @@ import {
   SettingsSetRequestSchema,
   SettingsSetResponseSchema,
   EgressStateGetRequestSchema,
+  SecretSetRequestSchema,
+  SecretSetResponseSchema,
+  SecretHasRequestSchema,
+  SecretHasResponseSchema,
   MeetingCreateRequestSchema,
   MeetingCreateResponseSchema,
   AgendaItemAddRequestSchema,
@@ -48,6 +52,8 @@ import type {
   SettingsGetResponse,
   SettingsSetResponse,
   EgressState,
+  SecretSetResponse,
+  SecretHasResponse,
   MeetingCreateResponse,
   AgendaItemAddResponse,
   AgendaItemRemoveResponse,
@@ -61,6 +67,7 @@ import type { Clock } from '@shared/providers'
 
 import type { AudioCaptureBridge } from './audio/AudioCaptureBridge'
 import { computeEgressState } from './settings/egressState'
+import type { SecretStorage } from './settings/SecretStorage'
 import type { SettingsStore } from './settings/SettingsStore'
 
 // A handler takes an unknown payload, validates it, and returns the result.
@@ -74,6 +81,12 @@ type Handler = (raw: unknown) => unknown
 export interface IpcRegistryDependencies {
   /** Loaded SettingsStore instance. Must have load() already called. */
   settingsStore: SettingsStore
+  /**
+   * SecretStorage instance (item 0016).
+   * Handles API keys via safeStorage in production, MemorySecretStorage in tests.
+   * Optional for backwards compat with tests that don't exercise secret channels.
+   */
+  secretStorage?: SecretStorage
   /** Database instance (optional, for future persistence). */
   db?: unknown
   /** Clock for generating timestamps. */
@@ -209,6 +222,28 @@ function makeHandleMeetingStart(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleSecretSet(deps: IpcRegistryDependencies) {
+  return function handleSecretSet(raw: unknown): SecretSetResponse {
+    const req = SecretSetRequestSchema.parse(raw)
+    if (deps.secretStorage === undefined) {
+      throw new Error('SecretStorage is not available')
+    }
+    deps.secretStorage.setSecret(req.key, req.value)
+    return SecretSetResponseSchema.parse({ ok: true })
+  }
+}
+
+function makeHandleSecretHas(deps: IpcRegistryDependencies) {
+  return function handleSecretHas(raw: unknown): SecretHasResponse {
+    const req = SecretHasRequestSchema.parse(raw)
+    if (deps.secretStorage === undefined) {
+      return SecretHasResponseSchema.parse({ has: false })
+    }
+    const has = deps.secretStorage.getSecret(req.key) !== null
+    return SecretHasResponseSchema.parse({ has })
+  }
+}
+
 function makeHandleAudioStart(deps: IpcRegistryDependencies) {
   return function handleAudioStart(raw: unknown): AudioStartResponse {
     AudioStartRequestSchema.parse(raw)
@@ -236,6 +271,8 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'settings:get': makeHandleSettingsGet(deps),
     'settings:set': makeHandleSettingsSet(deps),
     'egress:state': makeHandleEgressState(deps),
+    'secret:set': makeHandleSecretSet(deps),
+    'secret:has': makeHandleSecretHas(deps),
     'meeting:create': makeHandleMeetingCreate(deps),
     'agendaItem:add': makeHandleAgendaItemAdd(),
     'agendaItem:remove': makeHandleAgendaItemRemove(),

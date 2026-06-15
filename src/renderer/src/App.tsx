@@ -20,6 +20,7 @@ import { t } from './i18n'
 import { DraftScreen } from './screens/DraftScreen'
 import { LiveScreen } from './screens/LiveScreen'
 import { ReviewScreen } from './screens/ReviewScreen'
+import { SettingsScreen } from './screens/SettingsScreen'
 import { useAppStore, type AppRoute } from './store/appStore'
 
 import './tokens.css'
@@ -43,6 +44,7 @@ const SCREENS: Record<AppRoute, React.JSX.Element> = {
   draft: <DraftScreen />,
   live: <LiveScreen />,
   review: <ReviewScreen />,
+  settings: <SettingsScreen />,
 }
 
 // ---------------------------------------------------------------------------
@@ -58,6 +60,7 @@ const NAV_TABS: NavTab[] = [
   { route: 'draft', label: t('nav.draft') },
   { route: 'live', label: t('nav.live') },
   { route: 'review', label: t('nav.review') },
+  { route: 'settings', label: t('nav.settings') },
 ]
 
 // ---------------------------------------------------------------------------
@@ -69,6 +72,7 @@ export function App(): React.JSX.Element {
   const setRoute = useAppStore((s) => s.setRoute)
 
   const [egressState, setEgressState] = useState<EgressState>(DEFAULT_EGRESS)
+  const [keysConfigured, setKeysConfigured] = useState<boolean | null>(null)
 
   // Fetch egress state from main process on mount.
   // In production this could be an event subscription; for now a one-time
@@ -84,6 +88,28 @@ export function App(): React.JSX.Element {
       })
   }, [])
 
+  // Check whether the required API keys are present.
+  // If not, the app shows a banner directing the user to Settings.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const settings = await window.api.settingsGet()
+        const checks: Promise<{ has: boolean }>[] = [
+          window.api.secretHas({ key: 'deepgram' }),
+          window.api.secretHas({ key: 'anthropic' }),
+        ]
+        if (settings.extractionProvider === 'custom-openai') {
+          checks.push(window.api.secretHas({ key: settings.customOpenAI.keyRef }))
+        }
+        const results = await Promise.all(checks)
+        setKeysConfigured(results.every((r) => r.has))
+      } catch {
+        // If we can't check, assume not configured — show the banner.
+        setKeysConfigured(false)
+      }
+    })()
+  }, [])
+
   const currentScreen = SCREENS[route]
 
   return (
@@ -97,6 +123,7 @@ export function App(): React.JSX.Element {
             <button
               key={tabRoute}
               type="button"
+              data-testid={tabRoute === 'settings' ? 'nav-settings' : undefined}
               className={`app-nav__tab${route === tabRoute ? ' app-nav__tab--active' : ''}`}
               onClick={() => {
                 setRoute(tabRoute)
@@ -110,6 +137,23 @@ export function App(): React.JSX.Element {
 
         <EgressIndicator egressState={egressState} />
       </header>
+
+      {/* No-key banner — shown once we know keys are missing */}
+      {keysConfigured === false && route !== 'settings' && (
+        <div data-testid="no-key-banner" className="no-key-banner" role="alert">
+          <span className="no-key-banner__title">{t('nokey.banner.title')}</span>
+          <span className="no-key-banner__body">{t('nokey.banner.body')}</span>
+          <button
+            type="button"
+            className="btn btn--secondary no-key-banner__action"
+            onClick={() => {
+              setRoute('settings')
+            }}
+          >
+            {t('nokey.banner.action')}
+          </button>
+        </div>
+      )}
 
       {/* Screen content */}
       <div className="app-content">{currentScreen}</div>

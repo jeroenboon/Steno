@@ -20,8 +20,8 @@ import type { TranscriptSpan } from '@shared/domain/types'
 // Route type
 // ---------------------------------------------------------------------------
 
-/** The three top-level screens of the app. */
-export type AppRoute = 'draft' | 'live' | 'review'
+/** The top-level screens of the app. */
+export type AppRoute = 'draft' | 'live' | 'review' | 'settings'
 
 // ---------------------------------------------------------------------------
 // Mic permission type (item 0015)
