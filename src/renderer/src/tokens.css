@@ -1,0 +1,81 @@
+/**
+ * Design tokens — item 0013.
+ *
+ * Visual direction: "Precision Instrument"
+ * Dark obsidian surfaces, amber accent (recording/live signal), monospace
+ * for transcript data, humanist sans for chrome. Dense but controlled.
+ *
+ * All tokens are CSS custom properties consumed by Tailwind utilities
+ * and raw CSS alike.
+ */
+
+:root {
+  /* --- Surfaces (warm near-black, not cold gray) --- */
+  --color-base: #0d0d0f;
+  --color-surface-0: #111114;
+  --color-surface-1: #18181d;
+  --color-surface-2: #22222a;
+  --color-surface-3: #2c2c38;
+  --color-border: #2e2e3a;
+  --color-border-dim: #1e1e26;
+
+  /* --- Accent: amber-bronze (recording / active / attention) --- */
+  --color-accent: #d4882a;
+  --color-accent-dim: #a8671e;
+  --color-accent-glow: rgba(212, 136, 42, 0.15);
+  --color-accent-muted: #3d2e14;
+
+  /* --- Semantic states --- */
+  --color-live: #e8944a;
+  --color-confirmed: #4ead8a;
+  --color-proposed: #6b7fc4;
+  --color-dismissed: #4a4a58;
+  --color-danger: #c45555;
+  --color-nudge: #b8832a;
+
+  /* --- Text --- */
+  --color-text-primary: #e8e8f0;
+  --color-text-secondary: #8888a0;
+  --color-text-tertiary: #55556a;
+  --color-text-accent: #d4882a;
+  --color-text-inverted: #0d0d0f;
+
+  /* --- Typography --- */
+  --font-display: 'DM Mono', 'JetBrains Mono', 'Fira Code', monospace;
+  --font-body: 'Geist', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+
+  /* --- Spacing (4px grid) --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* --- Radius --- */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  /* --- Shadows --- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --shadow-accent: 0 0 0 1px var(--color-accent), 0 0 12px var(--color-accent-glow);
+
+  /* --- Motion --- */
+  --duration-fast: 120ms;
+  --duration-normal: 220ms;
+  --duration-slow: 380ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* --- Layout --- */
+  --chrome-height: 40px;
+  --sidebar-width: 220px;
+}
