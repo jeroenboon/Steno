@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'path'
 
-import { app, BrowserWindow, ipcMain, safeStorage, session } from 'electron'
+import { app, BrowserWindow, ipcMain, safeStorage, session, desktopCapturer } from 'electron'
 
 import type { IpcChannel } from '@shared/ipc'
 import { FakeASRProvider } from '@shared/providers'
@@ -45,6 +45,68 @@ function applyContentSecurityPolicy(): void {
       },
     })
   })
+}
+
+// ---------------------------------------------------------------------------
+// Display-media request handler (item 0017 — Windows system-audio loopback)
+//
+// On Windows, Electron's getDisplayMedia() with { audio: true, video: false }
+// can return the WASAPI loopback (system output audio). Without this handler,
+// Electron shows a screen-picker dialog to the user, which is confusing for an
+// audio-only loopback request.
+//
+// setDisplayMediaRequestHandler lets us intercept the request and supply a
+// source directly. We look for a "Screen N" or "Entire Screen" source (the
+// virtual WASAPI loopback device appears under the screen sources), grant the
+// first available screen source with audio, and do NOT include video (video:
+// false in the renderer's getDisplayMedia call means the video track is present
+// in the source but not in the returned stream — the renderer checks
+// stream.getAudioTracks() and discards video tracks).
+//
+// Security posture:
+//   - We only grant loopback (audio); we do not capture screen pixels.
+//   - The handler runs in the main process; the renderer cannot escalate
+//     permissions beyond what this handler allows.
+//   - If no source is found, the handler calls request.deny(), which causes
+//     getDisplayMedia in the renderer to throw NotAllowedError — the
+//     AudioCaptureService catches this and falls back to mic-only.
+//
+// Platform note (see ADR 0002 amendment):
+//   - Windows: WASAPI loopback is available through the screen sources.
+//   - macOS/Linux: getDisplayMedia loopback is not reliably available; the
+//     handler will find no matching source and deny, causing mic-only fallback.
+// ---------------------------------------------------------------------------
+
+function registerDisplayMediaHandler(): void {
+  session.defaultSession.setDisplayMediaRequestHandler(
+    (_request, callback) => {
+      desktopCapturer
+        .getSources({
+          types: ['screen'],
+          // Fetch thumbnail at minimal size — we only need audio, not pixels.
+          thumbnailSize: { width: 1, height: 1 },
+        })
+        .then((sources) => {
+          const source = sources[0]
+          if (source === undefined) {
+            // No screen source available — deny so the renderer falls back to mic-only.
+            callback({})
+            return
+          }
+
+          // Grant the first screen source. The renderer's getDisplayMedia call
+          // has video: false so no video frames will be captured or transmitted.
+          callback({ video: source, audio: 'loopback' })
+        })
+        .catch(() => {
+          // Any unexpected error → deny cleanly
+          callback({})
+        })
+    },
+    // useSystemPicker: false — we supply our own source directly so the user
+    // does not see a screen-picker dialog for an audio-only loopback request.
+    { useSystemPicker: false },
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +237,7 @@ app
   .whenReady()
   .then(async () => {
     applyContentSecurityPolicy()
+    registerDisplayMediaHandler()
     // Create window first so registerIpcHandlers can bind to its webContents.
     const mainWindow = createWindow()
     await registerIpcHandlers(mainWindow)

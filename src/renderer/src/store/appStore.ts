@@ -16,6 +16,8 @@ import { create } from 'zustand'
 
 import type { TranscriptSpan } from '@shared/domain/types'
 
+import type { CaptureMode, LoopbackState } from '../services/AudioCaptureService'
+
 // ---------------------------------------------------------------------------
 // Route type
 // ---------------------------------------------------------------------------
@@ -63,6 +65,19 @@ export interface AppState {
    */
   transcriptSpans: TranscriptSpan[]
 
+  /**
+   * Selected capture mode (item 0017).
+   * 'remote' = mic + system loopback mixed (default for video meetings).
+   * 'mic-only' = mic only (in-person).
+   */
+  captureMode: CaptureMode
+
+  /**
+   * Actual loopback state after start() resolves (item 0017).
+   * null = capture not yet started.
+   */
+  loopbackState: LoopbackState | null
+
   /** Navigate to a different screen. */
   setRoute: (route: AppRoute) => void
 
@@ -78,7 +93,16 @@ export interface AppState {
    * Otherwise the span is appended to the end of the list.
    */
   addTranscriptSpan: (span: TranscriptSpan) => void
+
+  /** Set the capture mode (before starting a session). */
+  setCaptureMode: (mode: CaptureMode) => void
+
+  /** Update the loopback state after start() resolves. */
+  setLoopbackState: (state: LoopbackState) => void
 }
+
+// Re-export for convenience
+export type { CaptureMode, LoopbackState }
 
 // ---------------------------------------------------------------------------
 // Store instance
@@ -89,6 +113,8 @@ export const useAppStore = create<AppState>()((set) => ({
   activeMeeting: null,
   micPermission: 'unknown',
   transcriptSpans: [],
+  captureMode: 'remote',
+  loopbackState: null,
 
   setRoute: (route) => {
     set({ route })
@@ -110,5 +136,11 @@ export const useAppStore = create<AppState>()((set) => ({
       }
       return { transcriptSpans: [...state.transcriptSpans, span] }
     })
+  },
+  setCaptureMode: (mode) => {
+    set({ captureMode: mode })
+  },
+  setLoopbackState: (state) => {
+    set({ loopbackState: state })
   },
 }))

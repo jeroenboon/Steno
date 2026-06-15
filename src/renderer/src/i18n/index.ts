@@ -60,6 +60,14 @@ const nl = {
   'live.transcript.empty': 'Zodra je praat verschijnt de transcriptie hier.',
   'live.transcript.interim': '(wordt bijgewerkt)',
 
+  // Live screen — loopback toggle (item 0017)
+  'live.loopback.toggle.label': 'Vergaderingsmodus',
+  'live.loopback.mode.remote': 'Videovergadering (systeem + microfoon)',
+  'live.loopback.mode.mic-only': 'Persoonlijk (alleen microfoon)',
+  'live.loopback.state.active': 'Systeemaudio actief',
+  'live.loopback.state.denied': 'Systeemaudio niet beschikbaar — alleen microfoon wordt opgenomen.',
+  'live.loopback.state.off': 'Alleen microfoon',
+
   // Settings screen (item 0016)
   'nav.settings': 'Instellingen',
   'screen.settings.title': 'Instellingen',
