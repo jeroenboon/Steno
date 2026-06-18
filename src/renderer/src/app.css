@@ -340,7 +340,7 @@ body,
 .loopback-toggle__select:focus,
 .settings-body select:focus,
 .settings-body input:focus {
-  outline: none;
+  outline: none; /* replaced by :focus-visible ring below */
   border-color: var(--color-text-primary);
 }
 
@@ -717,7 +717,7 @@ body,
 }
 
 .live-edit-form__textarea:focus {
-  outline: none;
+  outline: none; /* replaced by :focus-visible ring below */
   border-color: var(--color-text-primary);
 }
 
@@ -784,7 +784,7 @@ body,
 }
 
 .live-add-form__input:focus {
-  outline: none;
+  outline: none; /* replaced by :focus-visible ring below */
   border-color: var(--color-text-primary);
 }
 
@@ -840,4 +840,61 @@ body,
   color: var(--color-nudge);
   font-style: italic;
   cursor: help;
+}
+
+/* ---------------------------------------------------------------------------
+ * Keyboard focus rings (D2) — ink outline on every interactive element.
+ * We suppress the browser default and provide a consistent ink ring so that
+ * keyboard and pointer users see distinct, intentional affordances.
+ * --------------------------------------------------------------------------- */
+
+/* Suppress default ring on pure pointer focus; keep it for keyboard nav. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Inputs and selects: already change border-colour on :focus; add ring on
+ * :focus-visible so keyboard users get an unambiguous indicator. */
+.loopback-toggle__select:focus-visible,
+.settings-body select:focus-visible,
+.settings-body input:focus-visible,
+.live-edit-form__textarea:focus-visible,
+.live-edit-form__select:focus-visible,
+.live-add-form__input:focus-visible {
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Reduced motion (D2) — respect prefers-reduced-motion: reduce.
+ * Animations must be disabled; the live signal must still be visible as a
+ * steady wash (not animated) so the recording state remains communicated.
+ * --------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Live recording signal: steady wash instead of animated bleed. */
+  .screen--live::before {
+    animation: none;
+    opacity: 0.55;
+  }
+
+  /* Egress dot: steady solid dot instead of pulsing. */
+  .egress-indicator__dot {
+    animation: none;
+    opacity: 1;
+  }
 }
