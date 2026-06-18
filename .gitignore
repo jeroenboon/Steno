@@ -13,3 +13,12 @@ dist/
 
 # OS
 Thumbs.db
+
+# Local-only session artefacts (never commit these)
+design_todo.md
+docs/handoff-*.md
+docs/design/screenshots/
+scripts/visual-inspect.mjs
+
+# Agent prompts / copilot customisation (workspace-local, not source)
+.github/prompts/
