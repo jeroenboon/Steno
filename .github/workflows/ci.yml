@@ -36,6 +36,12 @@ jobs:
       - name: Test
         run: npm test
 
+      # Vitest runs under system Node and cannot detect a native module built
+      # for the wrong ABI. This loads better-sqlite3 under Electron's runtime so
+      # an ABI mismatch fails CI instead of crashing the app at startup.
+      - name: Native module smoke test (Electron runtime)
+        run: npm run test:native
+
       - name: Build
         run: npm run build
         env:

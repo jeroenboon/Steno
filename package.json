@@ -7,13 +7,22 @@
   "scripts": {
     "build": "electron-vite build",
     "dev": "electron-vite dev",
+    "predev": "npm run rebuild:native",
     "preview": "electron-vite preview",
+    "prepreview": "npm run rebuild:native",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "pretest": "npm run rebuild:native:node",
+    "test:watch": "vitest",
+    "pretest:watch": "npm run rebuild:native:node",
+    "test:native": "node scripts/smoke-electron-native.mjs",
+    "pretest:native": "npm run rebuild:native",
+    "rebuild:native": "node scripts/rebuild-native.mjs electron",
+    "rebuild:native:node": "node scripts/rebuild-native.mjs node",
+    "postinstall": "node scripts/rebuild-native.mjs electron"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",
