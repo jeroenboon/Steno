@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from 'vitest'
 
-import { t, type TranslationKey } from '../i18n'
+import { t, dictionary, type TranslationKey } from '../i18n'
 
 describe('i18n — Dutch default', () => {
   it('returns a Dutch string for "screen.draft.title"', () => {
@@ -53,5 +53,15 @@ describe('i18n — type safety', () => {
     const key2: TranslationKey = 'screen.live.title'
     const key3: TranslationKey = 'screen.review.title'
     expect([key1, key2, key3].length).toBe(3)
+  })
+})
+
+describe('i18n — copy rules', () => {
+  it('no translation value contains an em-dash (\u2014)', () => {
+    // Brief copy rule: use a comma, colon, or middle dot instead.
+    const violations = Object.entries(dictionary)
+      .filter(([, v]) => v.includes('\u2014'))
+      .map(([k]) => k)
+    expect(violations).toEqual([])
   })
 })

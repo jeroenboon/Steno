@@ -65,7 +65,7 @@ const nl = {
   'live.loopback.mode.remote': 'Videovergadering (systeem + microfoon)',
   'live.loopback.mode.mic-only': 'Persoonlijk (alleen microfoon)',
   'live.loopback.state.active': 'Systeemaudio actief',
-  'live.loopback.state.denied': 'Systeemaudio niet beschikbaar — alleen microfoon wordt opgenomen.',
+  'live.loopback.state.denied': 'Systeemaudio niet beschikbaar, alleen microfoon wordt opgenomen.',
   'live.loopback.state.off': 'Alleen microfoon',
 
   // Settings screen (item 0016)
@@ -155,7 +155,7 @@ const nl = {
 
   // Running Summary panel (item 0020)
   'live.summary.heading': 'Vergaderingsoverzicht',
-  'live.summary.disclaimer': 'Informatief — niet gezaghebbend over beslissingen en acties.',
+  'live.summary.disclaimer': 'Informatief: niet gezaghebbend over beslissingen en acties.',
   'live.summary.empty': 'Het overzicht verschijnt zodra er transcriptie beschikbaar is.',
   'live.summary.query.placeholder': 'Stel een vraag over de vergadering…',
   'live.summary.query.button': 'Vraag',
@@ -210,3 +210,6 @@ export type TranslationKey = keyof typeof nl
 export function t(key: TranslationKey): string {
   return nl[key]
 }
+
+/** The raw Dutch dictionary — exported for guard tests only. */
+export const dictionary: Record<string, string> = nl
