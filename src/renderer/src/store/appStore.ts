@@ -14,9 +14,14 @@
 
 import { create } from 'zustand'
 
-import type { TranscriptSpan } from '@shared/domain/types'
+import type { TranscriptSpan, AgendaItem, Participant } from '@shared/domain/types'
+import type { ItemsChangedPayload } from '@shared/ipc'
 
 import type { CaptureMode, LoopbackState } from '../services/AudioCaptureService'
+
+// Convenience type aliases for the item list entries
+export type ProposedDecision = ItemsChangedPayload['decisions'][number]
+export type ProposedAction = ItemsChangedPayload['actions'][number]
 
 // ---------------------------------------------------------------------------
 // Route type
@@ -78,6 +83,39 @@ export interface AppState {
    */
   loopbackState: LoopbackState | null
 
+  /**
+   * Proposed decisions from the last extraction turn (item 0018).
+   * Keyed by id; replaced wholesale on each items:changed event.
+   */
+  proposedDecisions: ProposedDecision[]
+
+  /**
+   * Proposed actions from the last extraction turn (item 0018).
+   */
+  proposedActions: ProposedAction[]
+
+  /**
+   * Confirmed decisions (user has confirmed; retained after confirmation).
+   */
+  confirmedDecisions: ProposedDecision[]
+
+  /**
+   * Confirmed actions.
+   */
+  confirmedActions: ProposedAction[]
+
+  /**
+   * Agenda items for the current meeting (set from Draft screen data).
+   * Used for grouping items in the Live screen.
+   */
+  agendaItems: AgendaItem[]
+
+  /**
+   * Participants for the current meeting.
+   * Used for the owner picker in the Live screen.
+   */
+  participants: Participant[]
+
   /** Navigate to a different screen. */
   setRoute: (route: AppRoute) => void
 
@@ -99,6 +137,38 @@ export interface AppState {
 
   /** Update the loopback state after start() resolves. */
   setLoopbackState: (state: LoopbackState) => void
+
+  /**
+   * Merge newly proposed decisions/actions from an items:changed event (item 0018).
+   * Proposed items are replaced with the new set from the turn.
+   * Confirmed items already in the store are NOT touched.
+   */
+  mergeProposedItems: (payload: {
+    decisions: ProposedDecision[]
+    actions: ProposedAction[]
+  }) => void
+
+  /**
+   * Move a proposed decision/action to the confirmed list (note-taker confirmed it).
+   * Removes from proposed, adds to confirmed with state='confirmed'.
+   */
+  confirmItem: (kind: 'decision' | 'action', id: string) => void
+
+  /**
+   * Remove a proposed decision/action (note-taker dismissed it or agent retracted it).
+   */
+  removeProposedItem: (kind: 'decision' | 'action', id: string) => void
+
+  /**
+   * Add a confirmed item directly (manual add, item 0018).
+   */
+  addConfirmedItem: (kind: 'decision' | 'action', item: ProposedDecision | ProposedAction) => void
+
+  /** Set the agenda items for the current meeting. */
+  setAgendaItems: (items: AgendaItem[]) => void
+
+  /** Set the participants for the current meeting. */
+  setParticipants: (participants: Participant[]) => void
 }
 
 // Re-export for convenience
@@ -115,6 +185,12 @@ export const useAppStore = create<AppState>()((set) => ({
   transcriptSpans: [],
   captureMode: 'remote',
   loopbackState: null,
+  proposedDecisions: [],
+  proposedActions: [],
+  confirmedDecisions: [],
+  confirmedActions: [],
+  agendaItems: [],
+  participants: [],
 
   setRoute: (route) => {
     set({ route })
@@ -142,5 +218,71 @@ export const useAppStore = create<AppState>()((set) => ({
   },
   setLoopbackState: (state) => {
     set({ loopbackState: state })
+  },
+
+  mergeProposedItems: ({ decisions, actions }) => {
+    set({ proposedDecisions: decisions, proposedActions: actions })
+  },
+
+  confirmItem: (kind, id) => {
+    set((state) => {
+      if (kind === 'decision') {
+        const item = state.proposedDecisions.find((d) => d.id === id)
+        if (item === undefined) return {}
+        const confirmed = { ...item, state: 'confirmed' as const }
+        return {
+          proposedDecisions: state.proposedDecisions.filter((d) => d.id !== id),
+          confirmedDecisions: [...state.confirmedDecisions.filter((d) => d.id !== id), confirmed],
+        }
+      } else {
+        const item = state.proposedActions.find((a) => a.id === id)
+        if (item === undefined) return {}
+        const confirmed = { ...item, state: 'confirmed' as const }
+        return {
+          proposedActions: state.proposedActions.filter((a) => a.id !== id),
+          confirmedActions: [...state.confirmedActions.filter((a) => a.id !== id), confirmed],
+        }
+      }
+    })
+  },
+
+  removeProposedItem: (kind, id) => {
+    set((state) => {
+      if (kind === 'decision') {
+        return { proposedDecisions: state.proposedDecisions.filter((d) => d.id !== id) }
+      } else {
+        return { proposedActions: state.proposedActions.filter((a) => a.id !== id) }
+      }
+    })
+  },
+
+  addConfirmedItem: (kind, item) => {
+    set((state) => {
+      if (kind === 'decision') {
+        const d = item as ProposedDecision
+        return {
+          confirmedDecisions: [
+            ...state.confirmedDecisions.filter((x) => x.id !== d.id),
+            { ...d, state: 'confirmed' as const },
+          ],
+        }
+      } else {
+        const a = item as ProposedAction
+        return {
+          confirmedActions: [
+            ...state.confirmedActions.filter((x) => x.id !== a.id),
+            { ...a, state: 'confirmed' as const },
+          ],
+        }
+      }
+    })
+  },
+
+  setAgendaItems: (items) => {
+    set({ agendaItems: items })
+  },
+
+  setParticipants: (participants) => {
+    set({ participants })
   },
 }))

@@ -12,6 +12,7 @@
 import { z } from 'zod'
 
 import { MeetingSchema, AgendaItemSchema, ParticipantSchema } from './domain'
+import { DecisionSchema, ActionSchema } from './domain/types'
 import { type EgressState } from './settings/egressState'
 import { AppSettingsSchema } from './settings/settingsSchema'
 
@@ -282,6 +283,98 @@ export const ItemsSummariesPayloadSchema = z.object({
 export type ItemsSummariesPayload = z.infer<typeof ItemsSummariesPayloadSchema>
 
 // ---------------------------------------------------------------------------
+// item:confirm — note-taker confirms a Proposed Decision or Action (item 0018)
+// ---------------------------------------------------------------------------
+
+export const ItemConfirmRequestSchema = z.object({
+  kind: z.enum(['decision', 'action']),
+  id: z.string().min(1),
+})
+
+export const ItemConfirmResponseSchema = z.union([DecisionSchema, ActionSchema])
+
+export type ItemConfirmRequest = z.infer<typeof ItemConfirmRequestSchema>
+export type ItemConfirmResponse = z.infer<typeof ItemConfirmResponseSchema>
+
+// ---------------------------------------------------------------------------
+// item:editAndConfirm — edit + confirm in one step (item 0018)
+// ---------------------------------------------------------------------------
+
+const DecisionUpdatesSchema = z.object({
+  rationale: z.string().optional(),
+  agendaItemId: z.string().min(1).optional(),
+})
+
+const ActionUpdatesSchema = z.object({
+  owner: z.string().min(1).optional(),
+  dueDate: z.string().datetime().optional(),
+  status: z.enum(['open', 'done']).optional(),
+  agendaItemId: z.string().min(1).optional(),
+})
+
+export const ItemEditAndConfirmRequestSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('decision'), id: z.string().min(1), updates: DecisionUpdatesSchema }),
+  z.object({ kind: z.literal('action'), id: z.string().min(1), updates: ActionUpdatesSchema }),
+])
+
+export const ItemEditAndConfirmResponseSchema = z.union([DecisionSchema, ActionSchema])
+
+export type ItemEditAndConfirmRequest = z.infer<typeof ItemEditAndConfirmRequestSchema>
+export type ItemEditAndConfirmResponse = z.infer<typeof ItemEditAndConfirmResponseSchema>
+
+// ---------------------------------------------------------------------------
+// item:dismiss — note-taker dismisses a Proposed Decision or Action (item 0018)
+// ---------------------------------------------------------------------------
+
+export const ItemDismissRequestSchema = z.object({
+  kind: z.enum(['decision', 'action']),
+  id: z.string().min(1),
+})
+
+export const ItemDismissResponseSchema = z.object({ ok: z.literal(true) })
+
+export type ItemDismissRequest = z.infer<typeof ItemDismissRequestSchema>
+export type ItemDismissResponse = z.infer<typeof ItemDismissResponseSchema>
+
+// ---------------------------------------------------------------------------
+// item:createConfirmed — manual add during Live → directly Confirmed (item 0018)
+// ---------------------------------------------------------------------------
+
+const NewDecisionItemSchema = z.object({
+  id: z.string().min(1),
+  rationale: z.string(),
+  agendaItemId: z.string().min(1),
+  sourceSpanId: z.string().min(1),
+})
+
+const NewActionItemSchema = z.object({
+  id: z.string().min(1),
+  agendaItemId: z.string().min(1),
+  sourceSpanId: z.string().min(1),
+  owner: z.string().min(1).optional(),
+  dueDate: z.string().datetime().optional(),
+  status: z.enum(['open', 'done']),
+})
+
+export const ItemCreateConfirmedRequestSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('decision'),
+    meetingId: z.string().min(1),
+    item: NewDecisionItemSchema,
+  }),
+  z.object({
+    kind: z.literal('action'),
+    meetingId: z.string().min(1),
+    item: NewActionItemSchema,
+  }),
+])
+
+export const ItemCreateConfirmedResponseSchema = z.union([DecisionSchema, ActionSchema])
+
+export type ItemCreateConfirmedRequest = z.infer<typeof ItemCreateConfirmedRequestSchema>
+export type ItemCreateConfirmedResponse = z.infer<typeof ItemCreateConfirmedResponseSchema>
+
+// ---------------------------------------------------------------------------
 // Channel registry — exhaustive union of all channel names
 // ---------------------------------------------------------------------------
 
@@ -300,6 +393,10 @@ export type IpcChannel =
   | 'meeting:start'
   | 'audio:start'
   | 'audio:stop'
+  | 'item:confirm'
+  | 'item:editAndConfirm'
+  | 'item:dismiss'
+  | 'item:createConfirmed'
 
 /**
  * One-way channels: renderer sends, main receives (no invoke/response).
@@ -385,4 +482,23 @@ export interface RendererApi {
    * (item 0018)
    */
   onItemsSummaries: (cb: (payload: ItemsSummariesPayload) => void) => UnsubscribeFn
+  /**
+   * Confirm a Proposed Decision or Action (item 0018).
+   * Transitions the item to Confirmed state.
+   */
+  itemConfirm: (req: ItemConfirmRequest) => Promise<ItemConfirmResponse>
+  /**
+   * Edit and confirm a Decision or Action in one step (item 0018).
+   */
+  itemEditAndConfirm: (req: ItemEditAndConfirmRequest) => Promise<ItemEditAndConfirmResponse>
+  /**
+   * Dismiss a Proposed Decision or Action (item 0018).
+   * Removes the item; the agent may re-propose it if context changes.
+   */
+  itemDismiss: (req: ItemDismissRequest) => Promise<ItemDismissResponse>
+  /**
+   * Manually create a Confirmed Decision or Action during Live (item 0018).
+   * Bypasses the Proposed state; the item is immediately Confirmed.
+   */
+  itemCreateConfirmed: (req: ItemCreateConfirmedRequest) => Promise<ItemCreateConfirmedResponse>
 }

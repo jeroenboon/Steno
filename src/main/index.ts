@@ -16,6 +16,7 @@ import { discussionSummaryRepo } from './db/repos/discussionSummaryRepo'
 import { meetingRepo } from './db/repos/meetingRepo'
 import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
 import { createIpcRegistry } from './ipc-registry'
+import { ItemLifecycleService } from './services/itemLifecycleService'
 import { LiveExtractionRuntime } from './services/liveExtractionRuntime'
 import { tryBuildAsrProvider, tryBuildExtractionProvider } from './settings/providerFactory'
 import { ElectronSecretStorage } from './settings/SecretStorage'
@@ -131,6 +132,10 @@ const IPC_CHANNELS: IpcChannel[] = [
   'meeting:start',
   'audio:start',
   'audio:stop',
+  'item:confirm',
+  'item:editAndConfirm',
+  'item:dismiss',
+  'item:createConfirmed',
 ]
 
 async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
@@ -181,6 +186,11 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   const aRepo = actionRepo(db)
   const spanRepo = transcriptSpanRepo(db)
   const dsRepo = discussionSummaryRepo(db)
+
+  // Shared ItemLifecycleService for note-taker action IPC (item 0018).
+  // The LiveExtractionRuntime builds its own intercepting subclass from the same
+  // repos; this instance is for direct note-taker operations (confirm/dismiss/edit).
+  const itemService = new ItemLifecycleService(dRepo, aRepo)
 
   // ---------------------------------------------------------------------------
   // ASR provider (item 0016 — replaces FakeASRProvider from item 0015)
@@ -301,6 +311,7 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     settingsStore,
     secretStorage,
     audioBridge,
+    itemLifecycleService: itemService,
     onAudioStart: () => {
       // Spin up the extraction runtime when the audio session begins.
       activeRuntime?.stop()

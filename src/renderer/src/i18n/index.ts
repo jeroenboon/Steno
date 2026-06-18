@@ -118,6 +118,32 @@ const nl = {
     'Ga naar Instellingen om je API-sleutels in te voeren voordat je een vergadering start.',
   'nokey.banner.action': 'Naar instellingen',
 
+  // Live screen — items panel (item 0018)
+  'live.items.decisions.heading': 'Beslissingen',
+  'live.items.actions.heading': 'Acties',
+  'live.items.offagenda.heading': 'Buiten agenda',
+  'live.items.confirm': 'Bevestigen',
+  'live.items.dismiss': 'Verwerpen',
+  'live.items.edit': 'Bewerken',
+  'live.items.save': 'Opslaan',
+  'live.items.cancel': 'Annuleren',
+  'live.items.source': 'Bron',
+  'live.items.owner': 'Eigenaar',
+  'live.items.owner.none': 'Geen eigenaar',
+  'live.items.empty': 'Nog geen items.',
+  'live.items.add.decision': 'Beslissing toevoegen',
+  'live.items.add.action': 'Actie toevoegen',
+  'live.items.add.decision.placeholder': 'Beschrijf de beslissing...',
+  'live.items.add.action.placeholder': 'Beschrijf de actie...',
+  'live.items.shortcuts': 'Enter = bevestigen · Delete = verwerpen · E = bewerken',
+  'live.items.state.proposed': 'Voorgesteld',
+  'live.items.state.confirmed': 'Bevestigd',
+  'live.items.low-confidence': 'Lage betrouwbaarheid',
+  'live.transcript.toggle.show': 'Transcriptie tonen',
+  'live.transcript.toggle.hide': 'Transcriptie verbergen',
+  'live.agenda.current': 'Huidig agendapunt',
+  'live.agenda.none': 'Geen agendapunt',
+
   // Generic
   'app.name': 'LiveTranscriber',
 } as const

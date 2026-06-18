@@ -34,6 +34,14 @@ vi.stubGlobal('api', {
   audioStop: vi.fn().mockResolvedValue({ ok: true }),
   audioSendFrame: vi.fn(),
   onTranscriptSpan: vi.fn().mockReturnValue(() => undefined), // returns unsubscribe fn
+  // Item push events (item 0018)
+  onItemsChanged: vi.fn().mockReturnValue(() => undefined),
+  onItemsSummaries: vi.fn().mockReturnValue(() => undefined),
+  // Item note-taker actions (item 0018)
+  itemConfirm: vi.fn().mockResolvedValue({ state: 'confirmed' }),
+  itemEditAndConfirm: vi.fn().mockResolvedValue({ state: 'confirmed' }),
+  itemDismiss: vi.fn().mockResolvedValue({ ok: true }),
+  itemCreateConfirmed: vi.fn().mockResolvedValue({ state: 'confirmed' }),
 })
 
 // ---------------------------------------------------------------------------

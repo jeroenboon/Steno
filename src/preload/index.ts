@@ -39,6 +39,14 @@ import type {
   UnsubscribeFn,
   ItemsChangedPayload,
   ItemsSummariesPayload,
+  ItemConfirmRequest,
+  ItemConfirmResponse,
+  ItemEditAndConfirmRequest,
+  ItemEditAndConfirmResponse,
+  ItemDismissRequest,
+  ItemDismissResponse,
+  ItemCreateConfirmedRequest,
+  ItemCreateConfirmedResponse,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -127,6 +135,22 @@ const api: RendererApi = {
       ipcRenderer.removeListener('items:summaries', listener)
     }
   },
+
+  // ---------------------------------------------------------------------------
+  // Item note-taker actions (item 0018)
+  // ---------------------------------------------------------------------------
+
+  itemConfirm: (req: ItemConfirmRequest) =>
+    ipcRenderer.invoke('item:confirm', req) as Promise<ItemConfirmResponse>,
+
+  itemEditAndConfirm: (req: ItemEditAndConfirmRequest) =>
+    ipcRenderer.invoke('item:editAndConfirm', req) as Promise<ItemEditAndConfirmResponse>,
+
+  itemDismiss: (req: ItemDismissRequest) =>
+    ipcRenderer.invoke('item:dismiss', req) as Promise<ItemDismissResponse>,
+
+  itemCreateConfirmed: (req: ItemCreateConfirmedRequest) =>
+    ipcRenderer.invoke('item:createConfirmed', req) as Promise<ItemCreateConfirmedResponse>,
 }
 
 contextBridge.exposeInMainWorld('api', api)

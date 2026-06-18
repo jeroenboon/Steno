@@ -45,6 +45,11 @@ import {
   AudioStartResponseSchema,
   AudioStopRequestSchema,
   AudioStopResponseSchema,
+  ItemConfirmRequestSchema,
+  ItemEditAndConfirmRequestSchema,
+  ItemDismissRequestSchema,
+  ItemDismissResponseSchema,
+  ItemCreateConfirmedRequestSchema,
 } from '@shared/ipc'
 import type {
   IpcChannel,
@@ -62,10 +67,15 @@ import type {
   MeetingStartResponse,
   AudioStartResponse,
   AudioStopResponse,
+  ItemConfirmResponse,
+  ItemEditAndConfirmResponse,
+  ItemDismissResponse,
+  ItemCreateConfirmedResponse,
 } from '@shared/ipc'
 import type { Clock } from '@shared/providers'
 
 import type { AudioCaptureBridge } from './audio/AudioCaptureBridge'
+import type { ItemLifecycleService } from './services/itemLifecycleService'
 import { computeEgressState } from './settings/egressState'
 import type { SecretStorage } from './settings/SecretStorage'
 import type { SettingsStore } from './settings/SettingsStore'
@@ -107,6 +117,17 @@ export interface IpcRegistryDependencies {
    * Use to tear down the LiveExtractionRuntime.
    */
   onAudioStop?: () => void
+  /**
+   * ItemLifecycleService instance (item 0018).
+   * Required for item:confirm, item:editAndConfirm, item:dismiss, item:createConfirmed.
+   * When absent, those channels return a "not available" error (graceful degradation).
+   */
+  itemLifecycleService?: ItemLifecycleService
+  /**
+   * Active meeting ID (item 0018).
+   * Used by item:createConfirmed to scope the new item to the correct meeting.
+   */
+  activeMeetingId?: () => string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -273,6 +294,59 @@ function makeHandleAudioStop(deps: IpcRegistryDependencies) {
 }
 
 // ---------------------------------------------------------------------------
+// Item action handlers (item 0018)
+// ---------------------------------------------------------------------------
+
+function makeHandleItemConfirm(deps: IpcRegistryDependencies) {
+  return function handleItemConfirm(raw: unknown): ItemConfirmResponse {
+    const req = ItemConfirmRequestSchema.parse(raw)
+    if (deps.itemLifecycleService === undefined) {
+      throw new Error('ItemLifecycleService is not available')
+    }
+    return deps.itemLifecycleService.confirm({ kind: req.kind, id: req.id })
+  }
+}
+
+function makeHandleItemEditAndConfirm(deps: IpcRegistryDependencies) {
+  return function handleItemEditAndConfirm(raw: unknown): ItemEditAndConfirmResponse {
+    const req = ItemEditAndConfirmRequestSchema.parse(raw)
+    if (deps.itemLifecycleService === undefined) {
+      throw new Error('ItemLifecycleService is not available')
+    }
+    if (req.kind === 'decision') {
+      return deps.itemLifecycleService.editAndConfirmDecision(req.id, req.updates)
+    } else {
+      return deps.itemLifecycleService.editAndConfirmAction(req.id, req.updates)
+    }
+  }
+}
+
+function makeHandleItemDismiss(deps: IpcRegistryDependencies) {
+  return function handleItemDismiss(raw: unknown): ItemDismissResponse {
+    const req = ItemDismissRequestSchema.parse(raw)
+    if (deps.itemLifecycleService === undefined) {
+      throw new Error('ItemLifecycleService is not available')
+    }
+    deps.itemLifecycleService.dismiss({ kind: req.kind, id: req.id })
+    return ItemDismissResponseSchema.parse({ ok: true })
+  }
+}
+
+function makeHandleItemCreateConfirmed(deps: IpcRegistryDependencies) {
+  return function handleItemCreateConfirmed(raw: unknown): ItemCreateConfirmedResponse {
+    const req = ItemCreateConfirmedRequestSchema.parse(raw)
+    if (deps.itemLifecycleService === undefined) {
+      throw new Error('ItemLifecycleService is not available')
+    }
+    if (req.kind === 'decision') {
+      return deps.itemLifecycleService.createConfirmedDecision(req.meetingId, req.item)
+    } else {
+      return deps.itemLifecycleService.createConfirmedAction(req.meetingId, req.item)
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
 
@@ -293,6 +367,10 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'meeting:start': makeHandleMeetingStart(deps),
     'audio:start': makeHandleAudioStart(deps),
     'audio:stop': makeHandleAudioStop(deps),
+    'item:confirm': makeHandleItemConfirm(deps),
+    'item:editAndConfirm': makeHandleItemEditAndConfirm(deps),
+    'item:dismiss': makeHandleItemDismiss(deps),
+    'item:createConfirmed': makeHandleItemCreateConfirmed(deps),
   }
 
   return {
