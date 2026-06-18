@@ -391,7 +391,91 @@ describe('meeting end', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 6. Teardown — stop cleanly
+// 6. Running summary (item 0020)
+// ---------------------------------------------------------------------------
+
+describe('running summary', () => {
+  it("emits 'summary:changed' after the cadence fires when spans exist", async () => {
+    const { clock, provider, sender, runtime } = buildHarness()
+
+    provider.scriptSummariseResponse('Vergadering gaat over Q3.')
+    runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+
+    clock.tick(20_000)
+    await runtime.tick()
+
+    const summaryEvents = sender.sentOn('summary:changed') as { summary: string }[]
+    expect(summaryEvents).toHaveLength(1)
+    expect(summaryEvents[0]?.summary).toBe('Vergadering gaat over Q3.')
+  })
+
+  it("does NOT emit 'summary:changed' when no spans are present", async () => {
+    const { clock, provider, sender, runtime } = buildHarness()
+
+    provider.scriptSummariseResponse('Dit zou niet gestuurd moeten worden.')
+
+    clock.tick(20_000)
+    await runtime.tick()
+
+    expect(sender.sentOn('summary:changed')).toHaveLength(0)
+  })
+
+  it('retains the last summary when summarise() throws (graceful degradation)', async () => {
+    const { clock, provider, sender, runtime } = buildHarness()
+
+    // First tick: succeeds, sets summary to 'Eerste samenvatting.'
+    provider.scriptSummariseResponse('Eerste samenvatting.')
+    runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    clock.tick(20_000)
+    await runtime.tick()
+
+    expect(runtime.runningSummary).toBe('Eerste samenvatting.')
+
+    // Second tick: provider.summarise throws
+    vi.spyOn(provider, 'summarise').mockRejectedValueOnce(new Error('LLM fout'))
+    clock.tick(20_000)
+    await runtime.tick()
+
+    // Summary retained; no new event emitted beyond the first
+    expect(runtime.runningSummary).toBe('Eerste samenvatting.')
+    expect(sender.sentOn('summary:changed')).toHaveLength(1)
+  })
+
+  it("does NOT emit 'summary:changed' in the degraded path (no provider)", async () => {
+    const { clock, sender, runtime } = buildHarness({ noProvider: true })
+
+    runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    clock.tick(20_000)
+    await runtime.tick()
+
+    expect(sender.sentOn('summary:changed')).toHaveLength(0)
+  })
+
+  it('querySummary() returns the provider answer when spans exist', async () => {
+    const { provider, runtime } = buildHarness()
+
+    provider.scriptQueryResponse('Jeroen gaat de taak oppakken.')
+    runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+
+    const answer = await runtime.querySummary('Wie pakt de taak op?')
+    expect(answer).toBe('Jeroen gaat de taak oppakken.')
+  })
+
+  it('querySummary() returns empty string when no spans exist', async () => {
+    const { runtime } = buildHarness()
+    const answer = await runtime.querySummary('Wat werd besproken?')
+    expect(answer).toBe('')
+  })
+
+  it('querySummary() returns empty string in the degraded path (no provider)', async () => {
+    const { runtime } = buildHarness({ noProvider: true })
+    const answer = await runtime.querySummary('Wat werd besproken?')
+    expect(answer).toBe('')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 7. Teardown — stop cleanly
 // ---------------------------------------------------------------------------
 
 describe('teardown', () => {

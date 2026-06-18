@@ -48,8 +48,9 @@ import type {
   MeetingId,
   TranscriptSpan,
 } from '@shared/domain'
-import type { NudgesChangedPayload } from '@shared/ipc'
+import type { NudgesChangedPayload, SummaryChangedPayload } from '@shared/ipc'
 import { deriveNudges } from '@shared/nudges/deriveNudges'
+import type { ExtractionProvider } from '@shared/providers'
 
 import type { IpcSender } from '../audio/AudioCaptureBridge'
 import type { actionRepo } from '../db/repos/actionRepo'
@@ -167,6 +168,8 @@ export class LiveExtractionRuntime {
   private readonly _context: MeetingContext
   /** Null when no extraction provider configured (degraded path). */
   private readonly _scheduler: ExtractionLoopScheduler | null
+  /** The extraction provider, or null when degraded. Used for summarise/query. */
+  private readonly _provider: ExtractionProvider | null
   private readonly _spanRepo: ReturnType<typeof transcriptSpanRepo>
   private readonly _dsRepo: ReturnType<typeof discussionSummaryRepo>
   private readonly _decisionsRepo: ReturnType<typeof decisionRepo>
@@ -176,6 +179,8 @@ export class LiveExtractionRuntime {
 
   private _stopped = false
   private _endMeetingCalled = false
+  /** Latest running summary — in-memory only, not persisted. */
+  private _runningSummary = ''
 
   constructor(opts: LiveExtractionRuntimeOptions) {
     this._meetingId = opts.meetingId
@@ -188,6 +193,9 @@ export class LiveExtractionRuntime {
     this._meetingStartedAt = opts.meetingStartedAt ?? new Date()
 
     if (opts.schedulerDeps !== null) {
+      // Store provider reference for summarise/query
+      this._provider = opts.schedulerDeps.provider
+
       // Build the intercepting item service from the repos.
       // The interceptor fires 'items:changed' whenever proposeItems produces items.
       const wrappedService = new InterceptingItemLifecycleService(
@@ -207,6 +215,7 @@ export class LiveExtractionRuntime {
       })
     } else {
       // Degraded path: no extraction provider — keep transcription + persistence
+      this._provider = null
       this._scheduler = null
       console.warn(
         '[LiveExtractionRuntime] No extraction provider configured. ' +
@@ -276,12 +285,65 @@ export class LiveExtractionRuntime {
    * Drive one scheduler tick. No-op when stopped or no scheduler configured.
    * If the tick produces proposed items, 'items:changed' is emitted via the
    * intercepting item service inside the scheduler.
+   *
+   * Also triggers the running summary update when the scheduler fired a turn.
    */
   async tick(): Promise<void> {
     if (this._stopped) return
     if (this._scheduler === null) return
 
     await this._scheduler.tick(this._meetingId, this._context)
+    await this._runSummary()
+  }
+
+  // -------------------------------------------------------------------------
+  // Running summary (item 0020)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Call provider.summarise() with all persisted final spans and emit
+   * 'summary:changed' if the result is non-empty.
+   *
+   * Failures are caught and logged — the meeting continues uninterrupted and
+   * the last known summary is retained (principle: degrade, never crash).
+   */
+  private async _runSummary(): Promise<void> {
+    if (this._provider?.summarise === undefined) return
+
+    const spans = this._spanRepo.listByMeeting(this._meetingId)
+    if (spans.length === 0) return
+
+    try {
+      const summary = await this._provider.summarise(spans)
+      if (summary.length > 0) {
+        this._runningSummary = summary
+        this._sender.send('summary:changed', { summary } satisfies SummaryChangedPayload)
+      }
+    } catch (err) {
+      // Never log transcript content; only a non-sensitive metadata note.
+      console.error(
+        '[LiveExtractionRuntime] summarise() failed, retaining last summary:',
+        err instanceof Error ? err.message : 'unknown error',
+      )
+    }
+  }
+
+  /**
+   * Answer a free-form question grounded in the current transcript.
+   * Returns '' when no provider or when provider lacks query() capability.
+   *
+   * Called by the IPC handler for 'summary:query'.
+   */
+  async querySummary(question: string): Promise<string> {
+    if (this._provider?.query === undefined) return ''
+    const spans = this._spanRepo.listByMeeting(this._meetingId)
+    if (spans.length === 0) return ''
+    return this._provider.query(spans, question)
+  }
+
+  /** Return the current in-memory running summary. */
+  get runningSummary(): string {
+    return this._runningSummary
   }
 
   // -------------------------------------------------------------------------

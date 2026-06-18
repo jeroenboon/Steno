@@ -136,6 +136,7 @@ const IPC_CHANNELS: IpcChannel[] = [
   'item:editAndConfirm',
   'item:dismiss',
   'item:createConfirmed',
+  'summary:query',
 ]
 
 async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
@@ -320,6 +321,9 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     onAudioStop: () => {
       activeRuntime?.stop()
       activeRuntime = null
+    },
+    summaryQuery: (question) => {
+      return activeRuntime !== null ? activeRuntime.querySummary(question) : Promise.resolve('')
     },
   })
 

@@ -128,6 +128,13 @@ export interface AppState {
    */
   dismissedNudgeIds: Set<NudgeId>
 
+  /**
+   * Current running summary from the extraction provider (item 0020).
+   * Updated on every summary:changed IPC event. Empty string when not yet available.
+   * In-memory only — not persisted.
+   */
+  runningSummary: string
+
   /** Replace the full nudge list (called on nudges:changed IPC event). */
   setNudges: (nudges: Nudge[]) => void
 
@@ -187,6 +194,9 @@ export interface AppState {
 
   /** Set the participants for the current meeting. */
   setParticipants: (participants: Participant[]) => void
+
+  /** Update the running summary (called on summary:changed IPC event). */
+  setRunningSummary: (summary: string) => void
 }
 
 // Re-export for convenience
@@ -211,6 +221,7 @@ export const useAppStore = create<AppState>()((set) => ({
   participants: [],
   nudges: [],
   dismissedNudgeIds: new Set<NudgeId>(),
+  runningSummary: '',
 
   setNudges: (nudges) => {
     set({ nudges })
@@ -314,5 +325,9 @@ export const useAppStore = create<AppState>()((set) => ({
 
   setParticipants: (participants) => {
     set({ participants })
+  },
+
+  setRunningSummary: (summary) => {
+    set({ runningSummary: summary })
   },
 }))

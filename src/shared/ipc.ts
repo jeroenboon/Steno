@@ -301,6 +301,44 @@ export const NudgesChangedPayloadSchema = z.object({
 export type NudgesChangedPayload = z.infer<typeof NudgesChangedPayloadSchema>
 
 // ---------------------------------------------------------------------------
+// summary:changed — main → renderer push event (item 0020)
+//
+// Emitted after each extraction cadence tick fires the summarise() call on the
+// provider. Carries the latest whole-meeting plain-text running summary.
+// The renderer replaces its local summary string on each event.
+//
+// Pattern: webContents.send('summary:changed', payload) on main;
+//          ipcRenderer.on('summary:changed', listener) in preload, exposed as
+//          window.api.onSummaryChanged(cb) returning an UnsubscribeFn.
+// ---------------------------------------------------------------------------
+
+export const SummaryChangedPayloadSchema = z.object({
+  /** The latest whole-meeting running summary as plain text. */
+  summary: z.string(),
+})
+
+export type SummaryChangedPayload = z.infer<typeof SummaryChangedPayloadSchema>
+
+// ---------------------------------------------------------------------------
+// summary:query — invoke channel (item 0020)
+//
+// The note-taker asks a free-form question grounded in the current transcript.
+// Main calls provider.query() and returns a plain-text answer.
+// If the provider has no query() method, returns { answer: '' }.
+// ---------------------------------------------------------------------------
+
+export const SummaryQueryRequestSchema = z.object({
+  question: z.string().min(1, 'Question cannot be empty'),
+})
+
+export const SummaryQueryResponseSchema = z.object({
+  answer: z.string(),
+})
+
+export type SummaryQueryRequest = z.infer<typeof SummaryQueryRequestSchema>
+export type SummaryQueryResponse = z.infer<typeof SummaryQueryResponseSchema>
+
+// ---------------------------------------------------------------------------
 // item:confirm — note-taker confirms a Proposed Decision or Action (item 0018)
 // ---------------------------------------------------------------------------
 
@@ -415,6 +453,7 @@ export type IpcChannel =
   | 'item:editAndConfirm'
   | 'item:dismiss'
   | 'item:createConfirmed'
+  | 'summary:query'
 
 /**
  * One-way channels: renderer sends, main receives (no invoke/response).
@@ -527,4 +566,18 @@ export interface RendererApi {
    * Bypasses the Proposed state; the item is immediately Confirmed.
    */
   itemCreateConfirmed: (req: ItemCreateConfirmedRequest) => Promise<ItemCreateConfirmedResponse>
+  /**
+   * Subscribe to running summary updates pushed from main (item 0020).
+   * Fired after each extraction cadence tick when summarise() produces a result.
+   * The callback receives the full current running summary string; the UI
+   * replaces its local summary text on each event.
+   * Returns an unsubscribe function.
+   */
+  onSummaryChanged: (cb: (payload: SummaryChangedPayload) => void) => UnsubscribeFn
+  /**
+   * Ask a free-form question grounded in the current transcript (item 0020).
+   * Main calls provider.query() and returns a plain-text answer.
+   * Returns { answer: '' } if the provider has no query capability.
+   */
+  summaryQuery: (req: SummaryQueryRequest) => Promise<SummaryQueryResponse>
 }

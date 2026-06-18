@@ -55,6 +55,7 @@ Each cycle: real public interface only, not internal implementation details. A g
 ### Planning step (before any code)
 
 List the behaviours you need to test. For each:
+
 - What is the observable output for a given input?
 - What is the public interface the test goes through?
 - Is there an existing fake/clock to use?
@@ -105,7 +106,7 @@ Before reporting back to the orchestrator, think through these:
    - Hard to reverse?
    - Surprising to a newcomer?
    - A real trade-off (not just the obvious choice)?
-   If all three: add an ADR in `docs/adr/` following the existing numbering and format.
+     If all three: add an ADR in `docs/adr/` following the existing numbering and format.
 3. Keep the reflect step in the same commit as the feature.
 
 ---

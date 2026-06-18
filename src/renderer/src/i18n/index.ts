@@ -153,6 +153,15 @@ const nl = {
     'Dit agendapunt heeft nog geen beslissingen of acties na meer dan 5 minuten.',
   'nudge.dismiss': 'Sluiten',
 
+  // Running Summary panel (item 0020)
+  'live.summary.heading': 'Vergaderingsoverzicht',
+  'live.summary.disclaimer': 'Informatief — niet gezaghebbend over beslissingen en acties.',
+  'live.summary.empty': 'Het overzicht verschijnt zodra er transcriptie beschikbaar is.',
+  'live.summary.query.placeholder': 'Stel een vraag over de vergadering…',
+  'live.summary.query.button': 'Vraag',
+  'live.summary.answer.label': 'Antwoord',
+  'live.summary.loading': 'Bezig met ophalen…',
+
   // Generic
   'app.name': 'LiveTranscriber',
 } as const

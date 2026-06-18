@@ -48,6 +48,9 @@ import type {
   ItemCreateConfirmedRequest,
   ItemCreateConfirmedResponse,
   NudgesChangedPayload,
+  SummaryChangedPayload,
+  SummaryQueryRequest,
+  SummaryQueryResponse,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -166,6 +169,23 @@ const api: RendererApi = {
       ipcRenderer.removeListener('nudges:changed', listener)
     }
   },
+
+  // ---------------------------------------------------------------------------
+  // Running summary (item 0020)
+  // ---------------------------------------------------------------------------
+
+  onSummaryChanged: (cb: (payload: SummaryChangedPayload) => void): UnsubscribeFn => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: SummaryChangedPayload) => {
+      cb(payload)
+    }
+    ipcRenderer.on('summary:changed', listener)
+    return () => {
+      ipcRenderer.removeListener('summary:changed', listener)
+    }
+  },
+
+  summaryQuery: (req: SummaryQueryRequest) =>
+    ipcRenderer.invoke('summary:query', req) as Promise<SummaryQueryResponse>,
 }
 
 contextBridge.exposeInMainWorld('api', api)

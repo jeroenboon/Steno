@@ -15,7 +15,7 @@ Your job: pick the next undone item, dispatch it to a worker subagent, verify th
 Before you start, read:
 
 - **[BACKLOG.md](../BACKLOG.md)** — the sequential build plan and engineering principles.
-- **[docs/handoff-*.md](../docs/)** — the most recent handoff for "where we are".
+- **[docs/handoff-\*.md](../docs/)** — the most recent handoff for "where we are".
 - **[CONTEXT.md](../CONTEXT.md)** — domain vocabulary.
 - **[CLAUDE.md](../CLAUDE.md)** — commands, architecture, gotchas.
 
@@ -59,6 +59,7 @@ ACCEPTANCE CRITERIA:
 ### Step 3 — Dispatch to the worker subagent
 
 Invoke the worker subagent (the Explore or default subagent) with:
+
 - The full task block above
 - The full content of `.vscode/worker.prompt.md` as its system instructions
 - Instruction to report back in the structured format defined in worker.prompt.md
@@ -100,6 +101,7 @@ All five must be green. `format` runs last (format-drift gate).
 ### Structural checks
 
 After each item, verify:
+
 - No `any` introduced (lint would catch it, but double-check)
 - No vendor SDK imported in `src/shared/`
 - No raw `ipcRenderer` in the renderer (everything through `window.api`)
@@ -115,6 +117,7 @@ Was a hard-to-reverse, surprising, real-trade-off decision made? If the worker m
 ## When to add an ADR
 
 Add an ADR when ALL THREE apply:
+
 1. The decision is hard to reverse
 2. It would surprise a capable newcomer
 3. It involved a real trade-off (not just the obvious choice)

@@ -5,7 +5,14 @@
  * Rolling scripts are consumed in order (FIFO); once exhausted, the provider
  * returns an empty response. The final-pass script is used once when
  * isFinalPass=true. All calls are recorded for assertion.
+ *
+ * Also implements optional summarise() and query() (item 0020):
+ *   - scriptSummariseResponse(text) sets the scripted summary string.
+ *   - scriptQueryResponse(text) sets the scripted query answer.
+ *   - Both default to a predictable deterministic string when not scripted.
  */
+
+import type { TranscriptSpan } from '../domain/types'
 
 import type { ExtractionRequest, ExtractionResponse } from './dtos'
 import type { ExtractionProvider } from './ExtractionProvider'
@@ -14,6 +21,10 @@ export class FakeExtractionProvider implements ExtractionProvider {
   private _rollingScripts: ExtractionResponse[] = []
   private _finalPassScript: ExtractionResponse | null = null
   private _calls: ExtractionRequest[] = []
+  private _summariseResponse: string | null = null
+  private _queryResponse: string | null = null
+  private _summariseCalls: TranscriptSpan[][] = []
+  private _queryCalls: { spans: TranscriptSpan[]; question: string }[] = []
 
   /**
    * Enqueue a scripted response for the next rolling (non-final-pass) call.
@@ -31,6 +42,16 @@ export class FakeExtractionProvider implements ExtractionProvider {
     this._finalPassScript = response
   }
 
+  /** Set the scripted summary returned by summarise(). */
+  scriptSummariseResponse(text: string): void {
+    this._summariseResponse = text
+  }
+
+  /** Set the scripted answer returned by query(). */
+  scriptQueryResponse(text: string): void {
+    this._queryResponse = text
+  }
+
   /** Returns the number of extract() calls received so far. */
   callCount(): number {
     return this._calls.length
@@ -39,6 +60,16 @@ export class FakeExtractionProvider implements ExtractionProvider {
   /** Returns all recorded extract() requests in call order. */
   calls(): readonly ExtractionRequest[] {
     return this._calls
+  }
+
+  /** Returns all recorded summarise() calls in order. */
+  summariseCalls(): readonly TranscriptSpan[][] {
+    return this._summariseCalls
+  }
+
+  /** Returns all recorded query() calls in order. */
+  queryCalls(): readonly { spans: TranscriptSpan[]; question: string }[] {
+    return this._queryCalls
   }
 
   async extract(request: ExtractionRequest): Promise<ExtractionResponse> {
@@ -65,5 +96,19 @@ export class FakeExtractionProvider implements ExtractionProvider {
       proposedDecisions: [],
       proposedActions: [],
     })
+  }
+
+  summarise(spans: TranscriptSpan[]): Promise<string> {
+    this._summariseCalls.push(spans)
+    return Promise.resolve(
+      this._summariseResponse ?? `Fake samenvatting voor ${String(spans.length)} fragmenten.`,
+    )
+  }
+
+  query(spans: TranscriptSpan[], question: string): Promise<string> {
+    this._queryCalls.push({ spans, question })
+    return Promise.resolve(
+      this._queryResponse ?? `Fake antwoord op "${question}" (${String(spans.length)} fragmenten).`,
+    )
   }
 }

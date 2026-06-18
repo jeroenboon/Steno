@@ -50,6 +50,8 @@ import {
   ItemDismissRequestSchema,
   ItemDismissResponseSchema,
   ItemCreateConfirmedRequestSchema,
+  SummaryQueryRequestSchema,
+  SummaryQueryResponseSchema,
 } from '@shared/ipc'
 import type {
   IpcChannel,
@@ -71,6 +73,7 @@ import type {
   ItemEditAndConfirmResponse,
   ItemDismissResponse,
   ItemCreateConfirmedResponse,
+  SummaryQueryResponse,
 } from '@shared/ipc'
 import type { Clock } from '@shared/providers'
 
@@ -128,6 +131,12 @@ export interface IpcRegistryDependencies {
    * Used by item:createConfirmed to scope the new item to the correct meeting.
    */
   activeMeetingId?: () => string | null
+  /**
+   * Query the running summary with a free-form question (item 0020).
+   * Called when the note-taker submits a question in the RunningSum panel.
+   * Returns '' when the active runtime has no provider or no query capability.
+   */
+  summaryQuery?: (question: string) => Promise<string>
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +365,14 @@ function makeHandleItemCreateConfirmed(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleSummaryQuery(deps: IpcRegistryDependencies) {
+  return async function handleSummaryQuery(raw: unknown): Promise<SummaryQueryResponse> {
+    const req = SummaryQueryRequestSchema.parse(raw)
+    const answer = deps.summaryQuery !== undefined ? await deps.summaryQuery(req.question) : ''
+    return SummaryQueryResponseSchema.parse({ answer })
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -381,6 +398,7 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'item:editAndConfirm': makeHandleItemEditAndConfirm(deps),
     'item:dismiss': makeHandleItemDismiss(deps),
     'item:createConfirmed': makeHandleItemCreateConfirmed(deps),
+    'summary:query': makeHandleSummaryQuery(deps),
   }
 
   return {

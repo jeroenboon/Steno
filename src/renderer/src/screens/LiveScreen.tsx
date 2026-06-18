@@ -33,10 +33,12 @@ import { OffAgenda } from '@shared/domain/types'
 import {
   ItemsChangedPayloadSchema,
   NudgesChangedPayloadSchema,
+  SummaryChangedPayloadSchema,
   TranscriptSpanSchema,
 } from '@shared/ipc'
 
 import { NudgePanel } from '../components/NudgePanel'
+import { RunningSummaryPanel } from '../components/RunningSummaryPanel'
 import { t } from '../i18n'
 import { AudioCaptureService, PermissionDeniedError } from '../services/AudioCaptureService'
 import { useAppStore } from '../store/appStore'
@@ -486,6 +488,7 @@ export function LiveScreen(): React.JSX.Element {
   const dismissedNudgeIds = useAppStore((s) => s.dismissedNudgeIds)
   const setNudges = useAppStore((s) => s.setNudges)
   const dismissNudge = useAppStore((s) => s.dismissNudge)
+  const setRunningSummary = useAppStore((s) => s.setRunningSummary)
 
   // --- Local UI state ---
   const [transcriptOpen, setTranscriptOpen] = useState(false)
@@ -545,6 +548,14 @@ export function LiveScreen(): React.JSX.Element {
       }
     })
 
+    // Running summary (item 0020)
+    const unsubSummary = window.api.onSummaryChanged((raw) => {
+      const result = SummaryChangedPayloadSchema.safeParse(raw)
+      if (result.success) {
+        setRunningSummary(result.data.summary)
+      }
+    })
+
     // Discussion summaries (logged but not displayed live — item 0021)
     const unsubSummaries = window.api.onItemsSummaries(() => {
       // Post-meeting summaries handled in item 0021 Review screen
@@ -570,13 +581,21 @@ export function LiveScreen(): React.JSX.Element {
       unsubSpan()
       unsubItems()
       unsubNudges()
+      unsubSummary()
       unsubSummaries()
       void service.stop().catch((err: unknown) => {
         console.error('[LiveScreen] Error stopping audio capture:', err)
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addTranscriptSpan, setMicPermission, setLoopbackState, mergeProposedItems, setNudges])
+  }, [
+    addTranscriptSpan,
+    setMicPermission,
+    setLoopbackState,
+    mergeProposedItems,
+    setNudges,
+    setRunningSummary,
+  ])
 
   // --- Item actions ---
   const handleConfirm = useCallback(
@@ -848,6 +867,11 @@ export function LiveScreen(): React.JSX.Element {
           )}
         </AnimatePresence>
       </section>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Running summary panel (item 0020) */}
+      {/* ------------------------------------------------------------------ */}
+      <RunningSummaryPanel />
 
       {/* ------------------------------------------------------------------ */}
       {/* Collapsible transcript pane (collapsed by default) */}

@@ -132,6 +132,79 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
   }
 
   // ---------------------------------------------------------------------------
+  // Running Summary (item 0020)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Produce a plain-text paragraph summarising the meeting so far.
+   * Uses the rolling model (Haiku) — latency matters here too.
+   * No structured output; plain text response.
+   *
+   * Never logs transcript content (principle #12).
+   */
+  async summarise(spans: import('@shared/domain/types').TranscriptSpan[]): Promise<string> {
+    if (spans.length === 0) return ''
+
+    const spanLines = spans
+      .map((s) => `[${s.id}] ${s.speakerLabel ? `${s.speakerLabel}: ` : ''}${s.text}`)
+      .join('\n')
+
+    const response = await this._client.messages.create({
+      model: this._rollingModel,
+      max_tokens: 512,
+      system:
+        'Je bent een assistent die een beknopte samenvatting geeft van een vergadering tot nu toe. ' +
+        'Geef één alinea in gewone taal. Geen opsommingen, geen koppen.',
+      messages: [
+        {
+          role: 'user',
+          content: `Geef een korte samenvatting van de vergadering op basis van dit transcript:\n${spanLines}`,
+        },
+      ],
+    })
+
+    const textBlock = response.content.find((block) => block.type === 'text')
+    if (textBlock?.type !== 'text') return ''
+    return textBlock.text
+  }
+
+  /**
+   * Answer a free-form question grounded in the current transcript.
+   * Uses the rolling model (Haiku).
+   * No structured output; plain text response.
+   *
+   * Never logs transcript content or the question (principle #12).
+   */
+  async query(
+    spans: import('@shared/domain/types').TranscriptSpan[],
+    question: string,
+  ): Promise<string> {
+    if (spans.length === 0) return ''
+
+    const spanLines = spans
+      .map((s) => `[${s.id}] ${s.speakerLabel ? `${s.speakerLabel}: ` : ''}${s.text}`)
+      .join('\n')
+
+    const response = await this._client.messages.create({
+      model: this._rollingModel,
+      max_tokens: 512,
+      system:
+        'Je bent een assistent die vragen beantwoordt op basis van een vergadertranscript. ' +
+        'Wees bondig en feitelijk. Geef alleen antwoord op basis van het transcript.',
+      messages: [
+        {
+          role: 'user',
+          content: `Transcript:\n${spanLines}\n\nVraag: ${question}`,
+        },
+      ],
+    })
+
+    const textBlock = response.content.find((block) => block.type === 'text')
+    if (textBlock?.type !== 'text') return ''
+    return textBlock.text
+  }
+
+  // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
