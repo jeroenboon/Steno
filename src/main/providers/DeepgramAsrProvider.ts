@@ -33,10 +33,36 @@
 
 import { randomUUID } from 'node:crypto'
 
+import WebSocketImpl from 'ws'
 import { z } from 'zod'
 
 import { TranscriptSpanSchema, type TranscriptSpan } from '@shared/domain/types'
 import type { ASRProvider } from '@shared/providers'
+
+// ---------------------------------------------------------------------------
+// WebSocket abstraction
+//
+// The Electron MAIN process (Node) does not expose a global `WebSocket`, so we
+// cannot rely on the DOM `WebSocket` at runtime even though @types/node now
+// declares it. We depend on a minimal structural interface and back the default
+// factory with the Node `ws` package. Tests inject a FakeWebSocket of the same
+// shape. (Referencing the global WebSocket here is exactly what caused the
+// "WebSocket is not defined" ReferenceError in the main process.)
+// ---------------------------------------------------------------------------
+
+/** The browser-like WebSocket surface this adapter actually uses. */
+export interface WebSocketLike {
+  readyState: number
+  onopen: (() => void) | null
+  onmessage: ((event: { data: string }) => void) | null
+  onerror: ((event: { message: string }) => void) | null
+  onclose: (() => void) | null
+  send(data: Uint8Array | string): void
+  close(): void
+}
+
+/** WebSocket readyState OPEN, per the WHATWG spec (and `ws`). */
+const WS_OPEN = 1
 
 // ---------------------------------------------------------------------------
 // Deepgram WebSocket URL helpers
@@ -89,7 +115,7 @@ type DeepgramResult = z.infer<typeof DeepgramResultSchema>
 // ---------------------------------------------------------------------------
 
 /** Factory that produces a WebSocket-compatible instance. Injected for testability. */
-export type WebSocketFactory = (url: string) => WebSocket
+export type WebSocketFactory = (url: string) => WebSocketLike
 
 export interface DeepgramAsrProviderOptions {
   /** Deepgram API key. Injected; never read from disk here (secrets = item 0012). */
@@ -104,8 +130,8 @@ export interface DeepgramAsrProviderOptions {
   /** Maximum backoff delay in milliseconds. Default 30 000 ms. */
   maxBackoffMs?: number
   /**
-   * WebSocket factory. Injected for tests; defaults to the global WebSocket
-   * constructor (available in Electron's Node >=20 / Chromium renderer).
+   * WebSocket factory. Injected for tests; defaults to the Node `ws` package,
+   * because the Electron main process has no global WebSocket.
    */
   webSocketFactory?: WebSocketFactory
 }
@@ -128,7 +154,7 @@ export class DeepgramAsrProvider implements ASRProvider {
   private readonly _maxBackoffMs: number
   private readonly _wsFactory: WebSocketFactory
 
-  private _socket: WebSocket | null = null
+  private _socket: WebSocketLike | null = null
   private _stopped = false
 
   /** Spans waiting to be consumed by the iterator. */
@@ -141,7 +167,8 @@ export class DeepgramAsrProvider implements ASRProvider {
     this._language = options.language ?? 'nl'
     this._sleep = options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)))
     this._maxBackoffMs = options.maxBackoffMs ?? 30_000
-    this._wsFactory = options.webSocketFactory ?? ((url) => new WebSocket(url))
+    this._wsFactory =
+      options.webSocketFactory ?? ((url) => new WebSocketImpl(url) as unknown as WebSocketLike)
   }
 
   // -------------------------------------------------------------------------
@@ -166,7 +193,7 @@ export class DeepgramAsrProvider implements ASRProvider {
   }
 
   pushAudioFrame(chunk: Uint8Array): void {
-    if (this._socket?.readyState === (WebSocket as unknown as { OPEN: number }).OPEN) {
+    if (this._socket?.readyState === WS_OPEN) {
       this._socket.send(chunk)
     }
   }
@@ -219,7 +246,7 @@ export class DeepgramAsrProvider implements ASRProvider {
       // (we track backoff in the reconnect path, not here)
     }
 
-    socket.onmessage = (event: { data: string }) => {
+    socket.onmessage = (event: { data: unknown }) => {
       this._handleMessage(event.data)
     }
 
@@ -250,10 +277,24 @@ export class DeepgramAsrProvider implements ASRProvider {
   // Internal: parse Deepgram payload → TranscriptSpan
   // -------------------------------------------------------------------------
 
-  private _handleMessage(raw: string): void {
+  private _handleMessage(raw: unknown): void {
+    // `ws` delivers text frames as a Buffer in Node; the browser delivers a
+    // string. Normalise to string before parsing. ArrayBuffer/typed arrays are
+    // handled too for safety.
+    let text: string
+    if (typeof raw === 'string') {
+      text = raw
+    } else if (raw instanceof ArrayBuffer) {
+      text = Buffer.from(raw).toString('utf8')
+    } else if (raw instanceof Uint8Array) {
+      text = Buffer.from(raw).toString('utf8')
+    } else {
+      text = String(raw)
+    }
+
     let parsed: unknown
     try {
-      parsed = JSON.parse(raw) as unknown
+      parsed = JSON.parse(text) as unknown
     } catch {
       // Malformed JSON — skip silently, never log raw content (principle #12)
       return

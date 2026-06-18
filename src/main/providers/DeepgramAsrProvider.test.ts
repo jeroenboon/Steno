@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { TranscriptSpan } from '@shared/domain/types'
 
-import { DeepgramAsrProvider } from './DeepgramAsrProvider'
+import { DeepgramAsrProvider, type WebSocketLike } from './DeepgramAsrProvider'
 
 // ---------------------------------------------------------------------------
 // Fake WebSocket
@@ -126,7 +126,7 @@ let currentSocket: FakeWebSocket
 function makeProvider(overrides?: { maxBackoffMs?: number }) {
   currentSocket = new FakeWebSocket()
 
-  const factory = () => currentSocket as unknown as WebSocket
+  const factory = () => currentSocket as unknown as WebSocketLike
 
   return new DeepgramAsrProvider({
     apiKey: 'test-key',
@@ -321,7 +321,7 @@ describe('DeepgramAsrProvider', () => {
       webSocketFactory: () => {
         const s = sockets[socketIndex]
         socketIndex++
-        return s as unknown as WebSocket
+        return s as unknown as WebSocketLike
       },
     })
 
@@ -374,7 +374,7 @@ describe('DeepgramAsrProvider', () => {
       webSocketFactory: () => {
         const s = sockets[socketIndex]
         socketIndex++
-        return s as unknown as WebSocket
+        return s as unknown as WebSocketLike
       },
     })
 

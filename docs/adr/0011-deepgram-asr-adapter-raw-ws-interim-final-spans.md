@@ -9,6 +9,15 @@
 Item 0011 implements the Deepgram realtime ASR adapter behind the existing `ASRProvider` port.
 Three design choices had real trade-offs and are recorded here.
 
+## Amendment (2026-06-18, item 0016 verification)
+
+The default `WebSocketFactory` originally used the global `WebSocket`. That global does
+not exist in the Electron **main** process (Node), so the first real `audio:start`
+threw `ReferenceError: WebSocket is not defined`. The adapter now depends on a minimal
+structural `WebSocketLike` interface, defaults to the Node **`ws`** package, and uses a
+local `WS_OPEN = 1` constant instead of referencing the global `WebSocket.OPEN`. Tests
+still inject a fake of the `WebSocketLike` shape. `ws` is pinned in dependencies.
+
 ## Decision 1: raw WebSocket over the Deepgram SDK
 
 `@deepgram/sdk` was not in the project at item start. The Deepgram realtime API is a
