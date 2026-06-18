@@ -26,6 +26,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",
+    "@fontsource/fraunces": "^5.2.9",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/ibm-plex-sans": "^5.2.8",
     "autoprefixer": "^10.4.21",
     "better-sqlite3": "^11.10.0",
     "electron-updater": "^6.3.9",

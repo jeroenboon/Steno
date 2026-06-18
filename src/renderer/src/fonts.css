@@ -1,0 +1,23 @@
+/**
+ * Self-hosted typefaces — Cahier design language (D1).
+ *
+ * Fraunces: serif headings (weight 600).
+ * IBM Plex Sans: body copy (weights 400, 500, 600).
+ * IBM Plex Mono: data / transcript (weights 400, 500).
+ *
+ * Latin subset covers all Dutch diacritics (ë, ï, é, ç — U+0000–U+00FF).
+ * No CDN; fonts are bundled by Vite and served same-origin.
+ * CSP: font-src 'self' in src/main/csp.ts.
+ */
+
+/* Fraunces — headings */
+@import '@fontsource/fraunces/latin-600.css';
+
+/* IBM Plex Sans — body */
+@import '@fontsource/ibm-plex-sans/latin-400.css';
+@import '@fontsource/ibm-plex-sans/latin-500.css';
+@import '@fontsource/ibm-plex-sans/latin-600.css';
+
+/* IBM Plex Mono — data / transcript */
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
