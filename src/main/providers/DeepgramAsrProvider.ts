@@ -56,7 +56,7 @@ export interface WebSocketLike {
   onopen: (() => void) | null
   onmessage: ((event: { data: string }) => void) | null
   onerror: ((event: { message: string }) => void) | null
-  onclose: (() => void) | null
+  onclose: ((event?: { code?: number; reason?: string }) => void) | null
   send(data: Uint8Array | string): void
   close(): void
 }
@@ -70,7 +70,7 @@ const WS_OPEN = 1
 
 const DEEPGRAM_WSS_BASE = 'wss://api.deepgram.com/v1/listen'
 
-function buildDeepgramUrl(apiKey: string, language: string): string {
+function buildDeepgramUrl(language: string): string {
   const params = new URLSearchParams({
     language,
     model: 'nova-2',
@@ -80,7 +80,10 @@ function buildDeepgramUrl(apiKey: string, language: string): string {
     diarize: 'true',
     interim_results: 'true',
   })
-  return `${DEEPGRAM_WSS_BASE}?${params.toString()}&token=${apiKey}`
+  // Auth is via the 'token' WebSocket subprotocol (see _connect), NOT a query
+  // param — Deepgram rejects query-param auth, which closed the socket
+  // immediately and triggered an endless reconnect loop.
+  return `${DEEPGRAM_WSS_BASE}?${params.toString()}`
 }
 
 // ---------------------------------------------------------------------------
@@ -114,8 +117,13 @@ type DeepgramResult = z.infer<typeof DeepgramResultSchema>
 // Constructor options
 // ---------------------------------------------------------------------------
 
-/** Factory that produces a WebSocket-compatible instance. Injected for testability. */
-export type WebSocketFactory = (url: string) => WebSocketLike
+/**
+ * Factory that produces a WebSocket-compatible instance. Injected for
+ * testability. `protocols` carries the Deepgram auth subprotocol
+ * (['token', apiKey]); both the browser WebSocket and the `ws` package accept
+ * it as the second constructor argument.
+ */
+export type WebSocketFactory = (url: string, protocols?: string | string[]) => WebSocketLike
 
 export interface DeepgramAsrProviderOptions {
   /** Deepgram API key. Injected; never read from disk here (secrets = item 0012). */
@@ -168,7 +176,8 @@ export class DeepgramAsrProvider implements ASRProvider {
     this._sleep = options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)))
     this._maxBackoffMs = options.maxBackoffMs ?? 30_000
     this._wsFactory =
-      options.webSocketFactory ?? ((url) => new WebSocketImpl(url) as unknown as WebSocketLike)
+      options.webSocketFactory ??
+      ((url, protocols) => new WebSocketImpl(url, protocols) as unknown as WebSocketLike)
   }
 
   // -------------------------------------------------------------------------
@@ -235,9 +244,10 @@ export class DeepgramAsrProvider implements ASRProvider {
   private _connect(backoffMs: number): void {
     if (this._stopped) return
 
-    // Build URL — API key embedded in query param, never logged
-    const url = buildDeepgramUrl(this._apiKey, this._language)
-    const socket = this._wsFactory(url)
+    // Build URL (no secret in it). Auth travels as the 'token' subprotocol,
+    // which is never logged.
+    const url = buildDeepgramUrl(this._language)
+    const socket = this._wsFactory(url, ['token', this._apiKey])
     this._socket = socket
 
     socket.onopen = () => {
@@ -255,14 +265,20 @@ export class DeepgramAsrProvider implements ASRProvider {
       console.error('[DeepgramAsrProvider] Socket error — will reconnect')
     }
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (this._stopped) return
+      // Log the close code/reason (non-sensitive) to aid diagnosis — e.g. 1008
+      // or 4001/4008 from Deepgram indicate auth problems, not a network blip.
+      const code = event?.code !== undefined ? String(event.code) : 'unknown'
+      const reason = event?.reason !== undefined && event.reason !== '' ? ` (${event.reason})` : ''
       // Reconnect with backoff; never log the key or any audio content
       const nextBackoff = Math.min(
         backoffMs === 0 ? INITIAL_BACKOFF_MS : backoffMs * BACKOFF_MULTIPLIER,
         this._maxBackoffMs,
       )
-      console.info(`[DeepgramAsrProvider] Socket closed — reconnecting in ${String(nextBackoff)}ms`)
+      console.info(
+        `[DeepgramAsrProvider] Socket closed (code ${code}${reason}) — reconnecting in ${String(nextBackoff)}ms`,
+      )
       void this._reconnectAfterDelay(nextBackoff)
     }
   }
