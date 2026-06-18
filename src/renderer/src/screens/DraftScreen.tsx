@@ -40,6 +40,9 @@ interface Participant {
 export function DraftScreen(): React.JSX.Element {
   const setRoute = useAppStore((s) => s.setRoute)
   const setActiveMeeting = useAppStore((s) => s.setActiveMeeting)
+  const setStoreMeetingTitle = useAppStore((s) => s.setMeetingTitle)
+  const setStoreAgendaItems = useAppStore((s) => s.setAgendaItems)
+  const setStoreParticipants = useAppStore((s) => s.setParticipants)
 
   // Meeting state
   const [meetingTitle, setMeetingTitle] = useState('')
@@ -156,6 +159,9 @@ export function DraftScreen(): React.JSX.Element {
 
       // Update store and navigate
       setActiveMeeting(meeting.id)
+      setStoreMeetingTitle(meeting.title)
+      setStoreAgendaItems(agendaItems)
+      setStoreParticipants(participants)
       setRoute('live')
     } catch (err) {
       console.error('Failed to start meeting:', err)

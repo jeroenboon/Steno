@@ -18,6 +18,7 @@ import React, { useCallback, useState } from 'react'
 
 import { OffAgenda } from '@shared/domain/types'
 import type { DiscussionSummary } from '@shared/domain/types'
+import { toMarkdown, toJson } from '@shared/export/meetingExporter'
 
 import { t } from '../i18n'
 import { useAppStore } from '../store/appStore'
@@ -273,8 +274,10 @@ export function ReviewScreen(): React.JSX.Element {
   const confirmedActions = useAppStore((s) => s.confirmedActions)
   const discussionSummaries = useAppStore((s) => s.discussionSummaries)
   const confirmItem = useAppStore((s) => s.confirmItem)
+  const meetingTitle = useAppStore((s) => s.meetingTitle)
 
   const [editState, setEditState] = useState<EditState | null>(null)
+  const [copyFeedback, setCopyFeedback] = useState(false)
 
   const participantMap = React.useMemo(() => {
     const m = new Map<string, string>()
@@ -345,6 +348,59 @@ export function ReviewScreen(): React.JSX.Element {
     setEditState(null)
   }, [])
 
+  // ---------------------------------------------------------------------------
+  // Export helpers (item 0022)
+  // ---------------------------------------------------------------------------
+
+  const buildExportInput = useCallback(() => {
+    return {
+      title: meetingTitle || 'Vergadering',
+      agendaItems,
+      participants,
+      decisions: confirmedDecisions,
+      actions: confirmedActions,
+      summaries: discussionSummaries,
+    }
+  }, [
+    meetingTitle,
+    agendaItems,
+    participants,
+    confirmedDecisions,
+    confirmedActions,
+    discussionSummaries,
+  ])
+
+  const handleExportMarkdown = useCallback(async () => {
+    try {
+      const content = toMarkdown(buildExportInput())
+      await window.api.exportMarkdown({ content })
+    } catch (err) {
+      console.error('[ReviewScreen] exportMarkdown failed:', err)
+    }
+  }, [buildExportInput])
+
+  const handleExportJson = useCallback(async () => {
+    try {
+      const content = toJson(buildExportInput())
+      await window.api.exportJson({ content })
+    } catch (err) {
+      console.error('[ReviewScreen] exportJson failed:', err)
+    }
+  }, [buildExportInput])
+
+  const handleCopyMarkdown = useCallback(async () => {
+    try {
+      const content = toMarkdown(buildExportInput())
+      await window.api.exportCopyMarkdown({ content })
+      setCopyFeedback(true)
+      setTimeout(() => {
+        setCopyFeedback(false)
+      }, 2000)
+    } catch (err) {
+      console.error('[ReviewScreen] exportCopyMarkdown failed:', err)
+    }
+  }, [buildExportInput])
+
   const hasSummaries = discussionSummaries.length > 0
 
   return (
@@ -352,6 +408,38 @@ export function ReviewScreen(): React.JSX.Element {
       <header className="screen__header">
         <h1 className="screen__title">{t('screen.review.title')}</h1>
         <p className="screen__subtitle">{t('screen.review.subtitle')}</p>
+        <div className="review-export-actions" data-testid="review-export-actions">
+          <button
+            type="button"
+            className="btn btn--secondary"
+            data-testid="review-export-markdown-btn"
+            onClick={() => {
+              void handleExportMarkdown()
+            }}
+          >
+            {t('review.export.markdown')}
+          </button>
+          <button
+            type="button"
+            className="btn btn--secondary"
+            data-testid="review-export-json-btn"
+            onClick={() => {
+              void handleExportJson()
+            }}
+          >
+            {t('review.export.json')}
+          </button>
+          <button
+            type="button"
+            className="btn btn--secondary"
+            data-testid="review-export-copy-btn"
+            onClick={() => {
+              void handleCopyMarkdown()
+            }}
+          >
+            {copyFeedback ? t('review.export.copied') : t('review.export.copy')}
+          </button>
+        </div>
       </header>
 
       {!hasSummaries && (

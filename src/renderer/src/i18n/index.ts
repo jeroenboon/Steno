@@ -180,6 +180,13 @@ const nl = {
   'review.items.owner.none': 'Geen eigenaar',
   'review.items.offagenda.heading': 'Buiten agenda',
 
+  // Export actions (item 0022)
+  'review.export.markdown': 'Exporteer als Markdown',
+  'review.export.json': 'Exporteer als JSON',
+  'review.export.copy': 'Kopieer als Markdown',
+  'review.export.copied': 'Gekopieerd!',
+  'review.export.error': 'Export mislukt',
+
   // Generic
   'app.name': 'LiveTranscriber',
 } as const

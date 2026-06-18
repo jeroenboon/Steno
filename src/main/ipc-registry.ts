@@ -54,6 +54,10 @@ import {
   SummaryQueryResponseSchema,
   MeetingEndRequestSchema,
   MeetingEndResponseSchema,
+  ExportMarkdownRequestSchema,
+  ExportJsonRequestSchema,
+  ExportCopyMarkdownRequestSchema,
+  ExportCopyMarkdownResponseSchema,
 } from '@shared/ipc'
 import type {
   IpcChannel,
@@ -77,6 +81,9 @@ import type {
   ItemCreateConfirmedResponse,
   SummaryQueryResponse,
   MeetingEndResponse,
+  ExportMarkdownResponse,
+  ExportJsonResponse,
+  ExportCopyMarkdownResponse,
 } from '@shared/ipc'
 import type { Clock } from '@shared/providers'
 
@@ -147,6 +154,21 @@ export interface IpcRegistryDependencies {
    * When absent, meeting:end is a no-op (graceful degradation).
    */
   onMeetingEnd?: (meetingId: string) => Promise<void>
+  /**
+   * Save content to a file the user selects via a save dialog (item 0022).
+   * Returns ok=false with a reason if the dialog is cancelled or the write fails.
+   * When absent, returns ok=false with reason 'not available'.
+   */
+  onExportFile?: (opts: {
+    content: string
+    defaultFilename: string
+    filters: { name: string; extensions: string[] }[]
+  }) => Promise<{ ok: true } | { ok: false; reason: string }>
+  /**
+   * Copy content to the clipboard (item 0022).
+   * When absent, is a no-op.
+   */
+  onCopyToClipboard?: (content: string) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -393,6 +415,42 @@ function makeHandleMeetingEnd(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleExportMarkdown(deps: IpcRegistryDependencies) {
+  return async function handleExportMarkdown(raw: unknown): Promise<ExportMarkdownResponse> {
+    const req = ExportMarkdownRequestSchema.parse(raw)
+    if (deps.onExportFile === undefined) {
+      return { ok: false, reason: 'not available' }
+    }
+    return deps.onExportFile({
+      content: req.content,
+      defaultFilename: 'notulen.md',
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    })
+  }
+}
+
+function makeHandleExportJson(deps: IpcRegistryDependencies) {
+  return async function handleExportJson(raw: unknown): Promise<ExportJsonResponse> {
+    const req = ExportJsonRequestSchema.parse(raw)
+    if (deps.onExportFile === undefined) {
+      return { ok: false, reason: 'not available' }
+    }
+    return deps.onExportFile({
+      content: req.content,
+      defaultFilename: 'notulen.json',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+  }
+}
+
+function makeHandleExportCopyMarkdown(deps: IpcRegistryDependencies) {
+  return function handleExportCopyMarkdown(raw: unknown): ExportCopyMarkdownResponse {
+    const req = ExportCopyMarkdownRequestSchema.parse(raw)
+    deps.onCopyToClipboard?.(req.content)
+    return ExportCopyMarkdownResponseSchema.parse({ ok: true })
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -420,6 +478,9 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'item:createConfirmed': makeHandleItemCreateConfirmed(deps),
     'summary:query': makeHandleSummaryQuery(deps),
     'meeting:end': makeHandleMeetingEnd(deps),
+    'export:markdown': makeHandleExportMarkdown(deps),
+    'export:json': makeHandleExportJson(deps),
+    'export:copyMarkdown': makeHandleExportCopyMarkdown(deps),
   }
 
   return {

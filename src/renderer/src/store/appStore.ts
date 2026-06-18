@@ -65,6 +65,13 @@ export interface AppState {
   activeMeeting: string | null
 
   /**
+   * Title of the active meeting (item 0022).
+   * Stored so the ReviewScreen can include it in exports.
+   * Empty string when no meeting is active.
+   */
+  meetingTitle: string
+
+  /**
    * Microphone permission state (item 0015).
    * Updated when the renderer calls getUserMedia.
    */
@@ -161,6 +168,9 @@ export interface AppState {
   /** Set (or clear) the active meeting id. */
   setActiveMeeting: (id: string | null) => void
 
+  /** Set the active meeting title (item 0022). */
+  setMeetingTitle: (title: string) => void
+
   /** Update the microphone permission state. */
   setMicPermission: (permission: MicPermission) => void
 
@@ -230,6 +240,7 @@ export type { CaptureMode, LoopbackState }
 export const useAppStore = create<AppState>()((set) => ({
   route: 'draft',
   activeMeeting: null,
+  meetingTitle: '',
   micPermission: 'unknown',
   transcriptSpans: [],
   captureMode: 'remote',
@@ -260,6 +271,9 @@ export const useAppStore = create<AppState>()((set) => ({
   },
   setActiveMeeting: (id) => {
     set({ activeMeeting: id })
+  },
+  setMeetingTitle: (title) => {
+    set({ meetingTitle: title })
   },
   setMicPermission: (permission) => {
     set({ micPermission: permission })

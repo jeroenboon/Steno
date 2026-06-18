@@ -53,6 +53,12 @@ import type {
   SummaryChangedPayload,
   SummaryQueryRequest,
   SummaryQueryResponse,
+  ExportMarkdownRequest,
+  ExportMarkdownResponse,
+  ExportJsonRequest,
+  ExportJsonResponse,
+  ExportCopyMarkdownRequest,
+  ExportCopyMarkdownResponse,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -191,6 +197,13 @@ const api: RendererApi = {
 
   meetingEnd: (req: MeetingEndRequest) =>
     ipcRenderer.invoke('meeting:end', req) as Promise<MeetingEndResponse>,
+
+  exportMarkdown: (req: ExportMarkdownRequest) =>
+    ipcRenderer.invoke('export:markdown', req) as Promise<ExportMarkdownResponse>,
+  exportJson: (req: ExportJsonRequest) =>
+    ipcRenderer.invoke('export:json', req) as Promise<ExportJsonResponse>,
+  exportCopyMarkdown: (req: ExportCopyMarkdownRequest) =>
+    ipcRenderer.invoke('export:copyMarkdown', req) as Promise<ExportCopyMarkdownResponse>,
 }
 
 contextBridge.exposeInMainWorld('api', api)

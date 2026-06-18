@@ -2,7 +2,16 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'path'
 
 import Database from 'better-sqlite3'
-import { app, BrowserWindow, ipcMain, safeStorage, session, desktopCapturer } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  safeStorage,
+  session,
+  desktopCapturer,
+  dialog,
+  clipboard,
+} from 'electron'
 
 import type { IpcChannel } from '@shared/ipc'
 import { FakeASRProvider, RealClock } from '@shared/providers'
@@ -138,6 +147,9 @@ const IPC_CHANNELS: IpcChannel[] = [
   'item:createConfirmed',
   'summary:query',
   'meeting:end',
+  'export:markdown',
+  'export:json',
+  'export:copyMarkdown',
 ]
 
 async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
@@ -328,9 +340,31 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     },
     onMeetingEnd: async () => {
       if (activeRuntime !== null) {
-        await activeRuntime.endMeeting()
+        const mRepo = meetingRepo(db)
+        const meeting = mRepo.findById(PLACEHOLDER_MEETING_ID)
+        if (meeting !== null) {
+          await activeRuntime.endMeeting(meeting)
+        }
         activeRuntime = null
       }
+    },
+    onExportFile: async ({ content, defaultFilename, filters }) => {
+      const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: defaultFilename,
+        filters,
+      })
+      if (result.canceled || result.filePath === '') {
+        return { ok: false, reason: 'cancelled' }
+      }
+      try {
+        writeFileSync(result.filePath, content, 'utf8')
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, reason: err instanceof Error ? err.message : String(err) }
+      }
+    },
+    onCopyToClipboard: (content) => {
+      clipboard.writeText(content)
     },
   })
 

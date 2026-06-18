@@ -445,6 +445,57 @@ export type MeetingEndRequest = z.infer<typeof MeetingEndRequestSchema>
 export type MeetingEndResponse = z.infer<typeof MeetingEndResponseSchema>
 
 // ---------------------------------------------------------------------------
+// export:markdown — save Markdown to a file chosen by the user (item 0022)
+//
+// Main shows a save dialog, writes the file, and returns ok/reason.
+// The renderer generates the content string using the shared serializer.
+// ---------------------------------------------------------------------------
+
+export const ExportMarkdownRequestSchema = z.object({
+  /** Pre-rendered Markdown content to write to disk. */
+  content: z.string(),
+})
+
+export const ExportMarkdownResponseSchema = z.union([
+  z.object({ ok: z.literal(true) }),
+  z.object({ ok: z.literal(false), reason: z.string() }),
+])
+
+export type ExportMarkdownRequest = z.infer<typeof ExportMarkdownRequestSchema>
+export type ExportMarkdownResponse = z.infer<typeof ExportMarkdownResponseSchema>
+
+// ---------------------------------------------------------------------------
+// export:json — save JSON to a file chosen by the user (item 0022)
+// ---------------------------------------------------------------------------
+
+export const ExportJsonRequestSchema = z.object({
+  /** Pre-rendered JSON content to write to disk. */
+  content: z.string(),
+})
+
+export const ExportJsonResponseSchema = z.union([
+  z.object({ ok: z.literal(true) }),
+  z.object({ ok: z.literal(false), reason: z.string() }),
+])
+
+export type ExportJsonRequest = z.infer<typeof ExportJsonRequestSchema>
+export type ExportJsonResponse = z.infer<typeof ExportJsonResponseSchema>
+
+// ---------------------------------------------------------------------------
+// export:copyMarkdown — copy Markdown to the clipboard (item 0022)
+// ---------------------------------------------------------------------------
+
+export const ExportCopyMarkdownRequestSchema = z.object({
+  /** Pre-rendered Markdown content to copy to the clipboard. */
+  content: z.string(),
+})
+
+export const ExportCopyMarkdownResponseSchema = z.object({ ok: z.literal(true) })
+
+export type ExportCopyMarkdownRequest = z.infer<typeof ExportCopyMarkdownRequestSchema>
+export type ExportCopyMarkdownResponse = z.infer<typeof ExportCopyMarkdownResponseSchema>
+
+// ---------------------------------------------------------------------------
 // Channel registry — exhaustive union of all channel names
 // ---------------------------------------------------------------------------
 
@@ -469,6 +520,9 @@ export type IpcChannel =
   | 'item:dismiss'
   | 'item:createConfirmed'
   | 'summary:query'
+  | 'export:markdown'
+  | 'export:json'
+  | 'export:copyMarkdown'
 
 /**
  * One-way channels: renderer sends, main receives (no invoke/response).
@@ -600,4 +654,20 @@ export interface RendererApi {
    * Summaries, final decisions/actions) and stops the runtime (item 0021).
    */
   meetingEnd: (req: MeetingEndRequest) => Promise<MeetingEndResponse>
+  /**
+   * Save meeting notes as a Markdown file. Main shows a save dialog.
+   * Returns ok=false with a reason if the dialog was cancelled or the write failed.
+   * (item 0022)
+   */
+  exportMarkdown: (req: ExportMarkdownRequest) => Promise<ExportMarkdownResponse>
+  /**
+   * Save meeting notes as a JSON file. Main shows a save dialog.
+   * (item 0022)
+   */
+  exportJson: (req: ExportJsonRequest) => Promise<ExportJsonResponse>
+  /**
+   * Copy meeting notes as Markdown to the clipboard.
+   * (item 0022)
+   */
+  exportCopyMarkdown: (req: ExportCopyMarkdownRequest) => Promise<ExportCopyMarkdownResponse>
 }
