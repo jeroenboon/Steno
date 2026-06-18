@@ -713,8 +713,12 @@ export function LiveScreen(): React.JSX.Element {
   }, [agendaItems])
 
   // --- Render ---
+  const isRecording = micPermission === 'granted'
   return (
-    <main data-testid="screen-live" className="screen screen--live screen--live-items">
+    <main
+      data-testid="screen-live"
+      className={`screen screen--live screen--live-items${isRecording ? ' screen--live--recording' : ''}`}
+    >
       {/* ------------------------------------------------------------------ */}
       {/* Header */}
       {/* ------------------------------------------------------------------ */}

@@ -396,4 +396,32 @@ describe('LiveScreen — item 0018 items UI', () => {
     const spanEl = await screen.findByTestId(`transcript-span-${LOW_CONFIDENCE_SPAN.id}`)
     expect(spanEl).toHaveAttribute('data-low-confidence', 'true')
   })
+
+  // -------------------------------------------------------------------------
+  // Recording-gated bleed class (D4)
+  // -------------------------------------------------------------------------
+
+  it('does NOT have screen--live--recording when micPermission is unknown', () => {
+    useAppStore.setState({ micPermission: 'unknown' })
+    render(<LiveScreen />)
+    const el = screen.getByTestId('screen-live')
+    expect(el).not.toHaveClass('screen--live--recording')
+  })
+
+  it('does NOT have screen--live--recording when micPermission is denied', () => {
+    useAppStore.setState({ micPermission: 'denied' })
+    render(<LiveScreen />)
+    const el = screen.getByTestId('screen-live')
+    expect(el).not.toHaveClass('screen--live--recording')
+  })
+
+  it('adds screen--live--recording when micPermission is granted', async () => {
+    render(<LiveScreen />)
+    // Simulate audio capture grant arriving after mount
+    useAppStore.setState({ micPermission: 'granted' })
+    // findBy* re-evaluates after re-render
+    await waitFor(() => {
+      expect(screen.getByTestId('screen-live')).toHaveClass('screen--live--recording')
+    })
+  })
 })

@@ -160,11 +160,10 @@ body,
 }
 
 /* Live recording signal: a narrow ink-red wash bleeds in from the seam edge.
- * The page centre stays calm and readable. TODO: gate on real recording state
- * once the live runtime exposes it; today the Live screen auto-starts capture
- * on mount, so screen presence approximates "recording".
+ * Only shown when capture is active (screen--live--recording modifier class).
+ * LiveScreen adds this modifier when micPermission === 'granted'.
  */
-.screen--live::before {
+.screen--live--recording::before {
   content: '';
   position: absolute;
   top: 0;
@@ -277,37 +276,6 @@ body,
   font-size: 10px;
   font-style: italic;
   color: var(--color-text-tertiary);
-}
-
-/* --- Item state language (forward-looking: marginalia / cards) ---
- * Proposed = pencil outline; Confirmed = inked solid with a Myrtle check;
- * Dismissed = struck through and faded.
- */
-
-.item {
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-  background-color: var(--color-surface-1);
-  font-size: 13px;
-}
-
-.item--proposed {
-  border: 1px dashed var(--color-proposed);
-  color: var(--color-text-secondary);
-}
-
-.item--confirmed {
-  border: 1px solid var(--color-confirmed);
-  color: var(--color-text-primary);
-}
-
-.item--confirmed .item__check {
-  color: var(--color-confirmed);
-}
-
-.item--dismissed {
-  color: var(--color-dismissed);
-  text-decoration: line-through;
 }
 
 /* --- Loopback toggle + selects (recessed wells) --- */
@@ -887,7 +855,7 @@ body,
   }
 
   /* Live recording signal: steady wash instead of animated bleed. */
-  .screen--live::before {
+  .screen--live--recording::before {
     animation: none;
     opacity: 0.55;
   }
