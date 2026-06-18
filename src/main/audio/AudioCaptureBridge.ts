@@ -45,6 +45,15 @@ export interface AudioCaptureBridgeOptions {
    * In tests this is a simple mock.
    */
   sender: IpcSender
+  /**
+   * Optional observer called for every span emitted by the ASR provider,
+   * before the span is forwarded to the renderer. Used by item 0018 to
+   * feed spans into the LiveExtractionRuntime without modifying the bridge.
+   *
+   * The observer receives ALL spans (including interim); filtering (isFinal)
+   * is the observer's responsibility.
+   */
+  onSpan?: (span: import('@shared/domain').TranscriptSpan) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -54,11 +63,13 @@ export interface AudioCaptureBridgeOptions {
 export class AudioCaptureBridge {
   private readonly _asr: ASRProvider
   private readonly _sender: IpcSender
+  private readonly _onSpan: ((span: import('@shared/domain').TranscriptSpan) => void) | undefined
   private _active = false
 
   constructor(opts: AudioCaptureBridgeOptions) {
     this._asr = opts.asrProvider
     this._sender = opts.sender
+    this._onSpan = opts.onSpan
   }
 
   /** Start a session: open the ASR provider and begin forwarding spans. */
@@ -91,6 +102,10 @@ export class AudioCaptureBridge {
 
   private async _forwardSpans(): Promise<void> {
     for await (const span of this._asr.spans()) {
+      // Notify the optional observer (e.g. LiveExtractionRuntime) before the
+      // renderer sees the span. The observer receives interim spans too; it
+      // is responsible for its own isFinal filtering.
+      this._onSpan?.(span)
       this._sender.send('transcript:span', span)
     }
   }

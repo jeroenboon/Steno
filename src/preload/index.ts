@@ -37,6 +37,8 @@ import type {
   AudioStartResponse,
   AudioStopResponse,
   UnsubscribeFn,
+  ItemsChangedPayload,
+  ItemsSummariesPayload,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -93,6 +95,36 @@ const api: RendererApi = {
     ipcRenderer.on('transcript:span', listener)
     return () => {
       ipcRenderer.removeListener('transcript:span', listener)
+    }
+  },
+
+  /**
+   * Subscribe to proposed-item updates pushed from main (item 0018).
+   * Fired after every rolling extraction turn or final pass that proposes ≥1 item.
+   * Returns an unsubscribe function.
+   */
+  onItemsChanged: (cb: (payload: ItemsChangedPayload) => void): UnsubscribeFn => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: ItemsChangedPayload) => {
+      cb(payload)
+    }
+    ipcRenderer.on('items:changed', listener)
+    return () => {
+      ipcRenderer.removeListener('items:changed', listener)
+    }
+  },
+
+  /**
+   * Subscribe to Discussion Summary events pushed from main (item 0018).
+   * Fired exactly once after the final extraction pass completes (meeting end).
+   * Returns an unsubscribe function.
+   */
+  onItemsSummaries: (cb: (payload: ItemsSummariesPayload) => void): UnsubscribeFn => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: ItemsSummariesPayload) => {
+      cb(payload)
+    }
+    ipcRenderer.on('items:summaries', listener)
+    return () => {
+      ipcRenderer.removeListener('items:summaries', listener)
     }
   },
 }

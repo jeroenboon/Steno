@@ -1,14 +1,22 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'path'
 
+import Database from 'better-sqlite3'
 import { app, BrowserWindow, ipcMain, safeStorage, session, desktopCapturer } from 'electron'
 
 import type { IpcChannel } from '@shared/ipc'
-import { FakeASRProvider } from '@shared/providers'
+import { FakeASRProvider, RealClock } from '@shared/providers'
 
 import { AudioCaptureBridge } from './audio/AudioCaptureBridge'
 import { buildContentSecurityPolicy } from './csp'
+import { runMigrations } from './db/migrate'
+import { actionRepo } from './db/repos/actionRepo'
+import { decisionRepo } from './db/repos/decisionRepo'
+import { discussionSummaryRepo } from './db/repos/discussionSummaryRepo'
+import { meetingRepo } from './db/repos/meetingRepo'
+import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
 import { createIpcRegistry } from './ipc-registry'
+import { LiveExtractionRuntime } from './services/liveExtractionRuntime'
 import { tryBuildAsrProvider, tryBuildExtractionProvider } from './settings/providerFactory'
 import { ElectronSecretStorage } from './settings/SecretStorage'
 import { SettingsStore } from './settings/SettingsStore'
@@ -158,6 +166,23 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   })
 
   // ---------------------------------------------------------------------------
+  // SQLite DB + repos (item 0018 wiring)
+  //
+  // Opened once per app session; migrations run on startup (forward-only,
+  // principle #13). The DB file lives in userData alongside settings.
+  // ---------------------------------------------------------------------------
+  const dbPath = join(userData, 'livetranscriber.db')
+  const db = new Database(dbPath)
+  db.pragma('journal_mode = WAL')
+  db.pragma('foreign_keys = ON')
+  runMigrations(db)
+
+  const dRepo = decisionRepo(db)
+  const aRepo = actionRepo(db)
+  const spanRepo = transcriptSpanRepo(db)
+  const dsRepo = discussionSummaryRepo(db)
+
+  // ---------------------------------------------------------------------------
   // ASR provider (item 0016 — replaces FakeASRProvider from item 0015)
   //
   // ASR and extraction are built INDEPENDENTLY: the ASR provider is gated only
@@ -177,19 +202,94 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     )
   }
 
-  // Extraction provider seam (item 0018 will wire this into the extraction loop).
+  // ---------------------------------------------------------------------------
+  // Extraction provider (item 0018 — wired into live extraction runtime)
+  //
   // Built independently so a missing extraction key does NOT disable ASR.
+  // If the key is absent, the runtime operates in degraded mode: spans are
+  // persisted but extraction and IPC item events do not run (no crash).
+  // ---------------------------------------------------------------------------
   const extractionResult = tryBuildExtractionProvider(settingsStore.current, secretStorage)
   if (!extractionResult.ok) {
     console.warn(
       '[LiveTranscriber] Extraction provider not ready — extraction key not configured yet. ' +
-        `Live extraction will start once the key is set. Reason: ${extractionResult.error}`,
+        'Live extraction will start once the key is set in Settings. ' +
+        `Reason: ${extractionResult.error}`,
     )
+  }
+
+  // ---------------------------------------------------------------------------
+  // Live extraction runtime (item 0018)
+  //
+  // Holds the active LiveExtractionRuntime for the current live meeting.
+  // Created when audio:start fires; torn down on audio:stop.
+  //
+  // The meeting context (agenda, participants, language) is minimal at this
+  // stage — a placeholder meeting with sane defaults is used until item 0021
+  // integrates full meeting persistence. The runtime still correctly persists
+  // spans and, if an extraction key is present, runs the rolling cadence.
+  // ---------------------------------------------------------------------------
+  let activeRuntime: LiveExtractionRuntime | null = null
+
+  const clock = new RealClock()
+
+  // Placeholder meeting ID for the active session. In a future item this will
+  // come from the persisted Meeting selected by the user in the Draft screen.
+  const PLACEHOLDER_MEETING_ID = 'active-session'
+
+  const buildRuntime = (): LiveExtractionRuntime => {
+    // Ensure the meeting row exists in the DB (upsert-style for the placeholder).
+    // This is needed because transcriptSpanRepo.insert has a foreign key on meetings.
+    const mRepo = meetingRepo(db)
+    if (mRepo.findById(PLACEHOLDER_MEETING_ID) === null) {
+      mRepo.insert({
+        id: PLACEHOLDER_MEETING_ID,
+        title: 'Active Meeting',
+        state: 'live',
+        paused: false,
+        createdAt: new Date().toISOString(),
+        primaryLanguage: settingsStore.current.primaryLanguage,
+        startedAt: new Date().toISOString(),
+      })
+    }
+
+    const schedulerDeps = extractionResult.ok
+      ? {
+          provider: extractionResult.provider,
+          discussionSummaryRepo: dsRepo,
+          spanRepo,
+          clock,
+          cadenceMs: 20_000,
+        }
+      : null
+
+    return new LiveExtractionRuntime({
+      meetingId: PLACEHOLDER_MEETING_ID,
+      context: {
+        agendaItems: [],
+        participants: [],
+        primaryLanguage: settingsStore.current.primaryLanguage,
+      },
+      schedulerDeps,
+      decisionsRepo: dRepo,
+      actionsRepo: aRepo,
+      spanRepo,
+      dsRepo,
+      sender: mainWindow.webContents,
+    })
   }
 
   const audioBridge = new AudioCaptureBridge({
     asrProvider,
     sender: mainWindow.webContents,
+    onSpan: (span) => {
+      if (activeRuntime !== null) {
+        activeRuntime.handleSpan(span)
+        // Drive the extraction cadence on each span arrival.
+        // tick() is a no-op if the cadence threshold hasn't been crossed.
+        void activeRuntime.tick()
+      }
+    },
   })
 
   // One-way channel: renderer sends PCM frames; no invoke/response.
@@ -197,7 +297,20 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     audioBridge.pushAudioFrame(frame)
   })
 
-  const registry = createIpcRegistry({ settingsStore, secretStorage, audioBridge })
+  const registry = createIpcRegistry({
+    settingsStore,
+    secretStorage,
+    audioBridge,
+    onAudioStart: () => {
+      // Spin up the extraction runtime when the audio session begins.
+      activeRuntime?.stop()
+      activeRuntime = buildRuntime()
+    },
+    onAudioStop: () => {
+      activeRuntime?.stop()
+      activeRuntime = null
+    },
+  })
 
   for (const channel of IPC_CHANNELS) {
     ipcMain.handle(channel, (_event, payload: unknown) => {

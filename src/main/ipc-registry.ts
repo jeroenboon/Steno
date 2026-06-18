@@ -97,6 +97,16 @@ export interface IpcRegistryDependencies {
    * Injected in production after the window is created.
    */
   audioBridge?: AudioCaptureBridge
+  /**
+   * Called after audio:start succeeds (item 0018).
+   * Use to spin up the LiveExtractionRuntime for the active session.
+   */
+  onAudioStart?: () => void
+  /**
+   * Called after audio:stop succeeds (item 0018).
+   * Use to tear down the LiveExtractionRuntime.
+   */
+  onAudioStop?: () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -248,6 +258,7 @@ function makeHandleAudioStart(deps: IpcRegistryDependencies) {
   return function handleAudioStart(raw: unknown): AudioStartResponse {
     AudioStartRequestSchema.parse(raw)
     deps.audioBridge?.start()
+    deps.onAudioStart?.()
     return AudioStartResponseSchema.parse({ ok: true })
   }
 }
@@ -256,6 +267,7 @@ function makeHandleAudioStop(deps: IpcRegistryDependencies) {
   return function handleAudioStop(raw: unknown): AudioStopResponse {
     AudioStopRequestSchema.parse(raw)
     deps.audioBridge?.stop()
+    deps.onAudioStop?.()
     return AudioStopResponseSchema.parse({ ok: true })
   }
 }

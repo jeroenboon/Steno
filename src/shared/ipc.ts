@@ -221,6 +221,67 @@ export { TranscriptSpanSchema } from './domain/types'
 export type { TranscriptSpan } from './domain/types'
 
 // ---------------------------------------------------------------------------
+// items:changed — main → renderer push event (item 0018)
+//
+// Emitted after every rolling extraction turn (or final pass) that produces
+// ≥1 newly proposed Decision or Action. Carries the full proposed set for
+// that turn so the renderer can merge/replace its local state.
+//
+// Pattern: webContents.send('items:changed', payload) on main;
+//          ipcRenderer.on('items:changed', listener) in preload, exposed as
+//          window.api.onItemsChanged(cb) returning an UnsubscribeFn.
+// ---------------------------------------------------------------------------
+
+export { DecisionSchema, ActionSchema, DiscussionSummarySchema } from './domain/types'
+export type { Decision, Action, DiscussionSummary } from './domain/types'
+
+export const ItemsChangedPayloadSchema = z.object({
+  /** Decisions proposed in this extraction turn. */
+  decisions: z.array(
+    z.object({
+      id: z.string().min(1),
+      rationale: z.string(),
+      agendaItemId: z.string().min(1),
+      sourceSpanId: z.string().min(1),
+      state: z.enum(['proposed', 'confirmed']),
+    }),
+  ),
+  /** Actions proposed in this extraction turn. */
+  actions: z.array(
+    z.object({
+      id: z.string().min(1),
+      agendaItemId: z.string().min(1),
+      sourceSpanId: z.string().min(1),
+      owner: z.string().min(1).optional(),
+      dueDate: z.string().datetime().optional(),
+      status: z.enum(['open', 'done']),
+      state: z.enum(['proposed', 'confirmed']),
+    }),
+  ),
+})
+
+export type ItemsChangedPayload = z.infer<typeof ItemsChangedPayloadSchema>
+
+// ---------------------------------------------------------------------------
+// items:summaries — main → renderer push event (item 0018)
+//
+// Emitted exactly once after the final extraction pass completes (when the
+// meeting ends). Carries all Discussion Summaries produced by the final pass.
+// ---------------------------------------------------------------------------
+
+export const ItemsSummariesPayloadSchema = z.object({
+  summaries: z.array(
+    z.object({
+      id: z.string().min(1),
+      agendaItemId: z.string().min(1),
+      text: z.string(),
+    }),
+  ),
+})
+
+export type ItemsSummariesPayload = z.infer<typeof ItemsSummariesPayloadSchema>
+
+// ---------------------------------------------------------------------------
 // Channel registry — exhaustive union of all channel names
 // ---------------------------------------------------------------------------
 
@@ -308,4 +369,20 @@ export interface RendererApi {
    * (item 0015)
    */
   onTranscriptSpan: (cb: (span: import('./domain/types').TranscriptSpan) => void) => UnsubscribeFn
+  /**
+   * Subscribe to proposed-item updates pushed from main.
+   * Fired after every rolling extraction turn or final pass that produces ≥1
+   * proposed Decision or Action. The callback receives the newly proposed items
+   * for that turn; the UI merges/replaces its local proposed-item state.
+   * Returns an unsubscribe function.
+   * (item 0018)
+   */
+  onItemsChanged: (cb: (payload: ItemsChangedPayload) => void) => UnsubscribeFn
+  /**
+   * Subscribe to Discussion Summary events pushed from main.
+   * Fired exactly once, after the final extraction pass completes (meeting end).
+   * Returns an unsubscribe function.
+   * (item 0018)
+   */
+  onItemsSummaries: (cb: (payload: ItemsSummariesPayload) => void) => UnsubscribeFn
 }
