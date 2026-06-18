@@ -22,7 +22,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
 }))
 
 import { computeEgressState, buildDisclosureCopy, type EgressState } from './egressState'
-import { buildProviders } from './providerFactory'
+import { buildProviders, tryBuildAsrProvider, tryBuildExtractionProvider } from './providerFactory'
 import { MemorySecretStorage, type SecretStorage } from './SecretStorage'
 import { AppSettingsSchema, DEFAULT_SETTINGS, type AppSettings } from './settingsSchema'
 import { SettingsStore } from './SettingsStore'
@@ -380,6 +380,54 @@ describe('buildProviders', () => {
 
     const providers = buildProviders(settings, storage)
     expect(typeof providers.extraction.extract).toBe('function')
+  })
+
+  it('builds ASR independently: Deepgram key present, Anthropic key MISSING → ASR ok, extraction not', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('deepgram', 'dg-key-123')
+    // No anthropic key stored
+
+    const settings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'nl',
+    }
+
+    const asr = tryBuildAsrProvider(settings, storage)
+    expect(asr.ok).toBe(true)
+    if (asr.ok) {
+      expect(typeof asr.provider.spans).toBe('function')
+    }
+
+    const extraction = tryBuildExtractionProvider(settings, storage)
+    expect(extraction.ok).toBe(false)
+    if (!extraction.ok) {
+      expect(extraction.error).toMatch(/anthropic.*key/i)
+    }
+  })
+
+  it('builds extraction independently: Anthropic key present, Deepgram key MISSING → extraction ok, ASR not', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('anthropic', 'ant-key-456')
+    // No deepgram key stored
+
+    const settings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'nl',
+    }
+
+    const asr = tryBuildAsrProvider(settings, storage)
+    expect(asr.ok).toBe(false)
+    if (!asr.ok) {
+      expect(asr.error).toMatch(/deepgram.*key/i)
+    }
+
+    const extraction = tryBuildExtractionProvider(settings, storage)
+    expect(extraction.ok).toBe(true)
+    if (extraction.ok) {
+      expect(typeof extraction.provider.extract).toBe('function')
+    }
   })
 
   it('throws a clear error when Deepgram API key is missing', () => {

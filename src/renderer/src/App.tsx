@@ -88,20 +88,22 @@ export function App(): React.JSX.Element {
       })
   }, [])
 
-  // Check whether the required API keys are present.
-  // If not, the app shows a banner directing the user to Settings.
+  // Check whether the API keys for the CURRENTLY SELECTED providers are present.
+  // ASR and extraction need different keys; we only require the keys for the
+  // providers actually chosen, so e.g. a Deepgram-only setup isn't blocked by a
+  // missing Anthropic key. If not all selected providers are configured, the app
+  // shows a banner directing the user to Settings.
   useEffect(() => {
     void (async () => {
       try {
         const settings = await window.api.settingsGet()
-        const checks: Promise<{ has: boolean }>[] = [
-          window.api.secretHas({ key: 'deepgram' }),
-          window.api.secretHas({ key: 'anthropic' }),
-        ]
+        const requiredKeys: string[] = []
+        if (settings.asrProvider === 'deepgram') requiredKeys.push('deepgram')
+        if (settings.extractionProvider === 'anthropic') requiredKeys.push('anthropic')
         if (settings.extractionProvider === 'custom-openai') {
-          checks.push(window.api.secretHas({ key: settings.customOpenAI.keyRef }))
+          requiredKeys.push(settings.customOpenAI.keyRef)
         }
-        const results = await Promise.all(checks)
+        const results = await Promise.all(requiredKeys.map((key) => window.api.secretHas({ key })))
         setKeysConfigured(results.every((r) => r.has))
       } catch {
         // If we can't check, assume not configured — show the banner.

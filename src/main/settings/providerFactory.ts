@@ -54,6 +54,18 @@ export type BuildProvidersResult =
   | { ok: true; providers: BuiltProviders }
   | { ok: false; error: string }
 
+/**
+ * Result types for the INDEPENDENT builders. ASR and extraction are gated on
+ * different keys (Deepgram vs Anthropic/custom), so a missing extraction key
+ * must never disable a working ASR provider, and vice-versa. The combined
+ * tryBuildProviders is all-or-nothing and is kept only for callers that
+ * genuinely need both at once.
+ */
+export type BuildAsrResult = { ok: true; provider: ASRProvider } | { ok: false; error: string }
+export type BuildExtractionResult =
+  | { ok: true; provider: ExtractionProvider }
+  | { ok: false; error: string }
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -95,6 +107,34 @@ export function tryBuildProviders(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return { ok: false, error: message }
+  }
+}
+
+/**
+ * Build ONLY the ASR provider. Gated solely on the ASR key (e.g. Deepgram);
+ * indifferent to whether an extraction key is configured. This is what the
+ * audio pipeline uses so transcription works as soon as the Deepgram key is set.
+ */
+export function tryBuildAsrProvider(settings: AppSettings, storage: SecretStorage): BuildAsrResult {
+  try {
+    return { ok: true, provider: buildAsrProvider(settings, storage) }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/**
+ * Build ONLY the extraction provider. Gated solely on its own key
+ * (Anthropic or the custom keyRef); indifferent to the ASR key.
+ */
+export function tryBuildExtractionProvider(
+  settings: AppSettings,
+  storage: SecretStorage,
+): BuildExtractionResult {
+  try {
+    return { ok: true, provider: buildExtractionProvider(settings, storage) }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
 

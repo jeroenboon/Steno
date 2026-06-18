@@ -9,7 +9,7 @@ import { FakeASRProvider } from '@shared/providers'
 import { AudioCaptureBridge } from './audio/AudioCaptureBridge'
 import { buildContentSecurityPolicy } from './csp'
 import { createIpcRegistry } from './ipc-registry'
-import { tryBuildProviders } from './settings/providerFactory'
+import { tryBuildAsrProvider, tryBuildExtractionProvider } from './settings/providerFactory'
 import { ElectronSecretStorage } from './settings/SecretStorage'
 import { SettingsStore } from './settings/SettingsStore'
 import { createWindowOptions } from './window-options'
@@ -160,30 +160,32 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   // ---------------------------------------------------------------------------
   // ASR provider (item 0016 — replaces FakeASRProvider from item 0015)
   //
-  // tryBuildProviders does not throw; if keys are missing it returns an error
-  // result and we fall back to FakeASRProvider so the app stays alive. The
-  // renderer will display a "no key configured" banner guiding the user to
-  // Settings (via secret:has → App.tsx keysConfigured state).
-  //
-  // Extraction provider seam: tryBuildProviders also constructs the configured
-  // ExtractionProvider. It is available via buildResult.providers.extraction
-  // for the extraction loop when item 0018 wires that up. For now we construct
-  // it here to prove the factory works; the live extraction startup is item 0018.
+  // ASR and extraction are built INDEPENDENTLY: the ASR provider is gated only
+  // on the ASR key (Deepgram), so transcription works as soon as that key is
+  // set, regardless of whether an extraction (Anthropic) key exists. A missing
+  // ASR key falls back to FakeASRProvider so the app stays alive; the renderer
+  // shows a "no key" banner guiding the user to Settings.
   // ---------------------------------------------------------------------------
-  const buildResult = tryBuildProviders(settingsStore.current, secretStorage)
+  const asrResult = tryBuildAsrProvider(settingsStore.current, secretStorage)
+  const asrProvider = asrResult.ok ? asrResult.provider : new FakeASRProvider()
 
-  const asrProvider = buildResult.ok ? buildResult.providers.asr : new FakeASRProvider()
-
-  if (!buildResult.ok) {
+  if (!asrResult.ok) {
     console.warn(
-      '[LiveTranscriber] Providers not ready — keys not configured yet. ' +
-        'Using FakeASRProvider until keys are set in Settings. ' +
-        `Reason: ${buildResult.error}`,
+      '[LiveTranscriber] ASR provider not ready — ASR key not configured yet. ' +
+        'Using FakeASRProvider until the key is set in Settings. ' +
+        `Reason: ${asrResult.error}`,
     )
   }
 
-  // Extraction provider seam (item 0018 will wire this into the extraction loop):
-  // const extractionProvider = buildResult.ok ? buildResult.providers.extraction : null
+  // Extraction provider seam (item 0018 will wire this into the extraction loop).
+  // Built independently so a missing extraction key does NOT disable ASR.
+  const extractionResult = tryBuildExtractionProvider(settingsStore.current, secretStorage)
+  if (!extractionResult.ok) {
+    console.warn(
+      '[LiveTranscriber] Extraction provider not ready — extraction key not configured yet. ' +
+        `Live extraction will start once the key is set. Reason: ${extractionResult.error}`,
+    )
+  }
 
   const audioBridge = new AudioCaptureBridge({
     asrProvider,
