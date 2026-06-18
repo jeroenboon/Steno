@@ -36,8 +36,9 @@ module.exports = {
         },
       },
       fontFamily: {
-        mono: ['DM Mono', 'JetBrains Mono', 'Fira Code', 'monospace'],
-        body: ['Geist', 'IBM Plex Sans', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        serif: ['Fraunces', 'Newsreader', 'Georgia', 'Times New Roman', 'serif'],
+        mono: ['IBM Plex Mono', 'DM Mono', 'JetBrains Mono', 'ui-monospace', 'monospace'],
+        body: ['IBM Plex Sans', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         xs: ['11px', { lineHeight: '1.4' }],
@@ -57,10 +58,10 @@ module.exports = {
         pill: '999px',
       },
       boxShadow: {
-        sm: '0 1px 2px rgba(0,0,0,0.4)',
-        md: '0 4px 12px rgba(0,0,0,0.5)',
-        lg: '0 8px 24px rgba(0,0,0,0.6)',
-        accent: '0 0 0 1px var(--color-accent), 0 0 12px var(--color-accent-glow)',
+        sm: 'var(--shadow-sm)',
+        md: 'var(--shadow-md)',
+        lg: 'var(--shadow-lg)',
+        accent: 'var(--shadow-accent)',
       },
       transitionTimingFunction: {
         'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',

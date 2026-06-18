@@ -1,8 +1,12 @@
 /**
- * App styles — item 0013.
+ * App styles — "Cahier".
  *
- * Imports Tailwind base layers and defines component-level styles
- * that Tailwind utilities don't cover well (e.g. the EgressIndicator badge).
+ * Paper surfaces, ink interaction, pencil-vs-ink state language.
+ * See docs/design/cahier-design-brief.md and tokens.css.
+ *
+ * Imports Tailwind base layers and defines component-level styles that
+ * Tailwind utilities don't cover well (the paper grid, the binding seam,
+ * the egress badge, the pencil/ink transcript).
  */
 
 @tailwind base;
@@ -29,67 +33,94 @@ body,
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* --- App shell --- */
+/* --- App shell + binding seam ---
+ * The thin kraft seam down the left edge is the only physical motif:
+ * decorative, the notional binding. The page is bound left, written rightward.
+ */
 
 .app-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   background-color: var(--color-base);
+  padding-left: var(--seam-width);
 }
+
+.app-shell::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--seam-width);
+  background-color: var(--color-accent);
+  opacity: 0.55;
+  z-index: 2;
+}
+
+/* --- Chrome (the consistent header on every screen) --- */
 
 .app-chrome {
   display: flex;
   align-items: center;
   justify-content: space-between;
   height: var(--chrome-height);
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-6);
   background-color: var(--color-surface-0);
-  border-bottom: 1px solid var(--color-border-dim);
+  border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
 
 .app-chrome__name {
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-tertiary);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--color-text-accent);
 }
 
-/* --- Navigation tabs --- */
+/* --- Navigation tabs (ink is the interaction colour) --- */
 
 .app-nav {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
 .app-nav__tab {
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
+  position: relative;
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-body);
+  font-size: 13px;
   font-weight: 500;
   color: var(--color-text-secondary);
   background: none;
   border: none;
+  border-bottom: 2px solid transparent;
   cursor: pointer;
-  transition:
-    color var(--duration-fast) var(--ease-out),
-    background-color var(--duration-fast) var(--ease-out);
+  transition: color var(--duration-fast) var(--ease-out);
 }
 
 .app-nav__tab:hover {
   color: var(--color-text-primary);
-  background-color: var(--color-surface-2);
 }
 
+/* Active tab: ink, underlined, with a small kraft tick. */
 .app-nav__tab--active {
-  color: var(--color-text-accent);
-  background-color: var(--color-accent-muted);
+  color: var(--color-text-primary);
+  font-weight: 600;
+  border-bottom-color: var(--color-text-primary);
+}
+
+.app-nav__tab--active::before {
+  content: '✓';
+  margin-right: var(--space-1);
+  color: var(--color-accent);
+  font-size: 11px;
 }
 
 /* --- Screen content area --- */
@@ -100,12 +131,64 @@ body,
   position: relative;
 }
 
-/* --- Screens --- */
+/* --- Screens + paper grid ---
+ * Meeting work (draft/live/review) sits on dotted paper; the grid scrolls
+ * with the content like a real page. Settings gets squared paper to read as
+ * "configuration". The grid is a faint hairline tint and never competes.
+ */
 
 .screen {
   height: 100%;
   overflow-y: auto;
-  padding: var(--space-8);
+  padding: var(--space-8) var(--space-10);
+}
+
+.screen--draft,
+.screen--live,
+.screen--review {
+  background-image: radial-gradient(var(--grid-line) 1.1px, transparent 1.2px);
+  background-size: var(--grid-size) var(--grid-size);
+  background-position: var(--space-4) var(--space-4);
+}
+
+.screen--settings {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+  background-position: var(--space-4) var(--space-4);
+}
+
+/* Live recording signal: a narrow ink-red wash bleeds in from the seam edge.
+ * The page centre stays calm and readable. TODO: gate on real recording state
+ * once the live runtime exposes it; today the Live screen auto-starts capture
+ * on mount, so screen presence approximates "recording".
+ */
+.screen--live::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 96px;
+  pointer-events: none;
+  background: linear-gradient(to right, rgba(168, 50, 45, 0.22), rgba(168, 50, 45, 0) 100%);
+  animation: live-bleed var(--duration-slow) var(--ease-in-out) infinite alternate;
+  z-index: 1;
+}
+
+@keyframes live-bleed {
+  from {
+    opacity: 0.75;
+  }
+  to {
+    opacity: 0.35;
+  }
+}
+
+.screen > * {
+  position: relative;
+  z-index: 1;
 }
 
 .screen__header {
@@ -113,10 +196,12 @@ body,
 }
 
 .screen__title {
-  font-size: 20px;
+  font-family: var(--font-serif);
+  font-size: 30px;
   font-weight: 600;
   color: var(--color-text-primary);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
+  line-height: 1.1;
   margin: 0 0 var(--space-2) 0;
 }
 
@@ -124,6 +209,10 @@ body,
   font-size: 13px;
   color: var(--color-text-secondary);
   margin: 0;
+}
+
+.screen__body {
+  margin-bottom: var(--space-6);
 }
 
 .screen__body--placeholder {
@@ -134,10 +223,162 @@ body,
 }
 
 .placeholder-text {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--color-text-tertiary);
   margin: 0;
+}
+
+/* --- Transcript: pencil and ink ---
+ * Final spans are inked solid; interim spans are light pencil-gray and
+ * darken to ink in place when they finalise (no layout shift).
+ */
+
+.transcript__heading {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-4) 0;
+}
+
+.transcript__empty {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+}
+
+.transcript__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.transcript__span {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text-primary); /* inked: final */
+  transition: color var(--duration-normal) var(--ease-out);
+}
+
+.transcript__span--interim {
+  color: var(--color-text-tertiary); /* pencil: still being revised */
+}
+
+.transcript__interim-label {
+  margin-left: var(--space-2);
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-style: italic;
+  color: var(--color-text-tertiary);
+}
+
+/* --- Item state language (forward-looking: marginalia / cards) ---
+ * Proposed = pencil outline; Confirmed = inked solid with a Myrtle check;
+ * Dismissed = struck through and faded.
+ */
+
+.item {
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface-1);
+  font-size: 13px;
+}
+
+.item--proposed {
+  border: 1px dashed var(--color-proposed);
+  color: var(--color-text-secondary);
+}
+
+.item--confirmed {
+  border: 1px solid var(--color-confirmed);
+  color: var(--color-text-primary);
+}
+
+.item--confirmed .item__check {
+  color: var(--color-confirmed);
+}
+
+.item--dismissed {
+  color: var(--color-dismissed);
+  text-decoration: line-through;
+}
+
+/* --- Loopback toggle + selects (recessed wells) --- */
+
+.screen__body--loopback-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.loopback-toggle__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.loopback-toggle__select,
+.settings-body select,
+.settings-body input {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text-primary);
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.loopback-toggle__select:focus,
+.settings-body select:focus,
+.settings-body input:focus {
+  outline: none;
+  border-color: var(--color-text-primary);
+}
+
+.loopback-status {
+  font-size: 12px;
+  margin: var(--space-1) 0 0 0;
+}
+
+.loopback-status--active {
+  color: var(--color-confirmed);
+}
+
+.loopback-status--denied {
+  color: var(--color-nudge);
+}
+
+.loopback-status--off {
+  color: var(--color-text-tertiary);
+}
+
+/* --- Mic status messages (red is reserved for live, so alerts use ink) --- */
+
+.mic-active-message {
+  font-size: 12px;
+  color: var(--color-confirmed);
+}
+
+.mic-starting-message {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+
+.mic-denied-message {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  border-left: 3px solid var(--color-nudge);
+  padding-left: var(--space-3);
 }
 
 /* --- EgressIndicator badge --- */
@@ -148,12 +389,12 @@ body,
   gap: var(--space-2);
   padding: 3px var(--space-3);
   border-radius: var(--radius-pill);
-  background-color: var(--color-surface-2);
-  border: 1px solid var(--color-border-dim);
-  font-family: var(--font-display);
+  background-color: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   color: var(--color-text-secondary);
   white-space: nowrap;
   user-select: none;
@@ -175,4 +416,66 @@ body,
   to {
     opacity: 0.4;
   }
+}
+
+/* --- Buttons (ink is the action colour) --- */
+
+.btn {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-text-primary);
+  background-color: var(--color-text-primary);
+  color: var(--color-text-inverted);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.btn:hover {
+  background-color: #000;
+}
+
+.btn--secondary {
+  background-color: transparent;
+  color: var(--color-text-primary);
+}
+
+.btn--secondary:hover {
+  background-color: var(--color-surface-2);
+}
+
+/* --- No-key banner (attention without alarm: umber, not red) --- */
+
+.no-key-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  background-color: var(--color-accent-muted);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.no-key-banner__title {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.no-key-banner__body {
+  flex: 1;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+/* --- Settings form --- */
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: 640px;
 }

@@ -1,48 +1,70 @@
 /**
- * Design tokens — item 0013.
+ * Design tokens — "Cahier".
  *
- * Visual direction: "Precision Instrument"
- * Dark obsidian surfaces, amber accent (recording/live signal), monospace
- * for transcript data, humanist sans for chrome. Dense but controlled.
+ * Visual direction: a working note-taker's notebook (Moleskine Cahier spirit,
+ * not skeuomorphism). Warm ivory paper, drafted in pencil, committed in ink.
+ * See docs/design/cahier-design-brief.md.
+ *
+ * Core rules encoded below:
+ *   - Kraft (--color-accent) is IDENTITY ONLY: wordmark, seam, hairlines.
+ *     Never an interactive colour (brown on ivory fails contrast).
+ *   - INK is the interaction colour: buttons, links, active nav.
+ *   - Ink-red (--color-live) is sacred to the live/recording signal.
+ *     Destructive actions use ink + friction, not colour, so --color-danger
+ *     is ink, not red.
+ *   - Myrtle green (--color-confirmed) marks the Confirmed state.
+ *   - Pencil-gray (--color-proposed / --color-text-tertiary) is the tentative
+ *     mark: interim transcript spans and proposed items.
+ *
+ * Variable names are kept stable so tailwind.config.js and existing utilities
+ * keep working; only the values change from the previous "Precision Instrument"
+ * direction. Light is the identity; a night variant ships later.
  *
  * All tokens are CSS custom properties consumed by Tailwind utilities
  * and raw CSS alike.
  */
 
 :root {
-  /* --- Surfaces (warm near-black, not cold gray) --- */
-  --color-base: #0d0d0f;
-  --color-surface-0: #111114;
-  --color-surface-1: #18181d;
-  --color-surface-2: #22222a;
-  --color-surface-3: #2c2c38;
-  --color-border: #2e2e3a;
-  --color-border-dim: #1e1e26;
+  /* --- Surfaces (warm ivory paper) --- */
+  --color-base: #f6f1e7; /* the canvas, everywhere */
+  --color-surface-0: #f1ebdd; /* chrome bar, slightly off-paper */
+  --color-surface-1: #fbf7ef; /* raised: cards, the right margin */
+  --color-surface-2: #ece4d5; /* recessed: inputs, wells, hover */
+  --color-surface-3: #e3d9c6; /* deeper recessed / pressed */
+  --color-border: #d8cdb8; /* kraft-tinted hairline */
+  --color-border-dim: #e6ddcc; /* fainter divider */
 
-  /* --- Accent: amber-bronze (recording / active / attention) --- */
-  --color-accent: #d4882a;
-  --color-accent-dim: #a8671e;
-  --color-accent-glow: rgba(212, 136, 42, 0.15);
-  --color-accent-muted: #3d2e14;
+  /* --- Accent: Kraft brown (IDENTITY ONLY, never interactive) --- */
+  --color-accent: #a6794c;
+  --color-accent-dim: #8a6238;
+  --color-accent-glow: rgba(166, 121, 76, 0.15);
+  --color-accent-muted: #ece0cb; /* faint kraft wash for subtle fills */
 
   /* --- Semantic states --- */
-  --color-live: #e8944a;
-  --color-confirmed: #4ead8a;
-  --color-proposed: #6b7fc4;
-  --color-dismissed: #4a4a58;
-  --color-danger: #c45555;
-  --color-nudge: #b8832a;
+  --color-live: #a8322d; /* ink-red: live/recording ONLY */
+  --color-confirmed: #2f4f3e; /* Myrtle green */
+  --color-proposed: #9a9388; /* pencil-gray (tentative) */
+  --color-dismissed: #b8ae9c; /* faded / erased */
+  --color-danger: #1e1b17; /* ink — destructive uses friction, not red */
+  --color-nudge: #9a6b3a; /* umber: attention, not alarm */
 
-  /* --- Text --- */
-  --color-text-primary: #e8e8f0;
-  --color-text-secondary: #8888a0;
-  --color-text-tertiary: #55556a;
-  --color-text-accent: #d4882a;
-  --color-text-inverted: #0d0d0f;
+  /* --- Text (warm ink on paper) --- */
+  --color-text-primary: #1e1b17; /* ink */
+  --color-text-secondary: #6b6457; /* warm gray, readable */
+  --color-text-tertiary: #9a9388; /* pencil-gray */
+  --color-text-accent: #a6794c; /* kraft, wordmark */
+  --color-text-inverted: #f6f1e7; /* paper, on ink-filled buttons */
 
-  /* --- Typography --- */
-  --font-display: 'DM Mono', 'JetBrains Mono', 'Fira Code', monospace;
-  --font-body: 'Geist', 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  /* --- Typography: three voices (serif headings, sans body, mono data) --- */
+  --font-serif: 'Fraunces', 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-body: 'IBM Plex Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'DM Mono', 'JetBrains Mono', ui-monospace, monospace;
+  /* Back-compat alias: previously the "machine" voice. Kept as mono. */
+  --font-display: var(--font-mono);
+
+  /* --- Paper grid (functional, never shouts) --- */
+  --grid-line: rgba(30, 27, 23, 0.07);
+  --grid-size: 24px; /* dot/square pitch */
 
   /* --- Spacing (4px grid) --- */
   --space-1: 4px;
@@ -56,16 +78,16 @@
   --space-12: 48px;
   --space-16: 64px;
 
-  /* --- Radius --- */
+  /* --- Radius (paper is soft, not glassy) --- */
   --radius-sm: 3px;
   --radius-md: 6px;
   --radius-lg: 10px;
   --radius-pill: 999px;
 
-  /* --- Shadows --- */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
+  /* --- Shadows (light, low — ink on paper, not floating glass) --- */
+  --shadow-sm: 0 1px 2px rgba(60, 50, 30, 0.08);
+  --shadow-md: 0 4px 12px rgba(60, 50, 30, 0.1);
+  --shadow-lg: 0 8px 24px rgba(60, 50, 30, 0.12);
   --shadow-accent: 0 0 0 1px var(--color-accent), 0 0 12px var(--color-accent-glow);
 
   /* --- Motion --- */
@@ -76,6 +98,7 @@
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* --- Layout --- */
-  --chrome-height: 40px;
+  --chrome-height: 48px;
   --sidebar-width: 220px;
+  --seam-width: 3px; /* the decorative left binding seam */
 }
