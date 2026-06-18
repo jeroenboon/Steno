@@ -314,9 +314,19 @@ function makeHandleItemEditAndConfirm(deps: IpcRegistryDependencies) {
       throw new Error('ItemLifecycleService is not available')
     }
     if (req.kind === 'decision') {
-      return deps.itemLifecycleService.editAndConfirmDecision(req.id, req.updates)
+      // Rebuild with only defined keys: under exactOptionalPropertyTypes a
+      // value of `string | undefined` is not assignable to an optional `string`.
+      const updates: Parameters<typeof deps.itemLifecycleService.editAndConfirmDecision>[1] = {}
+      if (req.updates.rationale !== undefined) updates.rationale = req.updates.rationale
+      if (req.updates.agendaItemId !== undefined) updates.agendaItemId = req.updates.agendaItemId
+      return deps.itemLifecycleService.editAndConfirmDecision(req.id, updates)
     } else {
-      return deps.itemLifecycleService.editAndConfirmAction(req.id, req.updates)
+      const updates: Parameters<typeof deps.itemLifecycleService.editAndConfirmAction>[1] = {}
+      if (req.updates.status !== undefined) updates.status = req.updates.status
+      if (req.updates.agendaItemId !== undefined) updates.agendaItemId = req.updates.agendaItemId
+      if (req.updates.owner !== undefined) updates.owner = req.updates.owner
+      if (req.updates.dueDate !== undefined) updates.dueDate = req.updates.dueDate
+      return deps.itemLifecycleService.editAndConfirmAction(req.id, updates)
     }
   }
 }
