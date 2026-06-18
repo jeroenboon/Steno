@@ -431,6 +431,20 @@ export type ItemCreateConfirmedRequest = z.infer<typeof ItemCreateConfirmedReque
 export type ItemCreateConfirmedResponse = z.infer<typeof ItemCreateConfirmedResponseSchema>
 
 // ---------------------------------------------------------------------------
+// meeting:end — end the active meeting, triggering the final extraction pass
+// (item 0021)
+// ---------------------------------------------------------------------------
+
+export const MeetingEndRequestSchema = z.object({
+  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
+})
+
+export const MeetingEndResponseSchema = z.object({ ok: z.literal(true) })
+
+export type MeetingEndRequest = z.infer<typeof MeetingEndRequestSchema>
+export type MeetingEndResponse = z.infer<typeof MeetingEndResponseSchema>
+
+// ---------------------------------------------------------------------------
 // Channel registry — exhaustive union of all channel names
 // ---------------------------------------------------------------------------
 
@@ -447,6 +461,7 @@ export type IpcChannel =
   | 'participant:add'
   | 'participant:remove'
   | 'meeting:start'
+  | 'meeting:end'
   | 'audio:start'
   | 'audio:stop'
   | 'item:confirm'
@@ -580,4 +595,9 @@ export interface RendererApi {
    * Returns { answer: '' } if the provider has no query capability.
    */
   summaryQuery: (req: SummaryQueryRequest) => Promise<SummaryQueryResponse>
+  /**
+   * End the active meeting. Triggers the final extraction pass (Discussion
+   * Summaries, final decisions/actions) and stops the runtime (item 0021).
+   */
+  meetingEnd: (req: MeetingEndRequest) => Promise<MeetingEndResponse>
 }

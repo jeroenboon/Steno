@@ -137,6 +137,7 @@ const IPC_CHANNELS: IpcChannel[] = [
   'item:dismiss',
   'item:createConfirmed',
   'summary:query',
+  'meeting:end',
 ]
 
 async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
@@ -324,6 +325,12 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     },
     summaryQuery: (question) => {
       return activeRuntime !== null ? activeRuntime.querySummary(question) : Promise.resolve('')
+    },
+    onMeetingEnd: async () => {
+      if (activeRuntime !== null) {
+        await activeRuntime.endMeeting()
+        activeRuntime = null
+      }
     },
   })
 

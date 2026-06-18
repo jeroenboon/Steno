@@ -34,6 +34,8 @@ import type {
   ParticipantRemoveResponse,
   MeetingStartRequest,
   MeetingStartResponse,
+  MeetingEndRequest,
+  MeetingEndResponse,
   AudioStartResponse,
   AudioStopResponse,
   UnsubscribeFn,
@@ -186,6 +188,9 @@ const api: RendererApi = {
 
   summaryQuery: (req: SummaryQueryRequest) =>
     ipcRenderer.invoke('summary:query', req) as Promise<SummaryQueryResponse>,
+
+  meetingEnd: (req: MeetingEndRequest) =>
+    ipcRenderer.invoke('meeting:end', req) as Promise<MeetingEndResponse>,
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -7,7 +7,7 @@
  * - Error handling on invalid payloads
  */
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 import { createIpcRegistry } from './ipc-registry'
 
@@ -113,5 +113,96 @@ describe('IPC registry — item 0014 (meeting/agenda/participant ops)', () => {
 
       expect(response).toHaveProperty('state', 'live')
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// meeting:end handler (item 0021)
+// ---------------------------------------------------------------------------
+
+describe('IPC registry — meeting:end (item 0021)', () => {
+  it('calls onMeetingEnd with the meetingId and returns { ok: true }', async () => {
+    const onMeetingEnd = vi.fn().mockResolvedValue(undefined)
+
+    const mockSettingsStore = {
+      current: {
+        asrProvider: 'deepgram' as const,
+        asrModel: 'nova-2',
+        extractionProvider: 'anthropic' as const,
+        extractionModel: 'claude-haiku-4-5',
+        extractionFinalModel: 'claude-sonnet-4-6',
+        primaryLanguage: 'nl',
+        customEndpoint: null,
+      },
+      save: async () => {
+        // no-op
+      },
+      load: async () => {
+        // no-op
+      },
+    } as unknown
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+    const registry = createIpcRegistry({ settingsStore: mockSettingsStore as any, onMeetingEnd })
+
+    const response = await registry.dispatch('meeting:end', { meetingId: 'mtg-abc' })
+
+    expect(onMeetingEnd).toHaveBeenCalledWith('mtg-abc')
+    expect(response).toEqual({ ok: true })
+  })
+
+  it('rejects when meetingId is empty', async () => {
+    const onMeetingEnd = vi.fn()
+
+    const mockSettingsStore = {
+      current: {
+        asrProvider: 'deepgram' as const,
+        asrModel: 'nova-2',
+        extractionProvider: 'anthropic' as const,
+        extractionModel: 'claude-haiku-4-5',
+        extractionFinalModel: 'claude-sonnet-4-6',
+        primaryLanguage: 'nl',
+        customEndpoint: null,
+      },
+      save: async () => {
+        // no-op
+      },
+      load: async () => {
+        // no-op
+      },
+    } as unknown
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+    const registry = createIpcRegistry({ settingsStore: mockSettingsStore as any, onMeetingEnd })
+
+    await expect(registry.dispatch('meeting:end', { meetingId: '' })).rejects.toThrow()
+    expect(onMeetingEnd).not.toHaveBeenCalled()
+  })
+
+  it('works when onMeetingEnd is not provided (graceful degradation)', async () => {
+    const mockSettingsStore = {
+      current: {
+        asrProvider: 'deepgram' as const,
+        asrModel: 'nova-2',
+        extractionProvider: 'anthropic' as const,
+        extractionModel: 'claude-haiku-4-5',
+        extractionFinalModel: 'claude-sonnet-4-6',
+        primaryLanguage: 'nl',
+        customEndpoint: null,
+      },
+      save: async () => {
+        // no-op
+      },
+      load: async () => {
+        // no-op
+      },
+    } as unknown
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+    const registry = createIpcRegistry({ settingsStore: mockSettingsStore as any })
+
+    const response = await registry.dispatch('meeting:end', { meetingId: 'mtg-xyz' })
+
+    expect(response).toEqual({ ok: true })
   })
 })

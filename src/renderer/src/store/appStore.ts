@@ -14,7 +14,14 @@
 
 import { create } from 'zustand'
 
-import type { TranscriptSpan, AgendaItem, Participant, Nudge, NudgeId } from '@shared/domain/types'
+import type {
+  TranscriptSpan,
+  AgendaItem,
+  Participant,
+  Nudge,
+  NudgeId,
+  DiscussionSummary,
+} from '@shared/domain/types'
 import type { ItemsChangedPayload } from '@shared/ipc'
 
 import type { CaptureMode, LoopbackState } from '../services/AudioCaptureService'
@@ -135,6 +142,13 @@ export interface AppState {
    */
   runningSummary: string
 
+  /**
+   * Discussion Summaries from the final extraction pass (item 0021).
+   * Populated when the meeting ends and items:summaries is received.
+   * Each summary covers one Agenda Item's discussion.
+   */
+  discussionSummaries: DiscussionSummary[]
+
   /** Replace the full nudge list (called on nudges:changed IPC event). */
   setNudges: (nudges: Nudge[]) => void
 
@@ -197,6 +211,13 @@ export interface AppState {
 
   /** Update the running summary (called on summary:changed IPC event). */
   setRunningSummary: (summary: string) => void
+
+  /**
+   * Store Discussion Summaries from the final extraction pass (item 0021).
+   * Called when items:summaries is received after meeting end.
+   * Replaces the previous set wholesale.
+   */
+  setDiscussionSummaries: (summaries: DiscussionSummary[]) => void
 }
 
 // Re-export for convenience
@@ -222,6 +243,7 @@ export const useAppStore = create<AppState>()((set) => ({
   nudges: [],
   dismissedNudgeIds: new Set<NudgeId>(),
   runningSummary: '',
+  discussionSummaries: [],
 
   setNudges: (nudges) => {
     set({ nudges })
@@ -329,5 +351,9 @@ export const useAppStore = create<AppState>()((set) => ({
 
   setRunningSummary: (summary) => {
     set({ runningSummary: summary })
+  },
+
+  setDiscussionSummaries: (summaries) => {
+    set({ discussionSummaries: summaries })
   },
 }))

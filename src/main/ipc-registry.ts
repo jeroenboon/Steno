@@ -52,6 +52,8 @@ import {
   ItemCreateConfirmedRequestSchema,
   SummaryQueryRequestSchema,
   SummaryQueryResponseSchema,
+  MeetingEndRequestSchema,
+  MeetingEndResponseSchema,
 } from '@shared/ipc'
 import type {
   IpcChannel,
@@ -74,6 +76,7 @@ import type {
   ItemDismissResponse,
   ItemCreateConfirmedResponse,
   SummaryQueryResponse,
+  MeetingEndResponse,
 } from '@shared/ipc'
 import type { Clock } from '@shared/providers'
 
@@ -137,6 +140,13 @@ export interface IpcRegistryDependencies {
    * Returns '' when the active runtime has no provider or no query capability.
    */
   summaryQuery?: (question: string) => Promise<string>
+  /**
+   * Called when the note-taker ends the meeting (item 0021).
+   * Main calls endMeeting() on the active LiveExtractionRuntime, which
+   * triggers the final extraction pass, emits items:summaries, and stops.
+   * When absent, meeting:end is a no-op (graceful degradation).
+   */
+  onMeetingEnd?: (meetingId: string) => Promise<void>
 }
 
 // ---------------------------------------------------------------------------
@@ -373,6 +383,16 @@ function makeHandleSummaryQuery(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleMeetingEnd(deps: IpcRegistryDependencies) {
+  return async function handleMeetingEnd(raw: unknown): Promise<MeetingEndResponse> {
+    const req = MeetingEndRequestSchema.parse(raw)
+    if (deps.onMeetingEnd !== undefined) {
+      await deps.onMeetingEnd(req.meetingId)
+    }
+    return MeetingEndResponseSchema.parse({ ok: true })
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -399,6 +419,7 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'item:dismiss': makeHandleItemDismiss(deps),
     'item:createConfirmed': makeHandleItemCreateConfirmed(deps),
     'summary:query': makeHandleSummaryQuery(deps),
+    'meeting:end': makeHandleMeetingEnd(deps),
   }
 
   return {

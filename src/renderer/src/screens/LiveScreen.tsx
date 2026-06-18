@@ -32,6 +32,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { OffAgenda } from '@shared/domain/types'
 import {
   ItemsChangedPayloadSchema,
+  ItemsSummariesPayloadSchema,
   NudgesChangedPayloadSchema,
   SummaryChangedPayloadSchema,
   TranscriptSpanSchema,
@@ -478,6 +479,8 @@ export function LiveScreen(): React.JSX.Element {
   const agendaItems = useAppStore((s) => s.agendaItems)
   const participants = useAppStore((s) => s.participants)
   const activeMeeting = useAppStore((s) => s.activeMeeting)
+  const setRoute = useAppStore((s) => s.setRoute)
+  const setDiscussionSummaries = useAppStore((s) => s.setDiscussionSummaries)
 
   const mergeProposedItems = useAppStore((s) => s.mergeProposedItems)
   const confirmItem = useAppStore((s) => s.confirmItem)
@@ -494,6 +497,7 @@ export function LiveScreen(): React.JSX.Element {
   const [transcriptOpen, setTranscriptOpen] = useState(false)
   const [editState, setEditState] = useState<EditState | null>(null)
   const [addingKind, setAddingKind] = useState<ItemKind | null>(null)
+  const [endingMeeting, setEndingMeeting] = useState(false)
 
   // --- Refs ---
   const serviceRef = useRef<AudioCaptureService | null>(null)
@@ -556,9 +560,13 @@ export function LiveScreen(): React.JSX.Element {
       }
     })
 
-    // Discussion summaries (logged but not displayed live — item 0021)
-    const unsubSummaries = window.api.onItemsSummaries(() => {
-      // Post-meeting summaries handled in item 0021 Review screen
+    // Discussion summaries (item 0021) — save to store and navigate to Review
+    const unsubSummaries = window.api.onItemsSummaries((raw) => {
+      const result = ItemsSummariesPayloadSchema.safeParse(raw)
+      if (result.success) {
+        setDiscussionSummaries(result.data.summaries)
+      }
+      setRoute('review')
     })
 
     // Start audio capture
@@ -595,6 +603,8 @@ export function LiveScreen(): React.JSX.Element {
     mergeProposedItems,
     setNudges,
     setRunningSummary,
+    setDiscussionSummaries,
+    setRoute,
   ])
 
   // --- Item actions ---
@@ -648,6 +658,21 @@ export function LiveScreen(): React.JSX.Element {
     setEditState(null)
   }, [])
 
+  const handleEndMeeting = useCallback(async () => {
+    if (endingMeeting) return
+    setEndingMeeting(true)
+    try {
+      const meetingId = activeMeeting ?? 'active-session'
+      await window.api.meetingEnd({ meetingId })
+      // Navigation to 'review' happens when items:summaries arrives.
+      // If the runtime has no provider, items:summaries may not fire — navigate anyway.
+      setRoute('review')
+    } catch (err) {
+      console.error('[LiveScreen] meetingEnd failed:', err)
+      setEndingMeeting(false)
+    }
+  }, [activeMeeting, endingMeeting, setRoute])
+
   const handleManualAdd = useCallback(
     async (kind: ItemKind, text: string) => {
       const meetingId = activeMeeting ?? 'active-session'
@@ -696,6 +721,17 @@ export function LiveScreen(): React.JSX.Element {
       <header className="screen__header">
         <h1 className="screen__title">{t('screen.live.title')}</h1>
         <p className="screen__subtitle">{t('screen.live.subtitle')}</p>
+        <button
+          type="button"
+          className="btn btn--danger live-end-btn"
+          data-testid="end-meeting-btn"
+          disabled={endingMeeting}
+          onClick={() => {
+            void handleEndMeeting()
+          }}
+        >
+          {t('live.end.button')}
+        </button>
       </header>
 
       {/* ------------------------------------------------------------------ */}

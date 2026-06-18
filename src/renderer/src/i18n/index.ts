@@ -162,6 +162,24 @@ const nl = {
   'live.summary.answer.label': 'Antwoord',
   'live.summary.loading': 'Bezig met ophalen…',
 
+  // Live screen — end meeting (item 0021)
+  'live.end.button': 'Vergadering beëindigen',
+
+  // Review screen (item 0021)
+  'review.summary.heading': 'Discussiesamenvatting',
+  'review.summary.empty': 'Geen samenvatting beschikbaar.',
+  'review.items.decisions.heading': 'Beslissingen',
+  'review.items.actions.heading': 'Acties',
+  'review.items.empty': 'Geen items.',
+  'review.items.confirm': 'Bevestigen',
+  'review.items.dismiss': 'Verwerpen',
+  'review.items.edit': 'Bewerken',
+  'review.items.save': 'Opslaan',
+  'review.items.cancel': 'Annuleren',
+  'review.items.owner': 'Eigenaar',
+  'review.items.owner.none': 'Geen eigenaar',
+  'review.items.offagenda.heading': 'Buiten agenda',
+
   // Generic
   'app.name': 'LiveTranscriber',
 } as const

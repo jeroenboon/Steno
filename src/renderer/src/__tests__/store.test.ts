@@ -59,3 +59,38 @@ describe('appStore — setActiveMeeting', () => {
 // Type test — AppRoute must be exactly these three values
 const _routeCheck: AppRoute[] = ['draft', 'live', 'review']
 void _routeCheck
+
+// ---------------------------------------------------------------------------
+// appStore — discussionSummaries (item 0021)
+// ---------------------------------------------------------------------------
+
+describe('appStore — discussionSummaries', () => {
+  beforeEach(() => {
+    useAppStore.setState({ discussionSummaries: [] })
+  })
+
+  it('starts with an empty discussionSummaries array', () => {
+    expect(useAppStore.getState().discussionSummaries).toEqual([])
+  })
+
+  it('setDiscussionSummaries stores the summaries', () => {
+    const summaries = [
+      { id: 's-1', agendaItemId: 'ai-1', text: 'De groep besloot door te gaan.' },
+      { id: 's-2', agendaItemId: 'ai-2', text: 'Budget goedgekeurd.' },
+    ]
+    useAppStore.getState().setDiscussionSummaries(summaries)
+    expect(useAppStore.getState().discussionSummaries).toEqual(summaries)
+  })
+
+  it('setDiscussionSummaries replaces the previous set', () => {
+    useAppStore
+      .getState()
+      .setDiscussionSummaries([{ id: 's-1', agendaItemId: 'ai-1', text: 'Eerste ronde.' }])
+    useAppStore
+      .getState()
+      .setDiscussionSummaries([{ id: 's-2', agendaItemId: 'ai-2', text: 'Tweede ronde.' }])
+    const summaries = useAppStore.getState().discussionSummaries
+    expect(summaries).toHaveLength(1)
+    expect(summaries[0]).toHaveProperty('id', 's-2')
+  })
+})
