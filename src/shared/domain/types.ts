@@ -208,14 +208,29 @@ export type RunningSummary = z.infer<typeof RunningSummarySchema>
  * contradicts an earlier one'). Never changes anything on its own; the
  * note-taker acts or dismisses."
  */
+export const NudgeKindSchema = z.enum([
+  'action-no-owner',
+  'conflicting-decisions',
+  'empty-agenda-item',
+])
+export type NudgeKind = z.infer<typeof NudgeKindSchema>
+
 export const NudgeSchema = z.object({
   id: NudgeIdSchema,
-  /** The message to display to the note-taker. */
+  /** Discriminator for the nudge rule that fired. */
+  kind: NudgeKindSchema,
+  /** IDs of the related decisions, actions, or agenda items that triggered this nudge. */
+  relatedItemIds: z.array(z.string().min(1)),
+  /**
+   * i18n key for the message to display (e.g. 'nudge.action-no-owner').
+   * Never a raw string — always resolved through the i18n layer in the renderer.
+   */
   message: z.string().min(1),
-  /** Whether this nudge has been dismissed. */
-  dismissed: z.boolean().default(false),
-  /** Optional ID of the item this nudge relates to (action, decision, etc.). */
-  relatedItemId: z.string().optional(),
+  /**
+   * ISO 8601 datetime set by the consumer when the note-taker dismisses the nudge.
+   * Absent until dismissed. Dismissal is in-memory only; nudges regenerate from state.
+   */
+  dismissedAt: z.string().datetime().optional(),
 })
 
 export type Nudge = z.infer<typeof NudgeSchema>

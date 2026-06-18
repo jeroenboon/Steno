@@ -12,7 +12,7 @@
 import { z } from 'zod'
 
 import { MeetingSchema, AgendaItemSchema, ParticipantSchema } from './domain'
-import { DecisionSchema, ActionSchema } from './domain/types'
+import { DecisionSchema, ActionSchema, NudgeSchema } from './domain/types'
 import { type EgressState } from './settings/egressState'
 import { AppSettingsSchema } from './settings/settingsSchema'
 
@@ -233,8 +233,8 @@ export type { TranscriptSpan } from './domain/types'
 //          window.api.onItemsChanged(cb) returning an UnsubscribeFn.
 // ---------------------------------------------------------------------------
 
-export { DecisionSchema, ActionSchema, DiscussionSummarySchema } from './domain/types'
-export type { Decision, Action, DiscussionSummary } from './domain/types'
+export { DecisionSchema, ActionSchema, DiscussionSummarySchema, NudgeSchema } from './domain/types'
+export type { Decision, Action, DiscussionSummary, Nudge } from './domain/types'
 
 export const ItemsChangedPayloadSchema = z.object({
   /** Decisions proposed in this extraction turn. */
@@ -281,6 +281,24 @@ export const ItemsSummariesPayloadSchema = z.object({
 })
 
 export type ItemsSummariesPayload = z.infer<typeof ItemsSummariesPayloadSchema>
+
+// ---------------------------------------------------------------------------
+// nudges:changed — main → renderer push event (item 0019)
+//
+// Emitted after every extraction turn (same timing as items:changed) and
+// whenever note-taker actions change the confirmed set. Carries the full
+// derived nudge array so the renderer can replace its local nudge state.
+//
+// Pattern: webContents.send('nudges:changed', payload) on main;
+//          ipcRenderer.on('nudges:changed', listener) in preload, exposed as
+//          window.api.onNudgesChanged(cb) returning an UnsubscribeFn.
+// ---------------------------------------------------------------------------
+
+export const NudgesChangedPayloadSchema = z.object({
+  nudges: z.array(NudgeSchema),
+})
+
+export type NudgesChangedPayload = z.infer<typeof NudgesChangedPayloadSchema>
 
 // ---------------------------------------------------------------------------
 // item:confirm — note-taker confirms a Proposed Decision or Action (item 0018)
@@ -482,6 +500,14 @@ export interface RendererApi {
    * (item 0018)
    */
   onItemsSummaries: (cb: (payload: ItemsSummariesPayload) => void) => UnsubscribeFn
+  /**
+   * Subscribe to nudge updates pushed from main (item 0019).
+   * Fired after every extraction turn that may change the nudge set.
+   * The callback receives the full derived nudge array; the UI replaces
+   * its local nudge state.
+   * Returns an unsubscribe function.
+   */
+  onNudgesChanged: (cb: (payload: NudgesChangedPayload) => void) => UnsubscribeFn
   /**
    * Confirm a Proposed Decision or Action (item 0018).
    * Transitions the item to Confirmed state.

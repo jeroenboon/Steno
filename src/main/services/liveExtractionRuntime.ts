@@ -48,6 +48,8 @@ import type {
   MeetingId,
   TranscriptSpan,
 } from '@shared/domain'
+import type { NudgesChangedPayload } from '@shared/ipc'
+import { deriveNudges } from '@shared/nudges/deriveNudges'
 
 import type { IpcSender } from '../audio/AudioCaptureBridge'
 import type { actionRepo } from '../db/repos/actionRepo'
@@ -149,6 +151,11 @@ export interface LiveExtractionRuntimeOptions {
   spanRepo: ReturnType<typeof transcriptSpanRepo>
   dsRepo: ReturnType<typeof discussionSummaryRepo>
   sender: IpcSender
+  /**
+   * When the meeting started (used for the EmptyAgendaItem nudge heuristic).
+   * Defaults to the time the runtime was constructed when not provided.
+   */
+  meetingStartedAt?: Date
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +169,10 @@ export class LiveExtractionRuntime {
   private readonly _scheduler: ExtractionLoopScheduler | null
   private readonly _spanRepo: ReturnType<typeof transcriptSpanRepo>
   private readonly _dsRepo: ReturnType<typeof discussionSummaryRepo>
+  private readonly _decisionsRepo: ReturnType<typeof decisionRepo>
+  private readonly _actionsRepo: ReturnType<typeof actionRepo>
   private readonly _sender: IpcSender
+  private readonly _meetingStartedAt: Date
 
   private _stopped = false
   private _endMeetingCalled = false
@@ -172,7 +182,10 @@ export class LiveExtractionRuntime {
     this._context = opts.context
     this._spanRepo = opts.spanRepo
     this._dsRepo = opts.dsRepo
+    this._decisionsRepo = opts.decisionsRepo
+    this._actionsRepo = opts.actionsRepo
     this._sender = opts.sender
+    this._meetingStartedAt = opts.meetingStartedAt ?? new Date()
 
     if (opts.schedulerDeps !== null) {
       // Build the intercepting item service from the repos.
@@ -185,6 +198,7 @@ export class LiveExtractionRuntime {
             decisions: result.decisions,
             actions: result.actions,
           } satisfies ItemsChangedPayload)
+          this._emitNudges()
         },
       )
       this._scheduler = new ExtractionLoopScheduler({
@@ -200,6 +214,32 @@ export class LiveExtractionRuntime {
           'Configure an extraction API key in Settings to enable item extraction.',
       )
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Nudge derivation (item 0019)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Derive nudges from the current meeting state and emit 'nudges:changed'.
+   * Called after every 'items:changed' emission so the renderer stays in sync.
+   */
+  private _emitNudges(): void {
+    const decisions = this._decisionsRepo.listByMeeting(this._meetingId)
+    const actions = this._actionsRepo.listActionsByMeeting(this._meetingId)
+    const spans = this._spanRepo.listByMeeting(this._meetingId)
+    const nudges = deriveNudges(
+      {
+        decisions,
+        actions,
+        agendaItems: this._context.agendaItems,
+        participants: this._context.participants,
+        transcriptSpans: spans,
+        meetingStartedAt: this._meetingStartedAt,
+      },
+      new Date(),
+    )
+    this._sender.send('nudges:changed', { nudges } satisfies NudgesChangedPayload)
   }
 
   // -------------------------------------------------------------------------
@@ -266,6 +306,9 @@ export class LiveExtractionRuntime {
     // Read back the summaries the scheduler persisted and emit items:summaries.
     const summaries = this._dsRepo.listByMeeting(this._meetingId)
     this._sender.send('items:summaries', { summaries } satisfies ItemsSummariesPayload)
+
+    // Re-derive nudges after the final pass (items may have changed).
+    this._emitNudges()
   }
 
   // -------------------------------------------------------------------------

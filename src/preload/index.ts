@@ -47,6 +47,7 @@ import type {
   ItemDismissResponse,
   ItemCreateConfirmedRequest,
   ItemCreateConfirmedResponse,
+  NudgesChangedPayload,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -151,6 +152,20 @@ const api: RendererApi = {
 
   itemCreateConfirmed: (req: ItemCreateConfirmedRequest) =>
     ipcRenderer.invoke('item:createConfirmed', req) as Promise<ItemCreateConfirmedResponse>,
+
+  // ---------------------------------------------------------------------------
+  // Nudges (item 0019)
+  // ---------------------------------------------------------------------------
+
+  onNudgesChanged: (cb: (payload: NudgesChangedPayload) => void): UnsubscribeFn => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: NudgesChangedPayload) => {
+      cb(payload)
+    }
+    ipcRenderer.on('nudges:changed', listener)
+    return () => {
+      ipcRenderer.removeListener('nudges:changed', listener)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

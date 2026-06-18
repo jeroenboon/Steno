@@ -144,6 +144,15 @@ const nl = {
   'live.agenda.current': 'Huidig agendapunt',
   'live.agenda.none': 'Geen agendapunt',
 
+  // Nudges (item 0019)
+  'nudge.action-no-owner':
+    'Deze actie heeft geen eigenaar. Wijs iemand toe voordat de vergadering eindigt.',
+  'nudge.conflicting-decisions':
+    'Twee beslissingen onder hetzelfde agendapunt lijken tegenstrijdig. Controleer en bevestig de juiste.',
+  'nudge.empty-agenda-item':
+    'Dit agendapunt heeft nog geen beslissingen of acties na meer dan 5 minuten.',
+  'nudge.dismiss': 'Sluiten',
+
   // Generic
   'app.name': 'LiveTranscriber',
 } as const

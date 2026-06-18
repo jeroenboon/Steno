@@ -14,7 +14,7 @@
 
 import { create } from 'zustand'
 
-import type { TranscriptSpan, AgendaItem, Participant } from '@shared/domain/types'
+import type { TranscriptSpan, AgendaItem, Participant, Nudge, NudgeId } from '@shared/domain/types'
 import type { ItemsChangedPayload } from '@shared/ipc'
 
 import type { CaptureMode, LoopbackState } from '../services/AudioCaptureService'
@@ -116,6 +116,24 @@ export interface AppState {
    */
   participants: Participant[]
 
+  /**
+   * Nudges derived from the current meeting state (item 0019).
+   * Replaced wholesale on each nudges:changed event from main.
+   */
+  nudges: Nudge[]
+
+  /**
+   * IDs of nudges dismissed by the note-taker (item 0019).
+   * In-memory only — nudges regenerate from state on the next turn.
+   */
+  dismissedNudgeIds: Set<NudgeId>
+
+  /** Replace the full nudge list (called on nudges:changed IPC event). */
+  setNudges: (nudges: Nudge[]) => void
+
+  /** Mark a nudge as dismissed (hides it from the UI). */
+  dismissNudge: (id: NudgeId) => void
+
   /** Navigate to a different screen. */
   setRoute: (route: AppRoute) => void
 
@@ -191,6 +209,18 @@ export const useAppStore = create<AppState>()((set) => ({
   confirmedActions: [],
   agendaItems: [],
   participants: [],
+  nudges: [],
+  dismissedNudgeIds: new Set<NudgeId>(),
+
+  setNudges: (nudges) => {
+    set({ nudges })
+  },
+
+  dismissNudge: (id) => {
+    set((state) => ({
+      dismissedNudgeIds: new Set([...state.dismissedNudgeIds, id]),
+    }))
+  },
 
   setRoute: (route) => {
     set({ route })

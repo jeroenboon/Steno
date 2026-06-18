@@ -24,6 +24,8 @@ export {
   type DiscussionSummaryId,
   NudgeIdSchema,
   type NudgeId,
+  NudgeKindSchema,
+  type NudgeKind,
   // Enums
   MeetingStateSchema,
   type MeetingState,

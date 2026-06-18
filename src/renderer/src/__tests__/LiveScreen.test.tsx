@@ -36,6 +36,7 @@ const mockApi = {
   onTranscriptSpan: vi.fn().mockReturnValue(mockUnsub),
   onItemsChanged: vi.fn().mockReturnValue(mockUnsub),
   onItemsSummaries: vi.fn().mockReturnValue(mockUnsub),
+  onNudgesChanged: vi.fn().mockReturnValue(mockUnsub),
   itemConfirm: vi.fn().mockResolvedValue({ state: 'confirmed' }),
   itemEditAndConfirm: vi.fn().mockResolvedValue({ state: 'confirmed' }),
   itemDismiss: vi.fn().mockResolvedValue({ ok: true }),

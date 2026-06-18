@@ -30,8 +30,13 @@ import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 
 import { OffAgenda } from '@shared/domain/types'
-import { ItemsChangedPayloadSchema, TranscriptSpanSchema } from '@shared/ipc'
+import {
+  ItemsChangedPayloadSchema,
+  NudgesChangedPayloadSchema,
+  TranscriptSpanSchema,
+} from '@shared/ipc'
 
+import { NudgePanel } from '../components/NudgePanel'
 import { t } from '../i18n'
 import { AudioCaptureService, PermissionDeniedError } from '../services/AudioCaptureService'
 import { useAppStore } from '../store/appStore'
@@ -477,6 +482,11 @@ export function LiveScreen(): React.JSX.Element {
   const removeProposedItem = useAppStore((s) => s.removeProposedItem)
   const addConfirmedItem = useAppStore((s) => s.addConfirmedItem)
 
+  const nudges = useAppStore((s) => s.nudges)
+  const dismissedNudgeIds = useAppStore((s) => s.dismissedNudgeIds)
+  const setNudges = useAppStore((s) => s.setNudges)
+  const dismissNudge = useAppStore((s) => s.dismissNudge)
+
   // --- Local UI state ---
   const [transcriptOpen, setTranscriptOpen] = useState(false)
   const [editState, setEditState] = useState<EditState | null>(null)
@@ -527,6 +537,14 @@ export function LiveScreen(): React.JSX.Element {
       }
     })
 
+    // Nudges (item 0019)
+    const unsubNudges = window.api.onNudgesChanged((raw) => {
+      const result = NudgesChangedPayloadSchema.safeParse(raw)
+      if (result.success) {
+        setNudges(result.data.nudges)
+      }
+    })
+
     // Discussion summaries (logged but not displayed live — item 0021)
     const unsubSummaries = window.api.onItemsSummaries(() => {
       // Post-meeting summaries handled in item 0021 Review screen
@@ -551,13 +569,14 @@ export function LiveScreen(): React.JSX.Element {
     return () => {
       unsubSpan()
       unsubItems()
+      unsubNudges()
       unsubSummaries()
       void service.stop().catch((err: unknown) => {
         console.error('[LiveScreen] Error stopping audio capture:', err)
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addTranscriptSpan, setMicPermission, setLoopbackState, mergeProposedItems])
+  }, [addTranscriptSpan, setMicPermission, setLoopbackState, mergeProposedItems, setNudges])
 
   // --- Item actions ---
   const handleConfirm = useCallback(
@@ -734,6 +753,11 @@ export function LiveScreen(): React.JSX.Element {
           </p>
         )}
       </section>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Nudge panel (item 0019) */}
+      {/* ------------------------------------------------------------------ */}
+      <NudgePanel nudges={nudges} dismissedNudgeIds={dismissedNudgeIds} onDismiss={dismissNudge} />
 
       {/* ------------------------------------------------------------------ */}
       {/* Items panel — keyboard shortcut legend */}

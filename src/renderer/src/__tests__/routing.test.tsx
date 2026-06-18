@@ -37,6 +37,8 @@ vi.stubGlobal('api', {
   // Item push events (item 0018)
   onItemsChanged: vi.fn().mockReturnValue(() => undefined),
   onItemsSummaries: vi.fn().mockReturnValue(() => undefined),
+  // Nudges (item 0019)
+  onNudgesChanged: vi.fn().mockReturnValue(() => undefined),
   // Item note-taker actions (item 0018)
   itemConfirm: vi.fn().mockResolvedValue({ state: 'confirmed' }),
   itemEditAndConfirm: vi.fn().mockResolvedValue({ state: 'confirmed' }),
