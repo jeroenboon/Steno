@@ -59,6 +59,10 @@ import type {
   ExportJsonResponse,
   ExportCopyMarkdownRequest,
   ExportCopyMarkdownResponse,
+  MeetingListRequest,
+  MeetingListResponse,
+  MeetingLoadRequest,
+  MeetingLoadResponse,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -204,6 +208,15 @@ const api: RendererApi = {
     ipcRenderer.invoke('export:json', req) as Promise<ExportJsonResponse>,
   exportCopyMarkdown: (req: ExportCopyMarkdownRequest) =>
     ipcRenderer.invoke('export:copyMarkdown', req) as Promise<ExportCopyMarkdownResponse>,
+
+  // ---------------------------------------------------------------------------
+  // Meeting history (item 0023)
+  // ---------------------------------------------------------------------------
+
+  meetingList: (req: MeetingListRequest) =>
+    ipcRenderer.invoke('meeting:list', req) as Promise<MeetingListResponse>,
+  meetingLoad: (req: MeetingLoadRequest) =>
+    ipcRenderer.invoke('meeting:load', req) as Promise<MeetingLoadResponse>,
 }
 
 contextBridge.exposeInMainWorld('api', api)

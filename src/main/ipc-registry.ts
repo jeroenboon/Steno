@@ -58,6 +58,10 @@ import {
   ExportJsonRequestSchema,
   ExportCopyMarkdownRequestSchema,
   ExportCopyMarkdownResponseSchema,
+  MeetingListRequestSchema,
+  MeetingListResponseSchema,
+  MeetingLoadRequestSchema,
+  MeetingLoadResponseSchema,
 } from '@shared/ipc'
 import type {
   IpcChannel,
@@ -84,6 +88,8 @@ import type {
   ExportMarkdownResponse,
   ExportJsonResponse,
   ExportCopyMarkdownResponse,
+  MeetingListResponse,
+  MeetingLoadResponse,
 } from '@shared/ipc'
 import type { Clock } from '@shared/providers'
 
@@ -169,6 +175,17 @@ export interface IpcRegistryDependencies {
    * When absent, is a no-op.
    */
   onCopyToClipboard?: (content: string) => void
+  /**
+   * List all meetings ordered newest-first (item 0023).
+   * When absent, returns an empty list.
+   */
+  meetingList?: () => MeetingListResponse['meetings']
+  /**
+   * Load full state of a past meeting (item 0023).
+   * Returns null when the meeting is not found.
+   * When absent, always returns null.
+   */
+  meetingLoad?: (meetingId: string) => MeetingLoadResponse | null
 }
 
 // ---------------------------------------------------------------------------
@@ -451,6 +468,28 @@ function makeHandleExportCopyMarkdown(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleMeetingList(deps: IpcRegistryDependencies) {
+  return function handleMeetingList(raw: unknown): MeetingListResponse {
+    MeetingListRequestSchema.parse(raw)
+    const meetings = deps.meetingList?.() ?? []
+    return MeetingListResponseSchema.parse({ meetings })
+  }
+}
+
+function makeHandleMeetingLoad(deps: IpcRegistryDependencies) {
+  return function handleMeetingLoad(raw: unknown): MeetingLoadResponse {
+    const req = MeetingLoadRequestSchema.parse(raw)
+    if (deps.meetingLoad === undefined) {
+      throw new Error('meeting:load is not available')
+    }
+    const result = deps.meetingLoad(req.meetingId)
+    if (result === null) {
+      throw new Error(`Meeting not found: ${req.meetingId}`)
+    }
+    return MeetingLoadResponseSchema.parse(result)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -481,6 +520,8 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'export:markdown': makeHandleExportMarkdown(deps),
     'export:json': makeHandleExportJson(deps),
     'export:copyMarkdown': makeHandleExportCopyMarkdown(deps),
+    'meeting:list': makeHandleMeetingList(deps),
+    'meeting:load': makeHandleMeetingLoad(deps),
   }
 
   return {

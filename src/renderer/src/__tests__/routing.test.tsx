@@ -47,6 +47,10 @@ vi.stubGlobal('api', {
   itemEditAndConfirm: vi.fn().mockResolvedValue({ state: 'confirmed' }),
   itemDismiss: vi.fn().mockResolvedValue({ ok: true }),
   itemCreateConfirmed: vi.fn().mockResolvedValue({ state: 'confirmed' }),
+  // Meeting history (item 0023)
+  meetingList: vi.fn().mockResolvedValue({ meetings: [] }),
+  meetingLoad: vi.fn(),
+  secretHas: vi.fn().mockResolvedValue({ has: true }),
 })
 
 // ---------------------------------------------------------------------------

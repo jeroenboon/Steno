@@ -12,7 +12,7 @@
 import { z } from 'zod'
 
 import { MeetingSchema, AgendaItemSchema, ParticipantSchema } from './domain'
-import { DecisionSchema, ActionSchema, NudgeSchema } from './domain/types'
+import { DecisionSchema, ActionSchema, DiscussionSummarySchema, NudgeSchema } from './domain/types'
 import { type EgressState } from './settings/egressState'
 import { AppSettingsSchema } from './settings/settingsSchema'
 
@@ -496,6 +496,42 @@ export type ExportCopyMarkdownRequest = z.infer<typeof ExportCopyMarkdownRequest
 export type ExportCopyMarkdownResponse = z.infer<typeof ExportCopyMarkdownResponseSchema>
 
 // ---------------------------------------------------------------------------
+// meeting:list — returns all meetings ordered newest-first (item 0023)
+// ---------------------------------------------------------------------------
+
+export const MeetingListRequestSchema = z.object({})
+
+export const MeetingListResponseSchema = z.object({
+  meetings: z.array(MeetingSchema),
+})
+
+export type MeetingListRequest = z.infer<typeof MeetingListRequestSchema>
+export type MeetingListResponse = z.infer<typeof MeetingListResponseSchema>
+
+// ---------------------------------------------------------------------------
+// meeting:load — load full state of a past meeting for review (item 0023)
+//
+// Returns the meeting + all its decisions, actions, agenda items, participants,
+// and discussion summaries so the Review screen can render a reopened meeting.
+// ---------------------------------------------------------------------------
+
+export const MeetingLoadRequestSchema = z.object({
+  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
+})
+
+export const MeetingLoadResponseSchema = z.object({
+  meeting: MeetingSchema,
+  decisions: z.array(DecisionSchema),
+  actions: z.array(ActionSchema),
+  agendaItems: z.array(AgendaItemSchema),
+  participants: z.array(ParticipantSchema),
+  summaries: z.array(DiscussionSummarySchema),
+})
+
+export type MeetingLoadRequest = z.infer<typeof MeetingLoadRequestSchema>
+export type MeetingLoadResponse = z.infer<typeof MeetingLoadResponseSchema>
+
+// ---------------------------------------------------------------------------
 // Channel registry — exhaustive union of all channel names
 // ---------------------------------------------------------------------------
 
@@ -523,6 +559,8 @@ export type IpcChannel =
   | 'export:markdown'
   | 'export:json'
   | 'export:copyMarkdown'
+  | 'meeting:list'
+  | 'meeting:load'
 
 /**
  * One-way channels: renderer sends, main receives (no invoke/response).
@@ -670,4 +708,15 @@ export interface RendererApi {
    * (item 0022)
    */
   exportCopyMarkdown: (req: ExportCopyMarkdownRequest) => Promise<ExportCopyMarkdownResponse>
+  /**
+   * List all meetings ordered newest-first (item 0023).
+   * Used by the Home screen to show past meetings.
+   */
+  meetingList: (req: MeetingListRequest) => Promise<MeetingListResponse>
+  /**
+   * Load full state of a past meeting (item 0023).
+   * Returns the meeting + all decisions, actions, agenda items, participants,
+   * and discussion summaries so the Review screen can render a reopened meeting.
+   */
+  meetingLoad: (req: MeetingLoadRequest) => Promise<MeetingLoadResponse>
 }

@@ -20,9 +20,11 @@ import { AudioCaptureBridge } from './audio/AudioCaptureBridge'
 import { buildContentSecurityPolicy } from './csp'
 import { runMigrations } from './db/migrate'
 import { actionRepo } from './db/repos/actionRepo'
+import { agendaItemRepo } from './db/repos/agendaItemRepo'
 import { decisionRepo } from './db/repos/decisionRepo'
 import { discussionSummaryRepo } from './db/repos/discussionSummaryRepo'
 import { meetingRepo } from './db/repos/meetingRepo'
+import { participantRepo } from './db/repos/participantRepo'
 import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
 import { createIpcRegistry } from './ipc-registry'
 import { ItemLifecycleService } from './services/itemLifecycleService'
@@ -150,6 +152,8 @@ const IPC_CHANNELS: IpcChannel[] = [
   'export:markdown',
   'export:json',
   'export:copyMarkdown',
+  'meeting:list',
+  'meeting:load',
 ]
 
 async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
@@ -200,6 +204,9 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   const aRepo = actionRepo(db)
   const spanRepo = transcriptSpanRepo(db)
   const dsRepo = discussionSummaryRepo(db)
+  const mRepo = meetingRepo(db)
+  const aiRepo = agendaItemRepo(db)
+  const pRepo = participantRepo(db)
 
   // Shared ItemLifecycleService for note-taker action IPC (item 0018).
   // The LiveExtractionRuntime builds its own intercepting subclass from the same
@@ -264,7 +271,6 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   const buildRuntime = (): LiveExtractionRuntime => {
     // Ensure the meeting row exists in the DB (upsert-style for the placeholder).
     // This is needed because transcriptSpanRepo.insert has a foreign key on meetings.
-    const mRepo = meetingRepo(db)
     if (mRepo.findById(PLACEHOLDER_MEETING_ID) === null) {
       mRepo.insert({
         id: PLACEHOLDER_MEETING_ID,
@@ -340,7 +346,6 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     },
     onMeetingEnd: async () => {
       if (activeRuntime !== null) {
-        const mRepo = meetingRepo(db)
         const meeting = mRepo.findById(PLACEHOLDER_MEETING_ID)
         if (meeting !== null) {
           await activeRuntime.endMeeting(meeting)
@@ -365,6 +370,21 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     },
     onCopyToClipboard: (content) => {
       clipboard.writeText(content)
+    },
+    meetingList: () => {
+      return mRepo.list().filter((m) => m.state !== 'draft')
+    },
+    meetingLoad: (meetingId) => {
+      const meeting = mRepo.findById(meetingId)
+      if (meeting === null) return null
+      return {
+        meeting,
+        decisions: dRepo.listByMeeting(meetingId),
+        actions: aRepo.listActionsByMeeting(meetingId),
+        agendaItems: aiRepo.listByMeeting(meetingId),
+        participants: pRepo.listByMeeting(meetingId),
+        summaries: dsRepo.listByMeeting(meetingId),
+      }
     },
   })
 

@@ -38,6 +38,8 @@ const mockApi = {
   audioStop: vi.fn(),
   audioSendFrame: vi.fn(),
   onTranscriptSpan: vi.fn(() => () => undefined),
+  meetingList: vi.fn().mockResolvedValue({ meetings: [] }),
+  meetingLoad: vi.fn(),
 }
 
 Object.defineProperty(window, 'api', { value: mockApi, writable: true, configurable: true })

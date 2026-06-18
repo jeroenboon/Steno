@@ -29,6 +29,7 @@ const nl = {
   'screen.review.subtitle': 'Controleer en bewerk de notulen.',
 
   // Navigation
+  'nav.home': 'Overzicht',
   'nav.draft': 'Voorbereiding',
   'nav.live': 'Live',
   'nav.review': 'Bekijken',
@@ -67,6 +68,12 @@ const nl = {
   'live.loopback.state.active': 'Systeemaudio actief',
   'live.loopback.state.denied': 'Systeemaudio niet beschikbaar, alleen microfoon wordt opgenomen.',
   'live.loopback.state.off': 'Alleen microfoon',
+
+  // Home screen (item 0023)
+  'home.new.button': 'Nieuwe vergadering',
+  'home.meetings.heading': 'Eerdere vergaderingen',
+  'home.meetings.empty': 'Nog geen vergaderingen.',
+  'home.meeting.interrupted': 'onderbroken',
 
   // Settings screen (item 0016)
   'nav.settings': 'Instellingen',

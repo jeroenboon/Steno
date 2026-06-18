@@ -206,3 +206,117 @@ describe('IPC registry — meeting:end (item 0021)', () => {
     expect(response).toEqual({ ok: true })
   })
 })
+
+// ---------------------------------------------------------------------------
+// meeting:list and meeting:load (item 0023)
+// ---------------------------------------------------------------------------
+
+describe('IPC registry — meeting:list and meeting:load (item 0023)', () => {
+  const mockSettingsStore = {
+    current: {
+      asrProvider: 'deepgram' as const,
+      asrModel: 'nova-2',
+      extractionProvider: 'anthropic' as const,
+      extractionModel: 'claude-haiku-4-5',
+      extractionFinalModel: 'claude-sonnet-4-6',
+      primaryLanguage: 'nl',
+      customEndpoint: null,
+    },
+    save: async () => {
+      // no-op
+    },
+    load: async () => {
+      // no-op
+    },
+  }
+
+  const endedMeeting = {
+    id: 'mtg-ended',
+    title: 'Q3 Planning',
+    state: 'ended' as const,
+    paused: false,
+    createdAt: '2026-06-01T10:00:00.000Z',
+    primaryLanguage: 'nl',
+  }
+
+  describe('meeting:list', () => {
+    it('returns the list provided by the meetingList dep', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        meetingList: () => [endedMeeting],
+      })
+
+      const response = await registry.dispatch('meeting:list', {})
+
+      expect(response).toEqual({ meetings: [endedMeeting] })
+    })
+
+    it('returns empty list when meetingList dep is absent', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+      })
+
+      const response = await registry.dispatch('meeting:list', {})
+
+      expect(response).toEqual({ meetings: [] })
+    })
+  })
+
+  describe('meeting:load', () => {
+    const fullPayload = {
+      meeting: endedMeeting,
+      decisions: [],
+      actions: [],
+      agendaItems: [],
+      participants: [],
+      summaries: [],
+    }
+
+    it('returns the full meeting payload when found', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        meetingLoad: (id) => (id === 'mtg-ended' ? fullPayload : null),
+      })
+
+      const response = await registry.dispatch('meeting:load', { meetingId: 'mtg-ended' })
+
+      expect(response).toEqual(fullPayload)
+    })
+
+    it('throws when the meeting is not found', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        meetingLoad: () => null,
+      })
+
+      await expect(registry.dispatch('meeting:load', { meetingId: 'unknown' })).rejects.toThrow(
+        'Meeting not found',
+      )
+    })
+
+    it('throws when meetingLoad dep is absent', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+      })
+
+      await expect(registry.dispatch('meeting:load', { meetingId: 'mtg-ended' })).rejects.toThrow(
+        'meeting:load is not available',
+      )
+    })
+
+    it('rejects when meetingId is empty', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        meetingLoad: () => fullPayload,
+      })
+
+      await expect(registry.dispatch('meeting:load', { meetingId: '' })).rejects.toThrow()
+    })
+  })
+})

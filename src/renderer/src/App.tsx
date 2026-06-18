@@ -18,6 +18,7 @@ import type { EgressState } from '@shared/ipc'
 import { EgressIndicator } from './components/EgressIndicator'
 import { t } from './i18n'
 import { DraftScreen } from './screens/DraftScreen'
+import { HomeScreen } from './screens/HomeScreen'
 import { LiveScreen } from './screens/LiveScreen'
 import { ReviewScreen } from './screens/ReviewScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
@@ -41,6 +42,7 @@ const DEFAULT_EGRESS: EgressState = {
 // ---------------------------------------------------------------------------
 
 const SCREENS: Record<AppRoute, React.JSX.Element> = {
+  home: <HomeScreen />,
   draft: <DraftScreen />,
   live: <LiveScreen />,
   review: <ReviewScreen />,
@@ -57,6 +59,7 @@ interface NavTab {
 }
 
 const NAV_TABS: NavTab[] = [
+  { route: 'home', label: t('nav.home') },
   { route: 'draft', label: t('nav.draft') },
   { route: 'live', label: t('nav.live') },
   { route: 'review', label: t('nav.review') },

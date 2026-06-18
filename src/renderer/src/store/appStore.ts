@@ -22,7 +22,8 @@ import type {
   NudgeId,
   DiscussionSummary,
 } from '@shared/domain/types'
-import type { ItemsChangedPayload } from '@shared/ipc'
+import type { ItemsChangedPayload, MeetingLoadResponse } from '@shared/ipc'
+import { MeetingLoadResponseSchema } from '@shared/ipc'
 
 import type { CaptureMode, LoopbackState } from '../services/AudioCaptureService'
 
@@ -35,7 +36,7 @@ export type ProposedAction = ItemsChangedPayload['actions'][number]
 // ---------------------------------------------------------------------------
 
 /** The top-level screens of the app. */
-export type AppRoute = 'draft' | 'live' | 'review' | 'settings'
+export type AppRoute = 'home' | 'draft' | 'live' | 'review' | 'settings'
 
 // ---------------------------------------------------------------------------
 // Mic permission type (item 0015)
@@ -228,6 +229,13 @@ export interface AppState {
    * Replaces the previous set wholesale.
    */
   setDiscussionSummaries: (summaries: DiscussionSummary[]) => void
+
+  /**
+   * Load a past meeting's full state from main via IPC and populate the store
+   * so the Review screen can render it (item 0023).
+   * Validates the IPC response with Zod before entering the store (principle #8).
+   */
+  loadMeeting: (id: string) => Promise<void>
 }
 
 // Re-export for convenience
@@ -238,7 +246,7 @@ export type { CaptureMode, LoopbackState }
 // ---------------------------------------------------------------------------
 
 export const useAppStore = create<AppState>()((set) => ({
-  route: 'draft',
+  route: 'home',
   activeMeeting: null,
   meetingTitle: '',
   micPermission: 'unknown',
@@ -369,5 +377,22 @@ export const useAppStore = create<AppState>()((set) => ({
 
   setDiscussionSummaries: (summaries) => {
     set({ discussionSummaries: summaries })
+  },
+
+  loadMeeting: async (id: string) => {
+    const raw = await window.api.meetingLoad({ meetingId: id })
+    const payload: MeetingLoadResponse = MeetingLoadResponseSchema.parse(raw)
+    set({
+      activeMeeting: id,
+      meetingTitle: payload.meeting.title,
+      // Only confirmed items matter in Review; clear proposed from any prior session.
+      proposedDecisions: [],
+      proposedActions: [],
+      confirmedDecisions: payload.decisions.filter((d) => d.state === 'confirmed'),
+      confirmedActions: payload.actions.filter((a) => a.state === 'confirmed'),
+      agendaItems: payload.agendaItems,
+      participants: payload.participants,
+      discussionSummaries: payload.summaries,
+    })
   },
 }))
