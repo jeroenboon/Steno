@@ -18,7 +18,7 @@
 import React, { useEffect, useState } from 'react'
 
 import { buildDisclosureCopy, computeEgressState } from '../../../shared/settings/egressState'
-import type { AppSettings } from '../../../shared/settings/settingsSchema'
+import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
 import { t } from '../i18n'
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,15 @@ export function SettingsScreen(): React.JSX.Element {
   // ---- load on mount ----
   useEffect(() => {
     void (async () => {
-      const s = await window.api.settingsGet()
+      let s: AppSettings
+      try {
+        s = await window.api.settingsGet()
+      } catch (err) {
+        // IPC failed (e.g. handler not ready). Fall back to defaults so the
+        // screen renders and stays usable instead of hanging on "laden...".
+        console.error('[Settings] settingsGet failed, using defaults:', err)
+        s = DEFAULT_SETTINGS
+      }
       setSettings(s)
 
       if (s.extractionProvider === 'custom-openai') {
@@ -113,13 +121,17 @@ export function SettingsScreen(): React.JSX.Element {
         })
       }
 
-      // Check key presence (never retrieves the value)
-      const [dg, ant] = await Promise.all([
-        window.api.secretHas({ key: 'deepgram' }),
-        window.api.secretHas({ key: 'anthropic' }),
-      ])
-      setDeepgramKeyPresent(dg.has)
-      setAnthropicKeyPresent(ant.has)
+      // Check key presence (never retrieves the value). Tolerate failure.
+      try {
+        const [dg, ant] = await Promise.all([
+          window.api.secretHas({ key: 'deepgram' }),
+          window.api.secretHas({ key: 'anthropic' }),
+        ])
+        setDeepgramKeyPresent(dg.has)
+        setAnthropicKeyPresent(ant.has)
+      } catch (err) {
+        console.error('[Settings] secretHas failed:', err)
+      }
     })()
   }, [])
 

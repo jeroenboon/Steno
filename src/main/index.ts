@@ -213,16 +213,19 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
 function createWindow(): BrowserWindow {
   const preloadPath = join(__dirname, '../preload/index.js')
   const opts = createWindowOptions(preloadPath)
-  const mainWindow = new BrowserWindow(opts)
+  return new BrowserWindow(opts)
+}
 
+// Load the renderer. Called AFTER IPC handlers are registered so the renderer
+// can never invoke a channel before its handler exists (that race left the
+// Settings screen stuck on "Instellingen laden...").
+function loadRenderer(mainWindow: BrowserWindow): void {
   const rendererUrl = process.env.ELECTRON_RENDERER_URL
   if (rendererUrl !== undefined) {
     void mainWindow.loadURL(rendererUrl)
   } else {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
-
-  return mainWindow
 }
 
 // ---------------------------------------------------------------------------
@@ -234,13 +237,19 @@ app
   .then(async () => {
     applyContentSecurityPolicy()
     registerDisplayMediaHandler()
-    // Create window first so registerIpcHandlers can bind to its webContents.
+    // Create the window (does NOT load the renderer yet) so registerIpcHandlers
+    // can bind to its webContents, THEN register handlers, THEN load the
+    // renderer. This ordering guarantees every IPC handler exists before any
+    // renderer code can invoke it.
     const mainWindow = createWindow()
     await registerIpcHandlers(mainWindow)
+    loadRenderer(mainWindow)
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow()
+        // IPC handlers are already registered (global on ipcMain); just create
+        // and load a fresh window.
+        loadRenderer(createWindow())
       }
     })
   })
