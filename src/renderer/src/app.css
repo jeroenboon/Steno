@@ -143,12 +143,121 @@ body,
   padding: var(--space-8) var(--space-10);
 }
 
+.screen--home,
 .screen--draft,
 .screen--live,
 .screen--review {
   background-image: radial-gradient(var(--grid-line) 1.1px, transparent 1.2px);
   background-size: var(--grid-size) var(--grid-size);
   background-position: var(--space-4) var(--space-4);
+}
+
+/* --- Home screen --- */
+
+.home__date-header {
+  display: block;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-style: italic;
+  color: var(--color-proposed);
+  letter-spacing: 0.02em;
+  margin-bottom: var(--space-6);
+  user-select: none;
+}
+
+.home__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-10);
+}
+
+/* Interrupted meeting callout: kraft-bordered card above the CTA */
+.home__interrupted-callout {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-1);
+  width: 100%;
+  max-width: 480px;
+}
+
+.home__interrupted-label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+/* History section */
+.home__history-heading {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-3) 0;
+}
+
+.home__empty {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  margin: 0;
+  padding: var(--space-6) 0;
+  border-bottom: 1px solid var(--color-border-dim);
+}
+
+.home__meeting-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.home__meeting-item {
+  border-bottom: 1px solid var(--color-border-dim);
+}
+
+.home__meeting-btn {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-3) 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.home__meeting-btn:hover {
+  background-color: var(--color-surface-1);
+  padding-left: var(--space-2);
+  padding-right: var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+  margin-right: calc(-1 * var(--space-2));
+}
+
+.home__meeting-title {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.home__meeting-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .screen--settings {

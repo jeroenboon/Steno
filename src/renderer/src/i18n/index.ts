@@ -74,6 +74,8 @@ const nl = {
   'home.meetings.heading': 'Eerdere vergaderingen',
   'home.meetings.empty': 'Nog geen vergaderingen.',
   'home.meeting.interrupted': 'onderbroken',
+  'home.interrupted.callout': 'Vergadering onderbroken',
+  'home.interrupted.resume': 'Hervat',
 
   // Settings screen (item 0016)
   'nav.settings': 'Instellingen',

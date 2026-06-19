@@ -9,7 +9,7 @@
  * - Clicking an ended meeting loads it and navigates to review
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import React from 'react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -36,6 +36,20 @@ describe('HomeScreen', () => {
     mockApi.meetingList.mockResolvedValue({ meetings: [] })
     render(<HomeScreen />)
     expect(screen.getByTestId('home-new-meeting')).toBeInTheDocument()
+  })
+
+  it("renders today's date as page header", () => {
+    mockApi.meetingList.mockResolvedValue({ meetings: [] })
+    render(<HomeScreen />)
+
+    const header = screen.getByTestId('home-date-header')
+    const expected = new Date().toLocaleDateString('nl-NL', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
+    expect(header).toHaveTextContent(expected)
   })
 
   it('"Nieuwe vergadering" navigates to draft', async () => {
@@ -117,7 +131,7 @@ describe('HomeScreen', () => {
     })
   })
 
-  it('interrupted meetings are shown but their button is disabled', async () => {
+  it('interrupted meeting is shown in a callout, not in the history list', async () => {
     mockApi.meetingList.mockResolvedValue({
       meetings: [
         {
@@ -132,10 +146,28 @@ describe('HomeScreen', () => {
     })
     render(<HomeScreen />)
 
-    await waitFor(() => {
-      expect(screen.getByTestId('home-meeting-item')).toBeInTheDocument()
+    const callout = await screen.findByTestId('home-interrupted-callout')
+    expect(callout).toHaveTextContent('Interrupted meeting')
+    expect(screen.queryByTestId('home-meeting-item')).not.toBeInTheDocument()
+  })
+
+  it('Hervat button in interrupted callout is disabled', async () => {
+    mockApi.meetingList.mockResolvedValue({
+      meetings: [
+        {
+          id: 'mtg-live',
+          title: 'Interrupted meeting',
+          state: 'live',
+          paused: false,
+          createdAt: '2026-06-10T09:00:00.000Z',
+          primaryLanguage: 'nl',
+        },
+      ],
     })
-    const btn = screen.getByRole('button', { name: /Interrupted meeting/i })
-    expect(btn).toBeDisabled()
+    render(<HomeScreen />)
+
+    const callout = await screen.findByTestId('home-interrupted-callout')
+    const hervat = within(callout).getByRole('button', { name: /hervat/i })
+    expect(hervat).toBeDisabled()
   })
 })
