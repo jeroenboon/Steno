@@ -172,6 +172,24 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
+describe('LiveScreen — guard: no active meeting', () => {
+  it('shows empty state when activeMeeting is null', async () => {
+    useAppStore.setState({ activeMeeting: null, route: 'live' })
+    render(<LiveScreen />)
+
+    expect(await screen.findByTestId('live-noactive')).toBeInTheDocument()
+    expect(screen.queryByTestId('end-meeting-btn')).not.toBeInTheDocument()
+  })
+
+  it('does not start audio capture when activeMeeting is null', async () => {
+    useAppStore.setState({ activeMeeting: null, route: 'live' })
+    render(<LiveScreen />)
+
+    await screen.findByTestId('live-noactive')
+    expect(mockApi.audioStart).not.toHaveBeenCalled()
+  })
+})
+
 describe('LiveScreen — item 0018 items UI', () => {
   it('renders the live screen', () => {
     render(<LiveScreen />)

@@ -104,10 +104,13 @@ describe('App routing — screens render for each route', () => {
     expect(await screen.findByTestId('screen-review')).toBeInTheDocument()
   })
 
-  it('does not render the Live screen when on Draft', async () => {
+  it('hides the Live screen when on Draft (but keeps it mounted while active)', async () => {
+    useAppStore.setState({ route: 'draft', activeMeeting: 'mtg-1' })
     renderApp()
     expect(await screen.findByTestId('screen-draft')).toBeInTheDocument()
-    expect(screen.queryByTestId('screen-live')).not.toBeInTheDocument()
+    // screen-live remains in DOM for persistent audio but is aria-hidden
+    const liveLayer = document.querySelector('[aria-hidden="true"]')
+    expect(liveLayer).toBeInTheDocument()
   })
 })
 
@@ -135,5 +138,62 @@ describe('EgressIndicator — present on every screen', () => {
       useAppStore.getState().setRoute('review')
     })
     expect(await screen.findByTestId('egress-indicator')).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tests: Live tab nav guards
+// ---------------------------------------------------------------------------
+
+describe('Live tab nav guards', () => {
+  it('Live tab is disabled when no meeting is active', async () => {
+    useAppStore.setState({ route: 'draft', activeMeeting: null })
+    renderApp()
+
+    const liveTab = await screen.findByRole('button', { name: /live/i })
+    expect(liveTab).toBeDisabled()
+  })
+
+  it('Draft tab is disabled when a meeting is active', async () => {
+    useAppStore.setState({ route: 'live', activeMeeting: 'mtg-1' })
+    renderApp()
+
+    const draftTab = await screen.findByRole('button', { name: /voorbereiding/i })
+    expect(draftTab).toBeDisabled()
+  })
+
+  it('Live tab is enabled when a meeting is active', async () => {
+    useAppStore.setState({ route: 'draft', activeMeeting: 'mtg-1' })
+    renderApp()
+
+    const liveTab = await screen.findByRole('button', { name: /live/i })
+    expect(liveTab).not.toBeDisabled()
+  })
+
+  it('Live tab shows a recording indicator when meeting is active', async () => {
+    useAppStore.setState({ route: 'home', activeMeeting: 'mtg-1' })
+    renderApp()
+
+    expect(await screen.findByTestId('nav-live-dot')).toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Tests: LiveScreen persists while navigating other tabs
+// ---------------------------------------------------------------------------
+
+describe('LiveScreen persistent mount', () => {
+  it('keeps LiveScreen in DOM when navigating away from live route', async () => {
+    useAppStore.setState({ route: 'live', activeMeeting: 'mtg-1' })
+    renderApp()
+
+    expect(await screen.findByTestId('screen-live')).toBeInTheDocument()
+
+    act(() => {
+      useAppStore.getState().setRoute('home')
+    })
+
+    // screen-live stays mounted (hidden), audio continues
+    expect(screen.getByTestId('screen-live')).toBeInTheDocument()
   })
 })

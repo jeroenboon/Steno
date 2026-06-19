@@ -123,12 +123,51 @@ body,
   font-size: 11px;
 }
 
+/* Disabled tab (Live when no meeting, Draft while meeting is active) */
+.app-nav__tab--disabled,
+.app-nav__tab:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Recording dot inside the Live nav tab */
+.nav-live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--color-live);
+  margin-left: var(--space-2);
+  vertical-align: middle;
+  animation: live-dot-pulse 1.2s var(--ease-in-out) infinite alternate;
+}
+
+@keyframes live-dot-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.3;
+  }
+}
+
 /* --- Screen content area --- */
 
 .app-content {
   flex: 1;
   overflow: hidden;
   position: relative;
+}
+
+/* Live-layer: always in the DOM when a meeting is active so audio persists.
+ * Fills the full content area; hidden via display:none when not on live route
+ * (set inline in App.tsx). The sibling app-screen-layer sits on top. */
+.app-live-layer,
+.app-screen-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
 }
 
 /* --- Screens + paper grid ---
@@ -143,11 +182,16 @@ body,
   padding: var(--space-8) var(--space-10);
 }
 
-.screen--home,
 .screen--draft,
 .screen--live,
 .screen--review {
   background-image: radial-gradient(var(--grid-line) 1.1px, transparent 1.2px);
+  background-size: var(--grid-size) var(--grid-size);
+  background-position: var(--space-4) var(--space-4);
+}
+
+.screen--home {
+  background-image: radial-gradient(rgba(30, 27, 23, 0.14) 1.5px, transparent 1.6px);
   background-size: var(--grid-size) var(--grid-size);
   background-position: var(--space-4) var(--space-4);
 }
@@ -171,6 +215,29 @@ body,
   align-items: flex-start;
   gap: var(--space-3);
   margin-bottom: var(--space-10);
+}
+
+/* Active meeting callout: ink-red bordered, with pulsing dot */
+.home__active-callout {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-live);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-1);
+  width: 100%;
+  max-width: 480px;
+}
+
+.home__active-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-live);
+  flex-shrink: 0;
+  animation: live-dot-pulse 1.2s var(--ease-in-out) infinite alternate;
 }
 
 /* Interrupted meeting callout: kraft-bordered card above the CTA */
@@ -258,6 +325,23 @@ body,
   color: var(--color-text-tertiary);
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* --- Live screen: no-active-meeting empty state --- */
+
+.live-noactive {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-10);
+}
+
+.live-noactive__message {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  margin: 0;
 }
 
 .screen--settings {

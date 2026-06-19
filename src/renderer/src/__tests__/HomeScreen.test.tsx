@@ -132,6 +132,7 @@ describe('HomeScreen', () => {
   })
 
   it('interrupted meeting is shown in a callout, not in the history list', async () => {
+    useAppStore.setState({ activeMeeting: null })
     mockApi.meetingList.mockResolvedValue({
       meetings: [
         {
@@ -152,6 +153,7 @@ describe('HomeScreen', () => {
   })
 
   it('Hervat button in interrupted callout is disabled', async () => {
+    useAppStore.setState({ activeMeeting: null })
     mockApi.meetingList.mockResolvedValue({
       meetings: [
         {
@@ -169,5 +171,50 @@ describe('HomeScreen', () => {
     const callout = await screen.findByTestId('home-interrupted-callout')
     const hervat = within(callout).getByRole('button', { name: /hervat/i })
     expect(hervat).toBeDisabled()
+  })
+
+  it('shows active callout when meeting is currently running in this session', async () => {
+    useAppStore.setState({ activeMeeting: 'mtg-live' })
+    mockApi.meetingList.mockResolvedValue({
+      meetings: [
+        {
+          id: 'mtg-live',
+          title: 'Q4 Kick-off',
+          state: 'live',
+          paused: false,
+          createdAt: '2026-06-10T09:00:00.000Z',
+          primaryLanguage: 'nl',
+        },
+      ],
+    })
+    render(<HomeScreen />)
+
+    const callout = await screen.findByTestId('home-active-callout')
+    expect(callout).toHaveTextContent('Q4 Kick-off')
+    expect(screen.queryByTestId('home-interrupted-callout')).not.toBeInTheDocument()
+  })
+
+  it('Terug button in active callout navigates to live screen', async () => {
+    const user = userEvent.setup()
+    useAppStore.setState({ activeMeeting: 'mtg-live' })
+    mockApi.meetingList.mockResolvedValue({
+      meetings: [
+        {
+          id: 'mtg-live',
+          title: 'Q4 Kick-off',
+          state: 'live',
+          paused: false,
+          createdAt: '2026-06-10T09:00:00.000Z',
+          primaryLanguage: 'nl',
+        },
+      ],
+    })
+    render(<HomeScreen />)
+
+    const callout = await screen.findByTestId('home-active-callout')
+    const terug = within(callout).getByRole('button', { name: /terug/i })
+    await user.click(terug)
+
+    expect(useAppStore.getState().route).toBe('live')
   })
 })

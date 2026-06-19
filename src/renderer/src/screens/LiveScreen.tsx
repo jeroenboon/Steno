@@ -521,6 +521,11 @@ export function LiveScreen(): React.JSX.Element {
 
   // --- IPC subscriptions ---
   useEffect(() => {
+    // Guard: do not start audio if no meeting is active. The persistent-mount
+    // pattern in App keeps LiveScreen in the DOM while navigating other tabs;
+    // this prevents a ghost session when the screen is visible with no meeting.
+    if (activeMeeting === null) return
+
     const service = new AudioCaptureService()
     serviceRef.current = service
 
@@ -714,6 +719,26 @@ export function LiveScreen(): React.JSX.Element {
 
   // --- Render ---
   const isRecording = micPermission === 'granted'
+
+  if (activeMeeting === null) {
+    return (
+      <main data-testid="screen-live" className="screen screen--live">
+        <div className="live-noactive" data-testid="live-noactive">
+          <p className="live-noactive__message">{t('live.noactive.message')}</p>
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => {
+              setRoute('draft')
+            }}
+          >
+            {t('live.noactive.action')}
+          </button>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main
       data-testid="screen-live"

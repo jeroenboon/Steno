@@ -76,6 +76,8 @@ const nl = {
   'home.meeting.interrupted': 'onderbroken',
   'home.interrupted.callout': 'Vergadering onderbroken',
   'home.interrupted.resume': 'Hervat',
+  'home.active.callout': 'Vergadering loopt',
+  'home.active.back': 'Terug',
 
   // Settings screen (item 0016)
   'nav.settings': 'Instellingen',
@@ -173,6 +175,8 @@ const nl = {
 
   // Live screen — end meeting (item 0021)
   'live.end.button': 'Vergadering beëindigen',
+  'live.noactive.message': 'Ga naar Voorbereiding om een vergadering te starten.',
+  'live.noactive.action': 'Naar voorbereiding',
 
   // Review screen (item 0021)
   'review.summary.heading': 'Discussiesamenvatting',

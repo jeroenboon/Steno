@@ -25,6 +25,7 @@ import { useAppStore } from '../store/appStore'
 export function HomeScreen(): React.JSX.Element {
   const setRoute = useAppStore((s) => s.setRoute)
   const loadMeeting = useAppStore((s) => s.loadMeeting)
+  const activeMeeting = useAppStore((s) => s.activeMeeting)
 
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,7 +44,9 @@ export function HomeScreen(): React.JSX.Element {
       })
   }, [])
 
-  const interruptedMeetings = meetings.filter((m) => m.state === 'live')
+  const interruptedMeetings = meetings.filter((m) => m.state === 'live' && m.id !== activeMeeting)
+  const activeLiveMeeting =
+    meetings.find((m) => m.state === 'live' && m.id === activeMeeting) ?? null
   const endedMeetings = meetings.filter((m) => m.state === 'ended')
 
   function handleNewMeeting(): void {
@@ -80,6 +83,23 @@ export function HomeScreen(): React.JSX.Element {
       </time>
 
       <div className="home__actions">
+        {activeLiveMeeting !== null && (
+          <div className="home__active-callout" data-testid="home-active-callout">
+            <span className="home__active-dot" aria-hidden="true" />
+            <span className="home__interrupted-label">
+              {t('home.active.callout')} · {activeLiveMeeting.title}
+            </span>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => {
+                setRoute('live')
+              }}
+            >
+              {t('home.active.back')}
+            </button>
+          </div>
+        )}
         {interruptedMeetings.length > 0 && (
           <div className="home__interrupted-callout" data-testid="home-interrupted-callout">
             <span className="home__interrupted-label">

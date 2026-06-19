@@ -38,13 +38,12 @@ const DEFAULT_EGRESS: EgressState = {
 }
 
 // ---------------------------------------------------------------------------
-// Screen registry
+// Screen registry (all screens except Live, which is persistently mounted)
 // ---------------------------------------------------------------------------
 
-const SCREENS: Record<AppRoute, React.JSX.Element> = {
+const SCREENS: Partial<Record<AppRoute, React.JSX.Element>> = {
   home: <HomeScreen />,
   draft: <DraftScreen />,
-  live: <LiveScreen />,
   review: <ReviewScreen />,
   settings: <SettingsScreen />,
 }
@@ -73,6 +72,7 @@ const NAV_TABS: NavTab[] = [
 export function App(): React.JSX.Element {
   const route = useAppStore((s) => s.route)
   const setRoute = useAppStore((s) => s.setRoute)
+  const activeMeeting = useAppStore((s) => s.activeMeeting)
 
   const [egressState, setEgressState] = useState<EgressState>(DEFAULT_EGRESS)
   const [keysConfigured, setKeysConfigured] = useState<boolean | null>(null)
@@ -115,7 +115,7 @@ export function App(): React.JSX.Element {
     })()
   }, [])
 
-  const currentScreen = SCREENS[route]
+  const isMeetingActive = activeMeeting !== null
 
   return (
     <div className="app-shell">
@@ -124,20 +124,32 @@ export function App(): React.JSX.Element {
         <span className="app-chrome__name">{t('app.name')}</span>
 
         <nav className="app-nav" aria-label="Schermen">
-          {NAV_TABS.map(({ route: tabRoute, label }) => (
-            <button
-              key={tabRoute}
-              type="button"
-              data-testid={tabRoute === 'settings' ? 'nav-settings' : undefined}
-              className={`app-nav__tab${route === tabRoute ? ' app-nav__tab--active' : ''}`}
-              onClick={() => {
-                setRoute(tabRoute)
-              }}
-              aria-current={route === tabRoute ? 'page' : undefined}
-            >
-              {label}
-            </button>
-          ))}
+          {NAV_TABS.map(({ route: tabRoute, label }) => {
+            // Live tab: only enabled when a meeting is active
+            const isLiveTab = tabRoute === 'live'
+            // Draft tab: disabled while a meeting is running
+            const isDraftTab = tabRoute === 'draft'
+            const isDisabled = (isLiveTab && !isMeetingActive) || (isDraftTab && isMeetingActive)
+
+            return (
+              <button
+                key={tabRoute}
+                type="button"
+                data-testid={tabRoute === 'settings' ? 'nav-settings' : undefined}
+                className={`app-nav__tab${route === tabRoute ? ' app-nav__tab--active' : ''}${isDisabled ? ' app-nav__tab--disabled' : ''}`}
+                disabled={isDisabled}
+                onClick={() => {
+                  if (!isDisabled) setRoute(tabRoute)
+                }}
+                aria-current={route === tabRoute ? 'page' : undefined}
+              >
+                {label}
+                {isLiveTab && isMeetingActive && (
+                  <span className="nav-live-dot" data-testid="nav-live-dot" aria-hidden="true" />
+                )}
+              </button>
+            )
+          })}
         </nav>
 
         <EgressIndicator egressState={egressState} />
@@ -161,7 +173,26 @@ export function App(): React.JSX.Element {
       )}
 
       {/* Screen content */}
-      <div className="app-content">{currentScreen}</div>
+      <div className="app-content">
+        {/*
+         * LiveScreen is always mounted when a meeting is active so that audio
+         * capture continues while the user browses other tabs. It is hidden
+         * via CSS when not on the 'live' route. When no meeting is active it
+         * is only rendered (and shown) if the user navigates to 'live', so
+         * that the empty-state CTA is accessible.
+         */}
+        <div
+          className="app-live-layer"
+          style={{ display: route === 'live' || isMeetingActive ? undefined : 'none' }}
+          aria-hidden={route !== 'live'}
+        >
+          <LiveScreen />
+        </div>
+
+        {route !== 'live' && SCREENS[route] != null && (
+          <div className="app-screen-layer">{SCREENS[route]}</div>
+        )}
+      </div>
     </div>
   )
 }
