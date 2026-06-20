@@ -30,6 +30,12 @@ const mockApi = {
   egressState: vi.fn<[], Promise<EgressState>>(),
   secretSet: vi.fn<[{ key: string; value: string }], Promise<{ ok: true }>>(),
   secretHas: vi.fn<[{ key: string }], Promise<{ has: boolean }>>(),
+  modelStatus: vi.fn<
+    [{ modelId: string }],
+    Promise<{ modelId: string; downloaded: boolean; sizeBytes: number }>
+  >(),
+  modelDownload: vi.fn<[{ modelId: string }], Promise<{ ok: true }>>(),
+  onModelProgress: vi.fn(() => () => undefined),
   ping: vi.fn(),
   meetingCreate: vi.fn(),
   agendaItemAdd: vi.fn(),
@@ -67,6 +73,13 @@ function setup(overrides?: Partial<typeof mockApi>): void {
     egressState: vi.fn().mockResolvedValue(defaultEgress),
     secretSet: vi.fn().mockResolvedValue({ ok: true }),
     secretHas: vi.fn().mockResolvedValue({ has: false }),
+    modelStatus: vi.fn().mockResolvedValue({
+      modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+      downloaded: false,
+      sizeBytes: 0,
+    }),
+    modelDownload: vi.fn().mockResolvedValue({ ok: true }),
+    onModelProgress: vi.fn(() => () => undefined),
     ...overrides,
   })
 }
@@ -95,7 +108,7 @@ describe('SettingsScreen — ASR provider selection', () => {
     })
   })
 
-  it('shows local-parakeet as a disabled option', async () => {
+  it('shows local-parakeet as a selectable option (not disabled)', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
       const options = screen.getAllByRole('option')
@@ -103,7 +116,7 @@ describe('SettingsScreen — ASR provider selection', () => {
         | HTMLOptionElement
         | undefined
       expect(parakeet).toBeDefined()
-      expect(parakeet?.disabled).toBe(true)
+      expect(parakeet?.disabled).toBe(false)
     })
   })
 })
@@ -354,6 +367,143 @@ describe('SettingsScreen — no key configured state', () => {
     render(<SettingsScreen />)
     await waitFor(() => {
       expect(screen.queryByTestId('deepgram-key-missing')).toBeNull()
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 7. Local model download UI (item 0024)
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — local model download (item 0024)', () => {
+  const parakeetSettings: AppSettings = {
+    ...DEFAULT_SETTINGS,
+    asrProvider: 'local-parakeet',
+  }
+
+  it('shows the download section when Parakeet is selected and model is not downloaded', async () => {
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(parakeetSettings),
+      modelStatus: vi.fn().mockResolvedValue({
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        downloaded: false,
+        sizeBytes: 0,
+      }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('model-download-section')).toBeDefined()
+    })
+  })
+
+  it('download button calls modelDownload when clicked', async () => {
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(parakeetSettings),
+      modelStatus: vi.fn().mockResolvedValue({
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        downloaded: false,
+        sizeBytes: 0,
+      }),
+      modelDownload: vi.fn().mockResolvedValue({ ok: true }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('download-model-btn'))
+
+    act(() => {
+      fireEvent.click(screen.getByTestId('download-model-btn'))
+    })
+
+    await waitFor(() => {
+      expect(mockApi.modelDownload).toHaveBeenCalledWith({
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+      })
+    })
+  })
+
+  it('shows the installed section when model is already downloaded', async () => {
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(parakeetSettings),
+      modelStatus: vi.fn().mockResolvedValue({
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        downloaded: true,
+        sizeBytes: 350_000_000,
+      }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('model-installed-section')).toBeDefined()
+      expect(screen.queryByTestId('model-download-section')).toBeNull()
+    })
+  })
+
+  it('shows progress bar after onModelProgress event with done: false', async () => {
+    let progressCallback: ((evt: import('../../../shared/ipc').ModelProgressEvent) => void) | null =
+      null
+
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(parakeetSettings),
+      modelStatus: vi.fn().mockResolvedValue({
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        downloaded: false,
+        sizeBytes: 0,
+      }),
+      onModelProgress: vi.fn(
+        (cb: (evt: import('../../../shared/ipc').ModelProgressEvent) => void) => {
+          progressCallback = cb
+          return () => undefined
+        },
+      ),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('model-download-section'))
+
+    act(() => {
+      progressCallback?.({
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        bytesReceived: 50_000,
+        bytesTotal: 100_000,
+        done: false,
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('model-progress')).toBeDefined()
+    })
+  })
+
+  it('hides download section when onModelProgress fires with done: true (no error)', async () => {
+    let progressCallback: ((evt: import('../../../shared/ipc').ModelProgressEvent) => void) | null =
+      null
+
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(parakeetSettings),
+      modelStatus: vi.fn().mockResolvedValue({
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        downloaded: false,
+        sizeBytes: 0,
+      }),
+      onModelProgress: vi.fn(
+        (cb: (evt: import('../../../shared/ipc').ModelProgressEvent) => void) => {
+          progressCallback = cb
+          return () => undefined
+        },
+      ),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('model-download-section'))
+
+    act(() => {
+      progressCallback?.({
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        bytesReceived: 100_000,
+        bytesTotal: 100_000,
+        done: true,
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('model-download-section')).toBeNull()
+      expect(screen.getByTestId('model-installed-section')).toBeDefined()
     })
   })
 })

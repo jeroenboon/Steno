@@ -19,13 +19,18 @@ const require = createRequire(import.meta.url)
 // Electron executable.
 const electronPath = require('electron')
 
-// Probe script executed *inside* Electron's Node. Exercises the real failure
-// path: loading and opening better-sqlite3 (the app does this at startup).
+// Probe script executed *inside* Electron's Node.
+// Exercises the real failure path for each native module.
 const probe = [
+  // better-sqlite3 (always required)
   "const Database = require('better-sqlite3');",
   "const db = new Database(':memory:');",
   "db.pragma('foreign_keys = ON');",
   'db.close();',
+  // onnxruntime-genai (optional — skip if not installed)
+  "try { require('onnxruntime-genai'); console.log('[smoke] onnxruntime-genai OK'); }",
+  "catch (e) { if (e.code === 'MODULE_NOT_FOUND') { console.log('[smoke] onnxruntime-genai not installed, skipping'); }",
+  'else { throw e; } }',
   "console.log('native modules OK under Electron');",
 ].join(' ')
 

@@ -86,7 +86,11 @@ const nl = {
 
   'settings.asr.heading': 'Spraakherkenning (ASR)',
   'settings.asr.deepgram.label': 'Deepgram (cloud)',
-  'settings.asr.parakeet.label': 'Lokaal Parakeet (binnenkort)',
+  'settings.asr.parakeet.label': 'Lokaal Parakeet (on-device)',
+  'settings.asr.parakeet.notDownloaded': 'Lokaal model nog niet gedownload.',
+  'settings.asr.parakeet.download': 'Download model',
+  'settings.asr.parakeet.downloading': 'Model downloaden...',
+  'settings.asr.parakeet.installed': 'Lokaal model geïnstalleerd.',
   'settings.asr.key.label': 'Deepgram API-sleutel',
   'settings.asr.key.placeholder': 'dg-...',
   'settings.asr.key.save': 'Opslaan',

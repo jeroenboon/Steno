@@ -63,6 +63,11 @@ import type {
   MeetingListResponse,
   MeetingLoadRequest,
   MeetingLoadResponse,
+  ModelStatusRequest,
+  ModelStatusResponse,
+  ModelDownloadRequest,
+  ModelDownloadResponse,
+  ModelProgressEvent,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -217,6 +222,25 @@ const api: RendererApi = {
     ipcRenderer.invoke('meeting:list', req) as Promise<MeetingListResponse>,
   meetingLoad: (req: MeetingLoadRequest) =>
     ipcRenderer.invoke('meeting:load', req) as Promise<MeetingLoadResponse>,
+
+  // ---------------------------------------------------------------------------
+  // Local model management (item 0024)
+  // ---------------------------------------------------------------------------
+
+  modelStatus: (req: ModelStatusRequest) =>
+    ipcRenderer.invoke('model:status', req) as Promise<ModelStatusResponse>,
+  modelDownload: (req: ModelDownloadRequest) =>
+    ipcRenderer.invoke('model:download', req) as Promise<ModelDownloadResponse>,
+
+  onModelProgress: (cb: (evt: ModelProgressEvent) => void): UnsubscribeFn => {
+    const listener = (_event: Electron.IpcRendererEvent, evt: ModelProgressEvent) => {
+      cb(evt)
+    }
+    ipcRenderer.on('model:progress', listener)
+    return () => {
+      ipcRenderer.removeListener('model:progress', listener)
+    }
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

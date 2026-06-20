@@ -24,6 +24,10 @@
  * They are never logged here (or in the provider constructors).
  */
 
+import { join } from 'node:path'
+
+import { app } from 'electron'
+
 import type { ASRProvider, ExtractionProvider } from '@shared/providers'
 
 import {
@@ -32,6 +36,8 @@ import {
 } from '../providers/AnthropicExtractionProvider'
 import { CustomOpenAIExtractionProvider } from '../providers/CustomOpenAIExtractionProvider'
 import { DeepgramAsrProvider } from '../providers/DeepgramAsrProvider'
+import { LocalAsrProvider } from '../providers/LocalAsrProvider'
+import { ModelDownloader } from '../providers/nemotron/ModelDownloader'
 
 import type { SecretStorage } from './SecretStorage'
 import type { AppSettings } from './settingsSchema'
@@ -144,11 +150,21 @@ export function tryBuildExtractionProvider(
 
 function buildAsrProvider(settings: AppSettings, storage: SecretStorage): ASRProvider {
   switch (settings.asrProvider) {
-    case 'local-parakeet':
-      throw new Error(
-        'ASR provider "local-parakeet" is not yet implemented. ' +
-          'It will be available in item 0023. Select "deepgram" in settings to continue.',
+    case 'local-parakeet': {
+      const modelDir = join(
+        app.getPath('userData'),
+        'models',
+        'nemotron-3.5-asr-streaming-0.6b-int4',
       )
+      const downloader = new ModelDownloader(modelDir)
+      if (!downloader.isDownloaded()) {
+        throw new Error(
+          'Lokaal ASR-model is nog niet gedownload. ' +
+            'Open Instellingen en download het model eerst.',
+        )
+      }
+      return new LocalAsrProvider({ modelDir, language: settings.primaryLanguage })
+    }
 
     case 'deepgram': {
       const apiKey = storage.getSecret('deepgram')

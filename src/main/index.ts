@@ -27,6 +27,7 @@ import { meetingRepo } from './db/repos/meetingRepo'
 import { participantRepo } from './db/repos/participantRepo'
 import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
 import { createIpcRegistry } from './ipc-registry'
+import { ModelDownloader } from './providers/nemotron/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
 import { LiveExtractionRuntime } from './services/liveExtractionRuntime'
 import { tryBuildAsrProvider, tryBuildExtractionProvider } from './settings/providerFactory'
@@ -154,6 +155,8 @@ const IPC_CHANNELS: IpcChannel[] = [
   'export:copyMarkdown',
   'meeting:list',
   'meeting:load',
+  'model:status',
+  'model:download',
 ]
 
 async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
@@ -385,6 +388,12 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
         participants: pRepo.listByMeeting(meetingId),
         summaries: dsRepo.listByMeeting(meetingId),
       }
+    },
+    modelDownloader: new ModelDownloader(
+      join(userData, 'models', 'nemotron-3.5-asr-streaming-0.6b-int4'),
+    ),
+    pushModelProgress: (evt) => {
+      mainWindow.webContents.send('model:progress', evt)
     },
   })
 

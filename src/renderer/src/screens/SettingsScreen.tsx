@@ -79,6 +79,13 @@ export function SettingsScreen(): React.JSX.Element {
   const [deepgramKeyPresent, setDeepgramKeyPresent] = useState(false)
   const [anthropicKeyPresent, setAnthropicKeyPresent] = useState(false)
 
+  // ---- local model state ----
+  const [modelDownloaded, setModelDownloaded] = useState(false)
+  const [modelProgress, setModelProgress] = useState<{ received: number; total: number } | null>(
+    null,
+  )
+  const [modelError, setModelError] = useState<string | null>(null)
+
   // ---- key entry (password fields — cleared after save, never stored) ----
   const [deepgramKeyEntry, setDeepgramKeyEntry] = useState('')
   const [deepgramKeySave, setDeepgramKeySave] = useState<KeySaveState>('idle')
@@ -132,7 +139,35 @@ export function SettingsScreen(): React.JSX.Element {
       } catch (err) {
         console.error('[Settings] secretHas failed:', err)
       }
+
+      // Check local model status
+      try {
+        const status = await window.api.modelStatus({
+          modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        })
+        setModelDownloaded(status.downloaded)
+      } catch (err) {
+        console.error('[Settings] modelStatus failed:', err)
+      }
     })()
+  }, [])
+
+  // Subscribe to model download progress events
+  useEffect(() => {
+    const unsub = window.api.onModelProgress((evt) => {
+      if (evt.done) {
+        setModelProgress(null)
+        if (evt.error !== undefined) {
+          setModelError(evt.error)
+        } else {
+          setModelDownloaded(true)
+          setModelError(null)
+        }
+      } else {
+        setModelProgress({ received: evt.bytesReceived, total: evt.bytesTotal })
+      }
+    })
+    return unsub
   }, [])
 
   if (settings === null) {
@@ -235,6 +270,17 @@ export function SettingsScreen(): React.JSX.Element {
     })
   }
 
+  async function handleDownloadModel(): Promise<void> {
+    setModelError(null)
+    setModelProgress({ received: 0, total: 1 })
+    try {
+      await window.api.modelDownload({ modelId: 'nemotron-3.5-asr-streaming-0.6b-int4' })
+    } catch (err) {
+      setModelProgress(null)
+      setModelError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const isCustomOpenAI = settings.extractionProvider === 'custom-openai'
 
   // ---- render ----
@@ -267,9 +313,7 @@ export function SettingsScreen(): React.JSX.Element {
               }}
             >
               <option value="deepgram">{t('settings.asr.deepgram.label')}</option>
-              <option value="local-parakeet" disabled>
-                {t('settings.asr.parakeet.label')}
-              </option>
+              <option value="local-parakeet">{t('settings.asr.parakeet.label')}</option>
             </select>
           </div>
 
@@ -280,6 +324,50 @@ export function SettingsScreen(): React.JSX.Element {
             </span>{' '}
             {disclosure.audioDisclosure}
           </p>
+
+          {/* Local model download */}
+          {settings.asrProvider === 'local-parakeet' && !modelDownloaded && (
+            <div className="settings-model-download" data-testid="model-download-section">
+              <p className="settings-model-info">{t('settings.asr.parakeet.notDownloaded')}</p>
+              {modelProgress === null ? (
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  data-testid="download-model-btn"
+                  onClick={() => {
+                    void handleDownloadModel()
+                  }}
+                >
+                  {t('settings.asr.parakeet.download')} (~350 MB)
+                </button>
+              ) : (
+                <div className="settings-model-progress" data-testid="model-progress">
+                  <progress
+                    value={modelProgress.received}
+                    max={modelProgress.total}
+                    aria-label={t('settings.asr.parakeet.downloading')}
+                  />
+                  <span>
+                    {modelProgress.total > 0
+                      ? `${String(Math.round((modelProgress.received / modelProgress.total) * 100))}%`
+                      : '0%'}
+                  </span>
+                </div>
+              )}
+              {modelError !== null && (
+                <p className="form-error" role="alert">
+                  {modelError}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Local model installed indicator */}
+          {settings.asrProvider === 'local-parakeet' && modelDownloaded && (
+            <div data-testid="model-installed-section">
+              <p className="settings-model-info">{t('settings.asr.parakeet.installed')}</p>
+            </div>
+          )}
 
           {/* Deepgram key entry */}
           {settings.asrProvider === 'deepgram' && (

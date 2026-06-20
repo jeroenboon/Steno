@@ -7,9 +7,14 @@
  * - Error handling on invalid payloads
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 
 import { createIpcRegistry } from './ipc-registry'
+import { ModelDownloader } from './providers/nemotron/ModelDownloader'
 
 describe('IPC registry — item 0014 (meeting/agenda/participant ops)', () => {
   let registry: ReturnType<typeof createIpcRegistry>
@@ -317,6 +322,131 @@ describe('IPC registry — meeting:list and meeting:load (item 0023)', () => {
       })
 
       await expect(registry.dispatch('meeting:load', { meetingId: '' })).rejects.toThrow()
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// model:status and model:download (item 0024)
+// ---------------------------------------------------------------------------
+
+describe('IPC registry — model:status and model:download (item 0024)', () => {
+  const mockSettingsStore = {
+    current: {
+      asrProvider: 'deepgram' as const,
+      asrModel: 'nova-2',
+      extractionProvider: 'anthropic' as const,
+      extractionModel: 'claude-haiku-4-5',
+      extractionFinalModel: 'claude-sonnet-4-6',
+      primaryLanguage: 'nl',
+      customEndpoint: null,
+    },
+    save: (): Promise<void> => Promise.resolve(),
+    load: (): Promise<void> => Promise.resolve(),
+  }
+
+  let dir: string
+
+  beforeEach(() => {
+    dir = join(tmpdir(), `ipc-model-test-${String(Date.now())}`)
+    mkdirSync(dir, { recursive: true })
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  describe('model:status', () => {
+    it('returns downloaded: false when no model files are present', async () => {
+      const downloader = new ModelDownloader(dir, fetch, [{ name: 'model.onnx', sha256: '' }])
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        modelDownloader: downloader,
+      })
+
+      const response = await registry.dispatch('model:status', {
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+      })
+
+      expect(response).toMatchObject({ downloaded: false })
+    })
+
+    it('returns downloaded: true when all expected files are present', async () => {
+      writeFileSync(join(dir, 'model.onnx'), 'content')
+      const downloader = new ModelDownloader(dir, fetch, [{ name: 'model.onnx', sha256: '' }])
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        modelDownloader: downloader,
+      })
+
+      const response = await registry.dispatch('model:status', {
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+      })
+
+      expect(response).toMatchObject({ downloaded: true })
+    })
+
+    it('returns downloaded: false when modelDownloader is not provided', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+      })
+
+      const response = await registry.dispatch('model:status', {
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+      })
+
+      expect(response).toMatchObject({ downloaded: false })
+    })
+  })
+
+  describe('model:download', () => {
+    it('starts a download and emits progress events via pushModelProgress', async () => {
+      const content = 'model data'
+      const fakeFetch = vi.fn(() =>
+        Promise.resolve(
+          new Response(content, {
+            headers: { 'content-length': String(content.length) },
+          }),
+        ),
+      )
+
+      const progressEvents: unknown[] = []
+      const downloader = new ModelDownloader(dir, fakeFetch, [{ name: 'model.onnx', sha256: '' }])
+
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        modelDownloader: downloader,
+        pushModelProgress: (evt) => {
+          progressEvents.push(evt)
+        },
+      })
+
+      const response = await registry.dispatch('model:download', {
+        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+      })
+
+      expect(response).toEqual({ ok: true })
+
+      // Give the async download a chance to complete
+      await new Promise((r) => setTimeout(r, 100))
+
+      const doneEvent = progressEvents.find((e) => (e as { done: boolean }).done)
+      expect(doneEvent).toBeDefined()
+    })
+
+    it('throws when modelDownloader is not provided', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+      })
+
+      await expect(
+        registry.dispatch('model:download', { modelId: 'nemotron-3.5-asr-streaming-0.6b-int4' }),
+      ).rejects.toThrow()
     })
   })
 })

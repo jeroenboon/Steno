@@ -62,6 +62,10 @@ import {
   MeetingListResponseSchema,
   MeetingLoadRequestSchema,
   MeetingLoadResponseSchema,
+  ModelStatusRequestSchema,
+  ModelStatusResponseSchema,
+  ModelDownloadRequestSchema,
+  ModelDownloadResponseSchema,
 } from '@shared/ipc'
 import type {
   IpcChannel,
@@ -90,10 +94,14 @@ import type {
   ExportCopyMarkdownResponse,
   MeetingListResponse,
   MeetingLoadResponse,
+  ModelStatusResponse,
+  ModelDownloadResponse,
+  ModelProgressEvent,
 } from '@shared/ipc'
 import type { Clock } from '@shared/providers'
 
 import type { AudioCaptureBridge } from './audio/AudioCaptureBridge'
+import type { ModelDownloader } from './providers/nemotron/ModelDownloader'
 import type { ItemLifecycleService } from './services/itemLifecycleService'
 import { computeEgressState } from './settings/egressState'
 import type { SecretStorage } from './settings/SecretStorage'
@@ -186,6 +194,17 @@ export interface IpcRegistryDependencies {
    * When absent, always returns null.
    */
   meetingLoad?: (meetingId: string) => MeetingLoadResponse | null
+  /**
+   * ModelDownloader for the local ASR model (item 0024).
+   * When absent, model:status always returns downloaded: false and
+   * model:download returns an error.
+   */
+  modelDownloader?: ModelDownloader
+  /**
+   * Callback to push model:progress events to the renderer (item 0024).
+   * Injected in production from main/index.ts via webContents.send.
+   */
+  pushModelProgress?: (evt: ModelProgressEvent) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -490,6 +509,46 @@ function makeHandleMeetingLoad(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleModelStatus(deps: IpcRegistryDependencies) {
+  return function handleModelStatus(raw: unknown): ModelStatusResponse {
+    const req = ModelStatusRequestSchema.parse(raw)
+    const downloaded = deps.modelDownloader?.isDownloaded() ?? false
+    return ModelStatusResponseSchema.parse({
+      modelId: req.modelId,
+      downloaded,
+      sizeBytes: 0,
+    })
+  }
+}
+
+function makeHandleModelDownload(deps: IpcRegistryDependencies) {
+  return function handleModelDownload(raw: unknown): ModelDownloadResponse {
+    const req = ModelDownloadRequestSchema.parse(raw)
+
+    if (deps.modelDownloader === undefined || deps.pushModelProgress === undefined) {
+      throw new Error('model:download is not available — ModelDownloader not configured')
+    }
+
+    const downloader = deps.modelDownloader
+    const push = deps.pushModelProgress
+    const modelId = req.modelId
+
+    void downloader
+      .download((received, total) => {
+        push({ modelId, bytesReceived: received, bytesTotal: total, done: false })
+      })
+      .then(() => {
+        push({ modelId, bytesReceived: 0, bytesTotal: 0, done: true })
+      })
+      .catch((err: unknown) => {
+        const error = err instanceof Error ? err.message : String(err)
+        push({ modelId, bytesReceived: 0, bytesTotal: 0, done: true, error })
+      })
+
+    return ModelDownloadResponseSchema.parse({ ok: true })
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -522,6 +581,8 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'export:copyMarkdown': makeHandleExportCopyMarkdown(deps),
     'meeting:list': makeHandleMeetingList(deps),
     'meeting:load': makeHandleMeetingLoad(deps),
+    'model:status': makeHandleModelStatus(deps),
+    'model:download': makeHandleModelDownload(deps),
   }
 
   return {

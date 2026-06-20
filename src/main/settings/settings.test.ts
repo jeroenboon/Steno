@@ -10,16 +10,27 @@
  *   6. No API key logged (spy on console.error / console.log)
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock Anthropic SDK so tests run without a browser/Electron environment.
-// The factory test only checks that the right adapter type is returned;
-// it does not call extract(), so the mock doesn't need to do anything.
 vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
     messages: { create: vi.fn() },
   })),
 }))
+
+// Mock electron so providerFactory can import app.getPath without Electron runtime.
+vi.mock('electron', () => ({
+  app: {
+    getPath: vi.fn(() => '/fake/userData'),
+  },
+}))
+
+import { ModelDownloader } from '../providers/nemotron/ModelDownloader'
 
 import { computeEgressState, buildDisclosureCopy, type EgressState } from './egressState'
 import { buildProviders, tryBuildAsrProvider, tryBuildExtractionProvider } from './providerFactory'
@@ -477,7 +488,7 @@ describe('buildProviders', () => {
     expect(() => buildProviders(settings, storage)).toThrow(/my-llm-key/i)
   })
 
-  it('throws "not yet implemented" for local-parakeet ASR', () => {
+  it('throws when local-parakeet model is not downloaded', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('anthropic', 'ant-key')
 
@@ -487,7 +498,57 @@ describe('buildProviders', () => {
       primaryLanguage: 'nl',
     }
 
-    expect(() => buildProviders(settings, storage)).toThrow(/not yet implemented/i)
+    // Model dir /fake/userData/models/nemotron-3.5-asr-streaming-0.6b-int4 won't exist
+    expect(() => buildProviders(settings, storage)).toThrow(/gedownload/i)
+  })
+
+  it('tryBuildAsrProvider returns ok:false when local-parakeet model is not downloaded', () => {
+    const storage = new MemorySecretStorage()
+    const settings: AppSettings = {
+      asrProvider: 'local-parakeet',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'nl',
+    }
+
+    const result = tryBuildAsrProvider(settings, storage)
+    expect(result.ok).toBe(false)
+  })
+
+  describe('tryBuildAsrProvider with local-parakeet model present', () => {
+    let modelDir: string
+
+    beforeEach(async () => {
+      // Point the electron mock to a temp dir that contains the expected model files
+      modelDir = join(tmpdir(), `provider-test-model-${String(Date.now())}`)
+      const nemotronDir = join(modelDir, 'models', 'nemotron-3.5-asr-streaming-0.6b-int4')
+      mkdirSync(nemotronDir, { recursive: true })
+
+      // Create ALL expected files so isDownloaded() returns true
+      for (const f of ModelDownloader.EXPECTED_FILES) {
+        writeFileSync(join(nemotronDir, f.name), 'placeholder')
+      }
+
+      const electronMock = (await import('electron')) as unknown as {
+        app: { getPath: ReturnType<typeof vi.fn> }
+      }
+      electronMock.app.getPath.mockReturnValue(modelDir)
+    })
+
+    afterEach(() => {
+      rmSync(modelDir, { recursive: true, force: true })
+    })
+
+    it('tryBuildAsrProvider returns ok:true when model is present', () => {
+      const storage = new MemorySecretStorage()
+      const settings: AppSettings = {
+        asrProvider: 'local-parakeet',
+        extractionProvider: 'anthropic',
+        primaryLanguage: 'nl',
+      }
+
+      const result = tryBuildAsrProvider(settings, storage)
+      expect(result.ok).toBe(true)
+    })
   })
 })
 
