@@ -175,11 +175,12 @@ export function App(): React.JSX.Element {
       {/* Screen content */}
       <div className="app-content">
         {/*
-         * LiveScreen is always mounted when a meeting is active so that audio
-         * capture continues while the user browses other tabs. It is hidden
-         * via CSS when not on the 'live' route. When no meeting is active it
-         * is only rendered (and shown) if the user navigates to 'live', so
-         * that the empty-state CTA is accessible.
+         * LiveScreen is mounted unconditionally (always in the DOM) so audio
+         * capture keeps running while the user browses other tabs. Visibility is
+         * toggled via the `display` style below — the component itself never
+         * unmounts. Because it is mounted before any meeting exists, its
+         * audio-start effect keys off `activeMeeting` to begin capture only once
+         * a meeting goes live (see LiveScreen's useEffect dependency array).
          */}
         <div
           className="app-live-layer"

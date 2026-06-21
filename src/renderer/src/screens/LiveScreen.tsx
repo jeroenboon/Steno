@@ -498,9 +498,11 @@ export function LiveScreen(): React.JSX.Element {
   const [editState, setEditState] = useState<EditState | null>(null)
   const [addingKind, setAddingKind] = useState<ItemKind | null>(null)
   const [endingMeeting, setEndingMeeting] = useState(false)
+  const [audioLevel, setAudioLevel] = useState(0)
 
   // --- Refs ---
   const serviceRef = useRef<AudioCaptureService | null>(null)
+  const audioLevelRef = useRef(0)
 
   // --- Derived maps ---
   const transcriptSpanMap = React.useMemo(() => {
@@ -521,9 +523,12 @@ export function LiveScreen(): React.JSX.Element {
 
   // --- IPC subscriptions ---
   useEffect(() => {
-    // Guard: do not start audio if no meeting is active. The persistent-mount
-    // pattern in App keeps LiveScreen in the DOM while navigating other tabs;
-    // this prevents a ghost session when the screen is visible with no meeting.
+    // Guard: do not start audio if no meeting is active. App mounts LiveScreen
+    // permanently (it is always in the DOM, only hidden via CSS) so audio capture
+    // survives tab switches. That means this effect first runs at app startup with
+    // no meeting — bail until one is active. `activeMeeting` IS in the dependency
+    // array below precisely so the effect re-fires (and starts capture) the moment
+    // a meeting goes live; without it, start() would never be called.
     if (activeMeeting === null) return
 
     const service = new AudioCaptureService()
@@ -575,8 +580,16 @@ export function LiveScreen(): React.JSX.Element {
     })
 
     // Start audio capture
+    let lastLevelTick = 0
     void service
-      .start(captureMode)
+      .start(captureMode, (level) => {
+        const now = Date.now()
+        if (now - lastLevelTick >= 80) {
+          lastLevelTick = now
+          audioLevelRef.current = level
+          setAudioLevel(level)
+        }
+      })
       .then((result) => {
         setMicPermission('granted')
         setLoopbackState(result.loopbackState)
@@ -600,8 +613,13 @@ export function LiveScreen(): React.JSX.Element {
         console.error('[LiveScreen] Error stopping audio capture:', err)
       })
     }
+    // captureMode is intentionally omitted: the mode is locked once capture
+    // begins (the selector is disabled while micPermission !== 'unknown'), so a
+    // re-run on mode change would never be desirable. activeMeeting IS included
+    // so capture starts when the meeting goes live and stops when it clears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    activeMeeting,
     addTranscriptSpan,
     setMicPermission,
     setLoopbackState,
@@ -832,9 +850,17 @@ export function LiveScreen(): React.JSX.Element {
           </p>
         )}
         {micPermission === 'granted' && (
-          <p className="mic-active-message" data-testid="mic-active-message">
-            {t('live.mic.active')}
-          </p>
+          <div className="mic-active-row">
+            <p className="mic-active-message" data-testid="mic-active-message">
+              {t('live.mic.active')}
+            </p>
+            <div className="audio-level-meter" aria-hidden="true">
+              <div
+                className="audio-level-bar"
+                style={{ width: String(Math.min(100, audioLevel * 400)) + '%' }}
+              />
+            </div>
+          </div>
         )}
       </section>
 

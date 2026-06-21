@@ -92,6 +92,37 @@ function applyContentSecurityPolicy(): void {
 //     handler will find no matching source and deny, causing mic-only fallback.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Media permission handlers (microphone via getUserMedia)
+//
+// getUserMedia and getDisplayMedia both pass through Electron's permission gate
+// before Chromium grants device access. Electron ships no UI to prompt the user,
+// so when no handler is registered the grant behaviour is an undocumented default
+// that has changed between versions — relying on it is how mic capture silently
+// fails to start. We grant audio capture explicitly and deny everything else,
+// which matches the locked-down posture of ADR 0005 (this is a local desktop app
+// that needs the microphone and nothing else from the browser permission set).
+//
+// Note: getDisplayMedia (loopback) is gated by setDisplayMediaRequestHandler
+// below, not by this handler; 'media' here covers the getUserMedia mic request.
+// On Windows the OS-level microphone privacy setting still applies on top of
+// this — if that is off, getUserMedia rejects (mic shows as "denied") rather
+// than hanging.
+// ---------------------------------------------------------------------------
+
+function registerMediaPermissionHandlers(): void {
+  const isMediaPermission = (permission: string): boolean =>
+    permission === 'media' || permission === 'audioCapture'
+
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(isMediaPermission(permission))
+  })
+
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) =>
+    isMediaPermission(permission),
+  )
+}
+
 function registerDisplayMediaHandler(): void {
   session.defaultSession.setDisplayMediaRequestHandler(
     (_request, callback) => {
@@ -436,6 +467,7 @@ app
   .whenReady()
   .then(async () => {
     applyContentSecurityPolicy()
+    registerMediaPermissionHandlers()
     registerDisplayMediaHandler()
     // Create the window (does NOT load the renderer yet) so registerIpcHandlers
     // can bind to its webContents, THEN register handlers, THEN load the

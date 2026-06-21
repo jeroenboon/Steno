@@ -12,7 +12,7 @@
  * - Low-confidence span receives a visual flag
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import React from 'react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
@@ -187,6 +187,36 @@ describe('LiveScreen — guard: no active meeting', () => {
 
     await screen.findByTestId('live-noactive')
     expect(mockApi.audioStart).not.toHaveBeenCalled()
+  })
+
+  // Regression (item 0024): App mounts LiveScreen permanently — its audio-start
+  // effect first runs at startup with activeMeeting === null and bails. When the
+  // meeting later goes live the effect MUST re-fire and call start(). It only does
+  // so if activeMeeting is in the effect's dependency array. Before the fix the
+  // dep was missing, so start() was never called: the UI sat on "Microfoon
+  // starten..." with no logs. We assert getUserMedia (the first thing start()
+  // touches) is reached only after activation.
+  it('starts audio capture when a meeting goes live after mount', async () => {
+    const getUserMedia = vi.fn().mockRejectedValue(new Error('no media device in jsdom'))
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia },
+      configurable: true,
+    })
+
+    // Mount with no active meeting, exactly as App does at startup.
+    useAppStore.setState({ activeMeeting: null, route: 'live' })
+    render(<LiveScreen />)
+    await screen.findByTestId('live-noactive')
+    expect(getUserMedia).not.toHaveBeenCalled()
+
+    // Meeting goes live (Draft → "Start vergadering").
+    act(() => {
+      useAppStore.setState({ activeMeeting: 'active-session' })
+    })
+
+    await waitFor(() => {
+      expect(getUserMedia).toHaveBeenCalled()
+    })
   })
 })
 

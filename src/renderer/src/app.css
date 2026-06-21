@@ -524,9 +524,33 @@ body,
 
 /* --- Mic status messages (red is reserved for live, so alerts use ink) --- */
 
+.mic-active-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .mic-active-message {
   font-size: 12px;
   color: var(--color-confirmed);
+  white-space: nowrap;
+}
+
+.audio-level-meter {
+  flex: 1;
+  max-width: 120px;
+  height: 6px;
+  background: var(--color-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.audio-level-bar {
+  height: 100%;
+  background: var(--color-confirmed);
+  border-radius: 3px;
+  transition: width 80ms linear;
+  min-width: 0;
 }
 
 .mic-starting-message {

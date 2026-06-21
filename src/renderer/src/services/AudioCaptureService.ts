@@ -118,7 +118,10 @@ export class AudioCaptureService {
    *          'remote' but the user denies the picker, loopbackState is 'denied'
    *          (not an error) and the service continues in mic-only mode.
    */
-  async start(mode: CaptureMode = 'remote'): Promise<StartResult> {
+  async start(
+    mode: CaptureMode = 'remote',
+    onAudioLevel?: (level: number) => void,
+  ): Promise<StartResult> {
     // ------------------------------------------------------------------
     // 1. Microphone (required)
     // ------------------------------------------------------------------
@@ -185,6 +188,14 @@ export class AudioCaptureService {
       const loopback = this._latestLoopbackBuffer
 
       const mixed = mixPcm(micData, loopback)
+
+      if (onAudioLevel !== undefined) {
+        let sumSq = 0
+        for (const sample of mixed) {
+          sumSq += sample * sample
+        }
+        onAudioLevel(Math.sqrt(sumSq / mixed.length))
+      }
 
       framer.push(mixed, (frame) => {
         window.api.audioSendFrame(frame)
@@ -282,10 +293,18 @@ export class AudioCaptureService {
    */
   private async _acquireLoopback(): Promise<MediaStream | null> {
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        audio: true,
-        video: false,
+      // Electron's setDisplayMediaRequestHandler may call callback({}) (empty object)
+      // when no source is available. In some Electron versions this never rejects —
+      // it just hangs. Guard with a 3 s timeout so start() is never blocked forever.
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('getDisplayMedia timeout'))
+        }, 3_000)
       })
+      const stream = await Promise.race([
+        navigator.mediaDevices.getDisplayMedia({ audio: true, video: false }),
+        timeoutPromise,
+      ])
       // Verify the stream actually has audio tracks (some platforms return video only)
       if (stream.getAudioTracks().length === 0) {
         for (const t of stream.getTracks()) t.stop()
@@ -293,7 +312,7 @@ export class AudioCaptureService {
       }
       return stream
     } catch {
-      // NotAllowedError (user cancelled picker), NotSupportedError, etc.
+      // NotAllowedError (user cancelled picker), NotSupportedError, timeout, etc.
       return null
     }
   }
