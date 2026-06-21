@@ -8,7 +8,7 @@
  * Audio pipeline:
  *   - Input: Uint8Array, 16-bit LE PCM, 16 kHz mono (from AudioCaptureBridge)
  *   - Convert to Float32Array, normalised [-1, 1]
- *   - Buffer until a full chunk (default 560 ms = 8960 samples)
+ *   - Buffer until a full chunk (default 5000 ms = 80000 samples)
  *   - Feed chunk to session.transcribe()
  *   - Emit TranscriptSpan for each non-empty result
  *
@@ -44,7 +44,7 @@ export interface LocalAsrProviderOptions {
   modelDir: string
   /** BCP-47 language tag. Default 'nl'. */
   language?: string
-  /** Chunk duration in milliseconds. Default 560. */
+  /** Chunk duration in milliseconds. Default 5000 (5 s — Whisper needs context). */
   chunkDurationMs?: number
   /** Injected for tests; defaults to DefaultSherpaSessionFactory (lazy loaded). */
   sessionFactory?: SherpaSessionFactory
@@ -83,7 +83,7 @@ export class LocalAsrProvider implements ASRProvider {
 
   constructor(options: LocalAsrProviderOptions) {
     this._modelDir = options.modelDir
-    this._chunkDurationMs = options.chunkDurationMs ?? 560
+    this._chunkDurationMs = options.chunkDurationMs ?? 5_000
     const language = options.language ?? 'nl'
     this._sessionFactory = options.sessionFactory ?? new LazyDefaultSherpaFactory(language)
   }

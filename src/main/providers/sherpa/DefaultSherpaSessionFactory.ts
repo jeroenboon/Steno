@@ -29,8 +29,8 @@ export class DefaultSherpaSessionFactory implements SherpaSessionFactory {
     const tokens = join(modelDir, 'tokens.txt')
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    const recognizer = new sherpa.OfflineRecognizer({
-      model: {
+    const recognizer = sherpa.createOfflineRecognizer({
+      modelConfig: {
         whisper: {
           encoder,
           decoder,

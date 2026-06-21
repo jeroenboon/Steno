@@ -217,29 +217,10 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   const itemService = new ItemLifecycleService(dRepo, aRepo)
 
   // ---------------------------------------------------------------------------
-  // ASR provider (item 0016 — replaces FakeASRProvider from item 0015)
-  //
-  // ASR and extraction are built INDEPENDENTLY: the ASR provider is gated only
-  // on the ASR key (Deepgram), so transcription works as soon as that key is
-  // set, regardless of whether an extraction (Anthropic) key exists. A missing
-  // ASR key falls back to FakeASRProvider so the app stays alive; the renderer
-  // shows a "no key" banner guiding the user to Settings.
-  // ---------------------------------------------------------------------------
-  const asrResult = tryBuildAsrProvider(settingsStore.current, secretStorage)
-  const asrProvider = asrResult.ok ? asrResult.provider : new FakeASRProvider()
-
-  if (!asrResult.ok) {
-    console.warn(
-      '[LiveTranscriber] ASR provider not ready — ASR key not configured yet. ' +
-        'Using FakeASRProvider until the key is set in Settings. ' +
-        `Reason: ${asrResult.error}`,
-    )
-  }
-
-  // ---------------------------------------------------------------------------
   // Extraction provider (item 0018 — wired into live extraction runtime)
   //
-  // Built independently so a missing extraction key does NOT disable ASR.
+  // Built at startup so the extraction key is checked early. Rebuilt on
+  // audio:start so changes in Settings take effect without an app restart.
   // If the key is absent, the runtime operates in degraded mode: spans are
   // persisted but extraction and IPC item events do not run (no crash).
   // ---------------------------------------------------------------------------
@@ -257,11 +238,6 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   //
   // Holds the active LiveExtractionRuntime for the current live meeting.
   // Created when audio:start fires; torn down on audio:stop.
-  //
-  // The meeting context (agenda, participants, language) is minimal at this
-  // stage — a placeholder meeting with sane defaults is used until item 0021
-  // integrates full meeting persistence. The runtime still correctly persists
-  // spans and, if an extraction key is present, runs the rolling cadence.
   // ---------------------------------------------------------------------------
   let activeRuntime: LiveExtractionRuntime | null = null
 
@@ -286,9 +262,12 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
       })
     }
 
-    const schedulerDeps = extractionResult.ok
+    // Rebuild extraction provider from current settings so a key entered after
+    // startup is picked up without restarting the app.
+    const freshExtractionResult = tryBuildExtractionProvider(settingsStore.current, secretStorage)
+    const schedulerDeps = freshExtractionResult.ok
       ? {
-          provider: extractionResult.provider,
+          provider: freshExtractionResult.provider,
           discussionSummaryRepo: dsRepo,
           spanRepo,
           clock,
@@ -312,35 +291,60 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     })
   }
 
-  const audioBridge = new AudioCaptureBridge({
-    asrProvider,
-    sender: mainWindow.webContents,
-    onSpan: (span) => {
-      if (activeRuntime !== null) {
-        activeRuntime.handleSpan(span)
-        // Drive the extraction cadence on each span arrival.
-        // tick() is a no-op if the cadence threshold hasn't been crossed.
-        void activeRuntime.tick()
-      }
-    },
-  })
+  // ---------------------------------------------------------------------------
+  // Audio capture bridge
+  //
+  // Rebuilt on every audio:start so the ASR provider reflects the settings
+  // active at that moment (e.g. user downloaded the model and switched to
+  // local-parakeet after the app was already running).
+  // ---------------------------------------------------------------------------
+  let currentBridge: AudioCaptureBridge | null = null
 
   // One-way channel: renderer sends PCM frames; no invoke/response.
+  // Forwards to whichever bridge is currently active.
   ipcMain.on('audio:frame', (_event, frame: Uint8Array) => {
-    audioBridge.pushAudioFrame(frame)
+    currentBridge?.pushAudioFrame(frame)
   })
 
   const registry = createIpcRegistry({
     settingsStore,
     secretStorage,
-    audioBridge,
     itemLifecycleService: itemService,
     onAudioStart: () => {
-      // Spin up the extraction runtime when the audio session begins.
+      // Stop any running bridge/runtime first.
+      currentBridge?.stop()
       activeRuntime?.stop()
+
+      // Build a fresh ASR provider from the settings active RIGHT NOW.
+      // This ensures a model downloaded or a provider switched after app startup
+      // is picked up without restarting the app.
+      const asrResult = tryBuildAsrProvider(settingsStore.current, secretStorage)
+      if (!asrResult.ok) {
+        console.warn(
+          '[LiveTranscriber] ASR provider not ready at audio:start — ' +
+            `falling back to FakeASRProvider. Reason: ${asrResult.error}`,
+        )
+      }
+      const asrProvider = asrResult.ok ? asrResult.provider : new FakeASRProvider()
+
       activeRuntime = buildRuntime()
+
+      currentBridge = new AudioCaptureBridge({
+        asrProvider,
+        sender: mainWindow.webContents,
+        onSpan: (span) => {
+          if (activeRuntime !== null) {
+            activeRuntime.handleSpan(span)
+            // tick() is a no-op when the cadence threshold hasn't been crossed.
+            void activeRuntime.tick()
+          }
+        },
+      })
+      currentBridge.start()
     },
     onAudioStop: () => {
+      currentBridge?.stop()
+      currentBridge = null
       activeRuntime?.stop()
       activeRuntime = null
     },

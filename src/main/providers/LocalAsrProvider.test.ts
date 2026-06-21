@@ -116,6 +116,7 @@ describe('LocalAsrProvider', () => {
     const provider = new LocalAsrProvider({
       modelDir: '/fake/model',
       sessionFactory: new FakeSherpaSessionFactory(['laatste']),
+      chunkDurationMs: 560,
     })
 
     provider.start()
@@ -134,6 +135,7 @@ describe('LocalAsrProvider', () => {
     const provider = new LocalAsrProvider({
       modelDir: '/fake/model',
       sessionFactory: new FakeSherpaSessionFactory(['isFinal check']),
+      chunkDurationMs: 560,
     })
 
     provider.start()
@@ -148,6 +150,7 @@ describe('LocalAsrProvider', () => {
     const provider = new LocalAsrProvider({
       modelDir: '/fake/model',
       sessionFactory: new FakeSherpaSessionFactory(['', '']), // empty output
+      chunkDurationMs: 560,
     })
 
     provider.start()
