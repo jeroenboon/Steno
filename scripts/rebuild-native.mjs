@@ -50,8 +50,10 @@ for (const moduleName of NATIVE_MODULES) {
     continue
   }
 
-  // Skip if the module doesn't have a native build directory
-  if (!existsSync(`${moduleDir}/build/Release`)) {
+  // Skip if the module doesn't have a binding.gyp — not a native addon.
+  // Note: better-sqlite3 v12 stores prebuilt binaries under lib/binding/ rather
+  // than build/Release/, so checking binding.gyp is more reliable across versions.
+  if (!existsSync(`${moduleDir}/binding.gyp`)) {
     continue
   }
 

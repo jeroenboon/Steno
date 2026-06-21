@@ -21,7 +21,6 @@ export class DefaultSherpaSessionFactory implements SherpaSessionFactory {
   async createSession(modelDir: string): Promise<SherpaSession> {
     // Dynamic import — keeps sherpa-onnx out of the module graph for tests
     // and avoids a load-time crash when the package is not installed.
-    // @ts-expect-error TS2307 — native module without bundled type declarations
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const sherpa = await import('sherpa-onnx')
 
