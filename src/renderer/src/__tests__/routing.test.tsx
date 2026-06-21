@@ -196,4 +196,22 @@ describe('LiveScreen persistent mount', () => {
     // screen-live stays mounted (hidden), audio continues
     expect(screen.getByTestId('screen-live')).toBeInTheDocument()
   })
+
+  it('hides the LiveScreen layer when navigating to another screen during an active meeting', async () => {
+    useAppStore.setState({ route: 'live', activeMeeting: 'mtg-1' })
+    renderApp()
+
+    await screen.findByTestId('screen-live')
+
+    act(() => {
+      useAppStore.getState().setRoute('home')
+    })
+
+    const liveLayer = document.querySelector('.app-live-layer')
+    expect(liveLayer).not.toBeNull()
+    // Still mounted so audio capture keeps running in the background...
+    expect(screen.getByTestId('screen-live')).toBeInTheDocument()
+    // ...but visually hidden so it does not render through the active screen.
+    expect((liveLayer as HTMLElement).style.display).toBe('none')
+  })
 })

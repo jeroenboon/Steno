@@ -177,14 +177,17 @@ export function App(): React.JSX.Element {
         {/*
          * LiveScreen is mounted unconditionally (always in the DOM) so audio
          * capture keeps running while the user browses other tabs. Visibility is
-         * toggled via the `display` style below — the component itself never
-         * unmounts. Because it is mounted before any meeting exists, its
-         * audio-start effect keys off `activeMeeting` to begin capture only once
-         * a meeting goes live (see LiveScreen's useEffect dependency array).
+         * toggled purely by the route via the `display` style below — the
+         * component itself never unmounts. It must be hidden on every non-live
+         * route (both layers are position:absolute/inset:0, so a visible
+         * live-layer would render through the active screen). Because it is
+         * mounted before any meeting exists, its audio-start effect keys off
+         * `activeMeeting` to begin capture only once a meeting goes live (see
+         * LiveScreen's useEffect dependency array).
          */}
         <div
           className="app-live-layer"
-          style={{ display: route === 'live' || isMeetingActive ? undefined : 'none' }}
+          style={{ display: route === 'live' ? undefined : 'none' }}
           aria-hidden={route !== 'live'}
         >
           <LiveScreen />
