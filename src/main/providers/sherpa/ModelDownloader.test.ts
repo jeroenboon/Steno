@@ -91,22 +91,22 @@ describe('ModelDownloader', () => {
   // -------------------------------------------------------------------------
 
   it('isDownloaded() returns false when the model directory is empty', () => {
-    const expectedFiles = makeExpectedFiles(['config.json', 'model.onnx'])
+    const expectedFiles = makeExpectedFiles(['large-v3-encoder.int8.onnx', 'tokens.txt'])
     const dl = new ModelDownloader(dir, fetch, expectedFiles)
     expect(dl.isDownloaded()).toBe(false)
   })
 
   it('isDownloaded() returns false when only some files are present', () => {
-    const expectedFiles = makeExpectedFiles(['config.json', 'model.onnx'])
-    writeFileSync(join(dir, 'config.json'), 'content')
+    const expectedFiles = makeExpectedFiles(['large-v3-encoder.int8.onnx', 'tokens.txt'])
+    writeFileSync(join(dir, 'large-v3-encoder.int8.onnx'), 'content')
     const dl = new ModelDownloader(dir, fetch, expectedFiles)
     expect(dl.isDownloaded()).toBe(false)
   })
 
   it('isDownloaded() returns true when all expected files are present', () => {
-    const expectedFiles = makeExpectedFiles(['config.json', 'model.onnx'])
-    writeFileSync(join(dir, 'config.json'), 'content')
-    writeFileSync(join(dir, 'model.onnx'), 'content')
+    const expectedFiles = makeExpectedFiles(['large-v3-encoder.int8.onnx', 'tokens.txt'])
+    writeFileSync(join(dir, 'large-v3-encoder.int8.onnx'), 'content')
+    writeFileSync(join(dir, 'tokens.txt'), 'content')
     const dl = new ModelDownloader(dir, fetch, expectedFiles)
     expect(dl.isDownloaded()).toBe(true)
   })
@@ -117,22 +117,22 @@ describe('ModelDownloader', () => {
 
   it('verify() returns true when all files match their expected SHA-256', async () => {
     const content = 'expected content'
-    const expectedFiles = makeExpectedFiles(['config.json'], content)
-    writeFileSync(join(dir, 'config.json'), content)
+    const expectedFiles = makeExpectedFiles(['tokens.txt'], content)
+    writeFileSync(join(dir, 'tokens.txt'), content)
     const dl = new ModelDownloader(dir, fetch, expectedFiles)
     await expect(dl.verify()).resolves.toBe(true)
   })
 
   it('verify() throws when a file has unexpected content (hash mismatch)', async () => {
-    const expectedFiles = makeExpectedFiles(['config.json'], 'expected')
-    writeFileSync(join(dir, 'config.json'), 'corrupted content')
+    const expectedFiles = makeExpectedFiles(['tokens.txt'], 'expected')
+    writeFileSync(join(dir, 'tokens.txt'), 'corrupted content')
     const dl = new ModelDownloader(dir, fetch, expectedFiles)
     await expect(dl.verify()).rejects.toThrow(/hash mismatch/i)
   })
 
   it('verify() throws when an expected file is missing', async () => {
-    const expectedFiles = makeExpectedFiles(['config.json', 'model.onnx'])
-    writeFileSync(join(dir, 'config.json'), 'content')
+    const expectedFiles = makeExpectedFiles(['large-v3-encoder.int8.onnx', 'tokens.txt'])
+    writeFileSync(join(dir, 'large-v3-encoder.int8.onnx'), 'content')
     const dl = new ModelDownloader(dir, fetch, expectedFiles)
     await expect(dl.verify()).rejects.toThrow(/missing/i)
   })
@@ -143,7 +143,7 @@ describe('ModelDownloader', () => {
 
   it('download() writes files to modelDir', async () => {
     const content = 'model content'
-    const expectedFiles = makeExpectedFiles(['config.json'], content)
+    const expectedFiles = makeExpectedFiles(['tokens.txt'], content)
     const fakeFetch = makeFakeFetch(content)
     const dl = new ModelDownloader(dir, fakeFetch, expectedFiles)
 
@@ -151,13 +151,13 @@ describe('ModelDownloader', () => {
       return
     })
 
-    const written = readFileSync(join(dir, 'config.json'), 'utf8')
+    const written = readFileSync(join(dir, 'tokens.txt'), 'utf8')
     expect(written).toBe(content)
   })
 
   it('download() calls onProgress with increasing bytesReceived', async () => {
     const content = 'abcdef'
-    const expectedFiles = makeExpectedFiles(['config.json'], content)
+    const expectedFiles = makeExpectedFiles(['tokens.txt'], content)
     const fakeFetch = makeFakeFetch(content, { chunkCount: 3 })
     const dl = new ModelDownloader(dir, fakeFetch, expectedFiles)
 
@@ -178,7 +178,7 @@ describe('ModelDownloader', () => {
 
   it('download() throws when verify fails after download (corrupt content)', async () => {
     const content = 'good content'
-    const expectedFiles = makeExpectedFiles(['config.json'], content)
+    const expectedFiles = makeExpectedFiles(['tokens.txt'], content)
     // Serve different content than what the hash was computed from
     const fakeFetch = makeFakeFetch('bad content')
     const dl = new ModelDownloader(dir, fakeFetch, expectedFiles)

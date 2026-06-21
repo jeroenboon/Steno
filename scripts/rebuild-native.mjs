@@ -1,13 +1,15 @@
 /**
  * Swap native modules' compiled addons to match a target runtime's Node ABI.
  *
- * Native modules (better-sqlite3, onnxruntime-genai) keep a single compiled
+ * Native modules (better-sqlite3, sherpa-onnx) keep a single compiled
  * addon each. The Electron app and the Vitest suite embed *different* Node
  * ABIs, so the same binary cannot serve both — loading the wrong one crashes
  * with ERR_DLOPEN_FAILED / NODE_MODULE_VERSION mismatch. Each native-using
  * command self-heals by swapping in the prebuilt binary for the ABI it needs.
  *
  * We use prebuild-install (prebuilt binaries, no C++ toolchain required).
+ * sherpa-onnx ships its own ABI-versioned prebuilts and may not use the
+ * build/Release layout — the existsSync guard below skips it gracefully if so.
  *
  * Usage:
  *   node scripts/rebuild-native.mjs electron   # ABI for the Electron app
@@ -28,8 +30,8 @@ const require = createRequire(import.meta.url)
 const prebuildInstall = require.resolve('prebuild-install/bin.js')
 
 // Modules to rebuild. Each entry is checked for presence before rebuilding —
-// onnxruntime-genai is optional and may not be installed yet.
-const NATIVE_MODULES = ['better-sqlite3', 'onnxruntime-genai']
+// sherpa-onnx is optional and may not be installed yet.
+const NATIVE_MODULES = ['better-sqlite3', 'sherpa-onnx']
 
 // `node` is the default runtime for prebuild-install (current process ABI).
 // For `electron`, pin to the installed Electron version so the ABI matches.

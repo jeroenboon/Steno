@@ -1,8 +1,8 @@
 /**
  * ModelDownloader (item 0024).
  *
- * Downloads all files for the nemotron-3.5-asr-streaming-0.6b-int4 model from
- * HuggingFace and verifies their SHA-256 hashes.
+ * Downloads all files for the sherpa-onnx Whisper large-v3 model and verifies
+ * their SHA-256 hashes.
  *
  * Expected files and hashes are injected at construction time so tests can use
  * controlled data without real HTTP calls. Production code uses
@@ -32,8 +32,7 @@ export interface ExpectedFile {
 // HuggingFace URL helper
 // ---------------------------------------------------------------------------
 
-const HF_BASE =
-  'https://huggingface.co/onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4/resolve/main'
+const HF_BASE = 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-large-v3/resolve/main'
 
 function hfUrl(filename: string): string {
   return `${HF_BASE}/${filename}`
@@ -45,16 +44,16 @@ function hfUrl(filename: string): string {
 
 export class ModelDownloader {
   /**
-   * Expected files in the nemotron-3.5-asr-streaming-0.6b-int4 model.
+   * Expected files in the sherpa-onnx Whisper large-v3 model.
    *
    * NOTE: sha256 values are placeholders ('') until the spike is completed on
-   * the target hardware. Fill them in after running scripts/spike-local-asr.mjs
+   * the target hardware. Fill them in after running scripts/spike-sherpa-asr.mjs
    * and verifying the downloads.
    */
   static readonly EXPECTED_FILES: ExpectedFile[] = [
-    { name: 'config.json', sha256: '' },
-    { name: 'tokenizer.json', sha256: '' },
-    { name: 'model.onnx', sha256: '' },
+    { name: 'large-v3-encoder.int8.onnx', sha256: '' },
+    { name: 'large-v3-decoder.int8.onnx', sha256: '' },
+    { name: 'tokens.txt', sha256: '' },
   ]
 
   constructor(

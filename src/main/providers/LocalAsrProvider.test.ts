@@ -1,8 +1,8 @@
 /**
  * Tests for LocalAsrProvider (item 0024).
  *
- * All ONNX inference is mocked via FakeOnnxSessionFactory — no real model,
- * no real GPU. Tests drive the provider through the ASRProvider public interface.
+ * All sherpa-onnx inference is mocked via FakeSherpaSessionFactory — no real model,
+ * no real native addon. Tests drive the provider through the ASRProvider public interface.
  *
  * Behaviours tested:
  * - pushAudioFrame() before start() is silently ignored
@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { LocalAsrProvider } from './LocalAsrProvider'
-import { FakeOnnxSessionFactory } from './nemotron/OnnxSession'
+import { FakeSherpaSessionFactory } from './sherpa/SherpaSession'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -52,7 +52,7 @@ describe('LocalAsrProvider', () => {
   it('pushAudioFrame() before start() is silently ignored', () => {
     const provider = new LocalAsrProvider({
       modelDir: '/fake/model',
-      sessionFactory: new FakeOnnxSessionFactory(['hello']),
+      sessionFactory: new FakeSherpaSessionFactory(['hello']),
     })
     expect(() => {
       provider.pushAudioFrame(pcmFrame(CHUNK_SAMPLES))
@@ -62,7 +62,7 @@ describe('LocalAsrProvider', () => {
   it('stop() before start() is a no-op', () => {
     const provider = new LocalAsrProvider({
       modelDir: '/fake/model',
-      sessionFactory: new FakeOnnxSessionFactory([]),
+      sessionFactory: new FakeSherpaSessionFactory([]),
     })
     expect(() => {
       provider.stop()
@@ -73,7 +73,7 @@ describe('LocalAsrProvider', () => {
     const script = ['hallo', 'wereld', 'test']
     const provider = new LocalAsrProvider({
       modelDir: '/fake/model',
-      sessionFactory: new FakeOnnxSessionFactory(script),
+      sessionFactory: new FakeSherpaSessionFactory(script),
       chunkDurationMs: 560,
     })
 
@@ -95,7 +95,7 @@ describe('LocalAsrProvider', () => {
   it('accumulates partial frames across multiple pushAudioFrame() calls', async () => {
     const provider = new LocalAsrProvider({
       modelDir: '/fake/model',
-      sessionFactory: new FakeOnnxSessionFactory(['geaccumuleerd']),
+      sessionFactory: new FakeSherpaSessionFactory(['geaccumuleerd']),
       chunkDurationMs: 560,
     })
 
@@ -115,7 +115,7 @@ describe('LocalAsrProvider', () => {
   it('stop() closes the iterator after buffered spans are emitted', async () => {
     const provider = new LocalAsrProvider({
       modelDir: '/fake/model',
-      sessionFactory: new FakeOnnxSessionFactory(['laatste']),
+      sessionFactory: new FakeSherpaSessionFactory(['laatste']),
     })
 
     provider.start()
@@ -133,7 +133,7 @@ describe('LocalAsrProvider', () => {
   it('spans have isFinal absent (treated as final per ADR 0011)', async () => {
     const provider = new LocalAsrProvider({
       modelDir: '/fake/model',
-      sessionFactory: new FakeOnnxSessionFactory(['isFinal check']),
+      sessionFactory: new FakeSherpaSessionFactory(['isFinal check']),
     })
 
     provider.start()
@@ -147,7 +147,7 @@ describe('LocalAsrProvider', () => {
   it('empty transcription output from the model is skipped (no span emitted)', async () => {
     const provider = new LocalAsrProvider({
       modelDir: '/fake/model',
-      sessionFactory: new FakeOnnxSessionFactory(['', '']), // empty output
+      sessionFactory: new FakeSherpaSessionFactory(['', '']), // empty output
     })
 
     provider.start()
@@ -165,7 +165,7 @@ describe('LocalAsrProvider', () => {
   it('spans have correct startMs and endMs based on chunk position', async () => {
     const provider = new LocalAsrProvider({
       modelDir: '/fake/model',
-      sessionFactory: new FakeOnnxSessionFactory(['eerste', 'tweede']),
+      sessionFactory: new FakeSherpaSessionFactory(['eerste', 'tweede']),
       chunkDurationMs: 560,
     })
 
@@ -184,7 +184,7 @@ describe('LocalAsrProvider', () => {
   it('session factory error causes iterator to complete without throwing', async () => {
     class BrokenFactory {
       createSession(): Promise<never> {
-        return Promise.reject(new Error('ONNX init failed'))
+        return Promise.reject(new Error('sherpa-onnx init failed'))
       }
     }
 

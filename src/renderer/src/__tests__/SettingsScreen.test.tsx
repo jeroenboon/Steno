@@ -74,7 +74,7 @@ function setup(overrides?: Partial<typeof mockApi>): void {
     secretSet: vi.fn().mockResolvedValue({ ok: true }),
     secretHas: vi.fn().mockResolvedValue({ has: false }),
     modelStatus: vi.fn().mockResolvedValue({
-      modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+      modelId: 'whisper-large-v3-sherpa',
       downloaded: false,
       sizeBytes: 0,
     }),
@@ -385,7 +385,7 @@ describe('SettingsScreen — local model download (item 0024)', () => {
     setup({
       settingsGet: vi.fn().mockResolvedValue(parakeetSettings),
       modelStatus: vi.fn().mockResolvedValue({
-        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        modelId: 'whisper-large-v3-sherpa',
         downloaded: false,
         sizeBytes: 0,
       }),
@@ -400,7 +400,7 @@ describe('SettingsScreen — local model download (item 0024)', () => {
     setup({
       settingsGet: vi.fn().mockResolvedValue(parakeetSettings),
       modelStatus: vi.fn().mockResolvedValue({
-        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        modelId: 'whisper-large-v3-sherpa',
         downloaded: false,
         sizeBytes: 0,
       }),
@@ -415,7 +415,7 @@ describe('SettingsScreen — local model download (item 0024)', () => {
 
     await waitFor(() => {
       expect(mockApi.modelDownload).toHaveBeenCalledWith({
-        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        modelId: 'whisper-large-v3-sherpa',
       })
     })
   })
@@ -424,7 +424,7 @@ describe('SettingsScreen — local model download (item 0024)', () => {
     setup({
       settingsGet: vi.fn().mockResolvedValue(parakeetSettings),
       modelStatus: vi.fn().mockResolvedValue({
-        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        modelId: 'whisper-large-v3-sherpa',
         downloaded: true,
         sizeBytes: 350_000_000,
       }),
@@ -443,7 +443,7 @@ describe('SettingsScreen — local model download (item 0024)', () => {
     setup({
       settingsGet: vi.fn().mockResolvedValue(parakeetSettings),
       modelStatus: vi.fn().mockResolvedValue({
-        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        modelId: 'whisper-large-v3-sherpa',
         downloaded: false,
         sizeBytes: 0,
       }),
@@ -459,7 +459,7 @@ describe('SettingsScreen — local model download (item 0024)', () => {
 
     act(() => {
       progressCallback?.({
-        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        modelId: 'whisper-large-v3-sherpa',
         bytesReceived: 50_000,
         bytesTotal: 100_000,
         done: false,
@@ -478,7 +478,7 @@ describe('SettingsScreen — local model download (item 0024)', () => {
     setup({
       settingsGet: vi.fn().mockResolvedValue(parakeetSettings),
       modelStatus: vi.fn().mockResolvedValue({
-        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        modelId: 'whisper-large-v3-sherpa',
         downloaded: false,
         sizeBytes: 0,
       }),
@@ -494,7 +494,7 @@ describe('SettingsScreen — local model download (item 0024)', () => {
 
     act(() => {
       progressCallback?.({
-        modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+        modelId: 'whisper-large-v3-sherpa',
         bytesReceived: 100_000,
         bytesTotal: 100_000,
         done: true,

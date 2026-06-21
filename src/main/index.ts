@@ -27,7 +27,7 @@ import { meetingRepo } from './db/repos/meetingRepo'
 import { participantRepo } from './db/repos/participantRepo'
 import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
 import { createIpcRegistry } from './ipc-registry'
-import { ModelDownloader } from './providers/nemotron/ModelDownloader'
+import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
 import { LiveExtractionRuntime } from './services/liveExtractionRuntime'
 import { tryBuildAsrProvider, tryBuildExtractionProvider } from './settings/providerFactory'
@@ -389,9 +389,7 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
         summaries: dsRepo.listByMeeting(meetingId),
       }
     },
-    modelDownloader: new ModelDownloader(
-      join(userData, 'models', 'nemotron-3.5-asr-streaming-0.6b-int4'),
-    ),
+    modelDownloader: new ModelDownloader(join(userData, 'models', 'whisper-large-v3-sherpa')),
     pushModelProgress: (evt) => {
       mainWindow.webContents.send('model:progress', evt)
     },

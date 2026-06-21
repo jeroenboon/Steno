@@ -1,9 +1,9 @@
 /**
  * LocalAsrProvider (item 0024).
  *
- * Implements ASRProvider using a local ONNX model (nemotron-3.5-asr-streaming).
- * The real ONNX session is hidden behind OnnxSessionFactory so tests can inject
- * FakeOnnxSessionFactory without any real model or GPU.
+ * Implements ASRProvider using sherpa-onnx + Whisper (offline, batch-per-chunk).
+ * The real SherpaSession is hidden behind SherpaSessionFactory so tests can inject
+ * FakeSherpaSessionFactory without any real model or native addon.
  *
  * Audio pipeline:
  *   - Input: Uint8Array, 16-bit LE PCM, 16 kHz mono (from AudioCaptureBridge)
@@ -12,7 +12,7 @@
  *   - Feed chunk to session.transcribe()
  *   - Emit TranscriptSpan for each non-empty result
  *
- * isFinal is absent on all spans (RNNT emits only final tokens per chunk).
+ * isFinal is absent on all spans (Whisper emits one result per chunk).
  * Per ADR 0011: isFinal absent = treated as final by all consumers.
  *
  * Lifecycle / async coordination:
@@ -26,7 +26,7 @@ import { randomUUID } from 'node:crypto'
 import { TranscriptSpanSchema, type TranscriptSpan } from '@shared/domain/types'
 import type { ASRProvider } from '@shared/providers/ASRProvider'
 
-import type { OnnxSession, OnnxSessionFactory } from './nemotron/OnnxSession'
+import type { SherpaSession, SherpaSessionFactory } from './sherpa/SherpaSession'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -46,10 +46,8 @@ export interface LocalAsrProviderOptions {
   language?: string
   /** Chunk duration in milliseconds. Default 560. */
   chunkDurationMs?: number
-  /** Execution providers to try in order. Default ['dml', 'cpu']. */
-  executionProviders?: string[]
-  /** Injected for tests; defaults to DefaultOnnxSessionFactory (lazy loaded). */
-  sessionFactory?: OnnxSessionFactory
+  /** Injected for tests; defaults to DefaultSherpaSessionFactory (lazy loaded). */
+  sessionFactory?: SherpaSessionFactory
 }
 
 // ---------------------------------------------------------------------------
@@ -59,8 +57,7 @@ export interface LocalAsrProviderOptions {
 export class LocalAsrProvider implements ASRProvider {
   private readonly _modelDir: string
   private readonly _chunkDurationMs: number
-  private readonly _executionProviders: string[]
-  private readonly _sessionFactory: OnnxSessionFactory
+  private readonly _sessionFactory: SherpaSessionFactory
 
   private _started = false
   private _stopped = false
@@ -81,14 +78,14 @@ export class LocalAsrProvider implements ASRProvider {
    */
   private _pendingWork = 0
 
-  private _session: OnnxSession | null = null
+  private _session: SherpaSession | null = null
   private _sessionReady = false
 
   constructor(options: LocalAsrProviderOptions) {
     this._modelDir = options.modelDir
     this._chunkDurationMs = options.chunkDurationMs ?? 560
-    this._executionProviders = options.executionProviders ?? ['dml', 'cpu']
-    this._sessionFactory = options.sessionFactory ?? new LazyDefaultFactory()
+    const language = options.language ?? 'nl'
+    this._sessionFactory = options.sessionFactory ?? new LazyDefaultSherpaFactory(language)
   }
 
   // -------------------------------------------------------------------------
@@ -180,16 +177,12 @@ export class LocalAsrProvider implements ASRProvider {
 
   private async _initSession(): Promise<void> {
     try {
-      this._session = await this._sessionFactory.createSession(
-        this._modelDir,
-        this._executionProviders,
-      )
+      this._session = await this._sessionFactory.createSession(this._modelDir)
       this._sessionReady = true
       // Process any audio that arrived while the session was initializing.
-      // This includes frames pushed before stop() was called.
       this._processBuffer()
     } catch (err) {
-      console.error('[LocalAsrProvider] Failed to initialise ONNX session:', err)
+      console.error('[LocalAsrProvider] Failed to initialise sherpa-onnx session:', err)
       this._stopped = true
     } finally {
       this._workDone()
@@ -220,11 +213,7 @@ export class LocalAsrProvider implements ASRProvider {
   private async _runInference(pcm: Float32Array, startMs: number, endMs: number): Promise<void> {
     try {
       if (this._session === null) return
-      let text = ''
-      for await (const token of this._session.transcribe(pcm, this._chunkDurationMs)) {
-        text += token
-      }
-      text = text.trim()
+      const text = (await this._session.transcribe(pcm, SAMPLE_RATE)).trim()
       if (text.length === 0) return
 
       const raw = {
@@ -232,7 +221,7 @@ export class LocalAsrProvider implements ASRProvider {
         text,
         startMs,
         endMs,
-        // isFinal intentionally absent — RNNT emits only final tokens per chunk
+        // isFinal intentionally absent — Whisper emits one result per chunk
       }
 
       const parsed = TranscriptSpanSchema.safeParse(raw)
@@ -256,6 +245,10 @@ export class LocalAsrProvider implements ASRProvider {
   }
 
   private _drainWaiters(): void {
+    if (this._session !== null) {
+      this._session.free()
+      this._session = null
+    }
     const done: IteratorReturnResult<undefined> = { value: undefined, done: true }
     for (const resolve of this._waiters) {
       resolve(done)
@@ -265,14 +258,16 @@ export class LocalAsrProvider implements ASRProvider {
 }
 
 // ---------------------------------------------------------------------------
-// Default session factory (lazy import of onnxruntime-genai)
+// Default session factory (lazy import of sherpa-onnx)
 // ---------------------------------------------------------------------------
 
-class LazyDefaultFactory implements OnnxSessionFactory {
-  async createSession(modelDir: string, executionProviders: string[]): Promise<OnnxSession> {
-    const { DefaultOnnxSessionFactory } = await import('./nemotron/DefaultOnnxSessionFactory')
-    const real = new DefaultOnnxSessionFactory()
-    return real.createSession(modelDir, executionProviders)
+class LazyDefaultSherpaFactory implements SherpaSessionFactory {
+  constructor(private readonly language: string) {}
+
+  async createSession(modelDir: string): Promise<SherpaSession> {
+    const { DefaultSherpaSessionFactory } = await import('./sherpa/DefaultSherpaSessionFactory')
+    const real = new DefaultSherpaSessionFactory(this.language)
+    return real.createSession(modelDir)
   }
 }
 

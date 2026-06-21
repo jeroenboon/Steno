@@ -37,7 +37,7 @@ import {
 import { CustomOpenAIExtractionProvider } from '../providers/CustomOpenAIExtractionProvider'
 import { DeepgramAsrProvider } from '../providers/DeepgramAsrProvider'
 import { LocalAsrProvider } from '../providers/LocalAsrProvider'
-import { ModelDownloader } from '../providers/nemotron/ModelDownloader'
+import { ModelDownloader } from '../providers/sherpa/ModelDownloader'
 
 import type { SecretStorage } from './SecretStorage'
 import type { AppSettings } from './settingsSchema'
@@ -151,11 +151,7 @@ export function tryBuildExtractionProvider(
 function buildAsrProvider(settings: AppSettings, storage: SecretStorage): ASRProvider {
   switch (settings.asrProvider) {
     case 'local-parakeet': {
-      const modelDir = join(
-        app.getPath('userData'),
-        'models',
-        'nemotron-3.5-asr-streaming-0.6b-int4',
-      )
+      const modelDir = join(app.getPath('userData'), 'models', 'whisper-large-v3-sherpa')
       const downloader = new ModelDownloader(modelDir)
       if (!downloader.isDownloaded()) {
         throw new Error(

@@ -27,9 +27,9 @@ const probe = [
   "const db = new Database(':memory:');",
   "db.pragma('foreign_keys = ON');",
   'db.close();',
-  // onnxruntime-genai (optional — skip if not installed)
-  "try { require('onnxruntime-genai'); console.log('[smoke] onnxruntime-genai OK'); }",
-  "catch (e) { if (e.code === 'MODULE_NOT_FOUND') { console.log('[smoke] onnxruntime-genai not installed, skipping'); }",
+  // sherpa-onnx (optional — skip if not installed)
+  "try { require('sherpa-onnx'); console.log('[smoke] sherpa-onnx OK'); }",
+  "catch (e) { if (e.code === 'MODULE_NOT_FOUND') { console.log('[smoke] sherpa-onnx not installed, skipping'); }",
   'else { throw e; } }',
   "console.log('native modules OK under Electron');",
 ].join(' ')

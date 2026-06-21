@@ -143,7 +143,7 @@ export function SettingsScreen(): React.JSX.Element {
       // Check local model status
       try {
         const status = await window.api.modelStatus({
-          modelId: 'nemotron-3.5-asr-streaming-0.6b-int4',
+          modelId: 'whisper-large-v3-sherpa',
         })
         setModelDownloaded(status.downloaded)
       } catch (err) {
@@ -274,7 +274,7 @@ export function SettingsScreen(): React.JSX.Element {
     setModelError(null)
     setModelProgress({ received: 0, total: 1 })
     try {
-      await window.api.modelDownload({ modelId: 'nemotron-3.5-asr-streaming-0.6b-int4' })
+      await window.api.modelDownload({ modelId: 'whisper-large-v3-sherpa' })
     } catch (err) {
       setModelProgress(null)
       setModelError(err instanceof Error ? err.message : String(err))
@@ -338,7 +338,7 @@ export function SettingsScreen(): React.JSX.Element {
                     void handleDownloadModel()
                   }}
                 >
-                  {t('settings.asr.parakeet.download')} (~350 MB)
+                  {t('settings.asr.parakeet.download')} (~2 GB)
                 </button>
               ) : (
                 <div className="settings-model-progress" data-testid="model-progress">

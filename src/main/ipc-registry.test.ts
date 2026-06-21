@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 
 import { createIpcRegistry } from './ipc-registry'
-import { ModelDownloader } from './providers/nemotron/ModelDownloader'
+import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 
 describe('IPC registry — item 0014 (meeting/agenda/participant ops)', () => {
   let registry: ReturnType<typeof createIpcRegistry>

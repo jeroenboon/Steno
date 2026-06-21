@@ -30,7 +30,7 @@ vi.mock('electron', () => ({
   },
 }))
 
-import { ModelDownloader } from '../providers/nemotron/ModelDownloader'
+import { ModelDownloader } from '../providers/sherpa/ModelDownloader'
 
 import { computeEgressState, buildDisclosureCopy, type EgressState } from './egressState'
 import { buildProviders, tryBuildAsrProvider, tryBuildExtractionProvider } from './providerFactory'
@@ -498,7 +498,7 @@ describe('buildProviders', () => {
       primaryLanguage: 'nl',
     }
 
-    // Model dir /fake/userData/models/nemotron-3.5-asr-streaming-0.6b-int4 won't exist
+    // Model dir /fake/userData/models/whisper-large-v3-sherpa won't exist
     expect(() => buildProviders(settings, storage)).toThrow(/gedownload/i)
   })
 
@@ -520,12 +520,12 @@ describe('buildProviders', () => {
     beforeEach(async () => {
       // Point the electron mock to a temp dir that contains the expected model files
       modelDir = join(tmpdir(), `provider-test-model-${String(Date.now())}`)
-      const nemotronDir = join(modelDir, 'models', 'nemotron-3.5-asr-streaming-0.6b-int4')
-      mkdirSync(nemotronDir, { recursive: true })
+      const whisperDir = join(modelDir, 'models', 'whisper-large-v3-sherpa')
+      mkdirSync(whisperDir, { recursive: true })
 
       // Create ALL expected files so isDownloaded() returns true
       for (const f of ModelDownloader.EXPECTED_FILES) {
-        writeFileSync(join(nemotronDir, f.name), 'placeholder')
+        writeFileSync(join(whisperDir, f.name), 'placeholder')
       }
 
       const electronMock = (await import('electron')) as unknown as {

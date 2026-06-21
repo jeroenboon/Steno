@@ -31,6 +31,7 @@
     "@fontsource/ibm-plex-sans": "^5.2.8",
     "autoprefixer": "^10.4.21",
     "better-sqlite3": "^11.10.0",
+    "sherpa-onnx": "^1.13.3",
     "electron-updater": "^6.3.9",
     "framer-motion": "^11.18.2",
     "react": "^18.3.1",

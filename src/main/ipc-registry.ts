@@ -101,7 +101,7 @@ import type {
 import type { Clock } from '@shared/providers'
 
 import type { AudioCaptureBridge } from './audio/AudioCaptureBridge'
-import type { ModelDownloader } from './providers/nemotron/ModelDownloader'
+import type { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import type { ItemLifecycleService } from './services/itemLifecycleService'
 import { computeEgressState } from './settings/egressState'
 import type { SecretStorage } from './settings/SecretStorage'
