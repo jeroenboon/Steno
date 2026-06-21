@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Windows Electron + TypeScript + React desktop app that transcribes live meetings (local Parakeet V3 or a bring-your-own cloud ASR) and, during the meeting, extracts structured **Decisions** and **Actions** that a note-taker monitors and corrects in real time.
+A Windows Electron + TypeScript + React desktop app that transcribes live meetings (local Whisper via sherpa-onnx, or a bring-your-own cloud ASR) and, during the meeting, extracts structured **Decisions** and **Actions** that a note-taker monitors and corrects in real time.
 
 Read **[CONTEXT.md](CONTEXT.md)** before touching domain code — it is the authoritative glossary (Meeting, Decision, Action, Owner, Proposed/Confirmed, interim/final span, Egress State, etc.) and the terms in code match it exactly. Read the relevant **[docs/adr/](docs/adr/)** before changing the area an ADR covers; ADRs are numbered to match backlog items. **[BACKLOG.md](BACKLOG.md)** is the sequential build plan (items 0001–0025) and the engineering rules of engagement.
 
@@ -26,7 +26,7 @@ npm run rebuild:native:node  # swap better-sqlite3 back to the current Node ABI
 
 ### Native modules: the dual-ABI swap (read before touching better-sqlite3 / any native dep)
 
-`better-sqlite3` is a native module with a single compiled addon at `build/Release`. **Vitest runs under system Node; the Electron app embeds a _different_ Node ABI.** One binary cannot serve both: load the wrong one and you get `ERR_DLOPEN_FAILED` / `NODE_MODULE_VERSION` mismatch. The app crashes at startup; Vitest fails to open a DB. Note `require('better-sqlite3')` only loads JS — the addon is loaded lazily on `new Database()`, so a bare `require` is **not** a valid ABI check. This dual-ABI trap is how the item-0018 startup crash slipped past a green test suite.
+`better-sqlite3` and `sherpa-onnx` are native modules with compiled addons. **Vitest runs under system Node; the Electron app embeds a _different_ Node ABI.** One binary cannot serve both: load the wrong one and you get `ERR_DLOPEN_FAILED` / `NODE_MODULE_VERSION` mismatch. The app crashes at startup; Vitest fails to open a DB. Note `require('better-sqlite3')` only loads JS — the addon is loaded lazily on `new Database()`, so a bare `require` is **not** a valid ABI check. This dual-ABI trap is how the item-0018 startup crash slipped past a green test suite.
 
 Because no single binary works for both, each native-using command **self-heals** by swapping in the right prebuilt before it runs (`scripts/rebuild-native.mjs`, via `prebuild-install` — prebuilt binaries, no C++ toolchain needed). Do not remove these hooks:
 
@@ -66,7 +66,7 @@ The whole product rests on swapping providers, so the domain core depends only o
 
 - `src/shared/providers/ASRProvider.ts` and `ExtractionProvider.ts` — the two ports. DTOs are Zod schemas (`dtos.ts`); these are the boundary contracts.
 - `FakeASRProvider` / `FakeExtractionProvider` + an injectable `Clock` (real + fake) live alongside them and back **every** timing/provider test (deterministic tests, no real timers, no network).
-- Real adapters live in `src/main/providers/`: `DeepgramAsrProvider` (raw WebSocket, interim/final spans, ADR 0011), `AnthropicExtractionProvider` (haiku for rolling turns, sonnet for the final pass, JSON-with-one-retry-repair, ADR 0010), `CustomOpenAIExtractionProvider` (BYO OpenAI-compatible endpoint, ADR 0012).
+- Real adapters live in `src/main/providers/`: `DeepgramAsrProvider` (raw WebSocket, interim/final spans, ADR 0011), `LocalAsrProvider` (sherpa-onnx + Whisper, batch-per-chunk, no isFinal, ADR 0001), `AnthropicExtractionProvider` (haiku for rolling turns, sonnet for the final pass, JSON-with-one-retry-repair, ADR 0010), `CustomOpenAIExtractionProvider` (BYO OpenAI-compatible endpoint, ADR 0012).
 - `src/main/settings/providerFactory.ts` resolves the configured provider. `tryBuildAsrProvider` / `tryBuildExtractionProvider` return a result object, not a throw: ASR and extraction are built **independently** so a missing extraction key never disables transcription, and vice versa. Missing keys degrade gracefully (Fake ASR fallback / extraction disabled) — the app must never crash on an unconfigured key.
 
 ### Validate at every boundary with Zod (rule #8)

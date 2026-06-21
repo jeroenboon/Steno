@@ -292,13 +292,152 @@ _Why:_ a blanket "nothing leaves the device" promise is false with cloud provide
 
 ## Phase 3 — Upgrades (deferred, post-core)
 
-### 0024 — Local Parakeet V3 via ONNX + DirectML (spike → adapter)
+### 0024 — Lokale ASR via sherpa-onnx + Whisper (spike → adapter → model download)
 
-**Depends on:** 0011 (proves the ASR seam).
-**Goal:** Bring up local streaming Parakeet behind `ASRProvider` as an upgrade to the cloud default. Per [ADR 0001](docs/adr/0001-electron-shell-with-onnx-local-asr.md), this is the deferred high-risk path.
-**What & how:** Time-boxed spike first: sherpa-onnx Node bindings + DirectML execution provider on the target AMD iGPU, streaming a Parakeet transducer export. Measure real-time factor and latency. If viable, wrap as `ParakeetAsrProvider`; if not, document the result and keep cloud default (sidecar remains the fallback per ADR 0001). Model downloaded on first selection with a progress UI; cached in userData.
-**TDD:** adapter conforms to ASRProvider against recorded fixtures; download/cache logic tested with a mocked fetch.
-**DoD:** gate green (the spike's go/no-go is recorded even if the adapter doesn't ship). **Reflect:** **amend ADR 0001** with the spike outcome.
+**Depends on:** 0011 (bewijst de ASR seam). Zie `docs/handoff-sherpa-onnx-pivot.md` voor
+de context achter de pivot van onnxruntime-genai naar sherpa-onnx.
+
+**Goal:** Werkende lokale ASR achter de bestaande `ASRProvider` port via `sherpa-onnx` en
+een Whisper-gebaseerd model. Audio blijft op het apparaat. Cloud ASR (Deepgram) blijft
+beschikbaar als alternatief.
+
+---
+
+#### Stap A — Spike: sherpa-onnx in Electron + model selectie (go/no-go gate)
+
+**Doel:** bevestigen dat sherpa-onnx laadt onder Electron ABI, een Whisper model Dutch
+audio correct transcribeert, en de RTF acceptabel is op de doelhardware.
+
+**Wat:**
+
+1. `npm install sherpa-onnx` — voeg toe aan `scripts/rebuild-native.mjs` (zelfde patroon
+   als `better-sqlite3`).
+2. Schrijf een tijdelijk spike-script `scripts/spike-sherpa-asr.mjs` (niet committen).
+   - Laad een pre-converted Whisper model (bijv. `sherpa-onnx-whisper-large-v3` van de
+     sherpa-onnx model hub: `https://github.com/k2-fsa/sherpa-onnx/releases`).
+   - Feed een opgenomen WAV-bestand (16 kHz mono, ~2 min Nederlandstalig gesprek).
+   - Druk RTF, laadtijd en WER af.
+3. Voeg sherpa-onnx toe aan `scripts/smoke-electron-native.mjs`:
+   ```js
+   try {
+     require('sherpa-onnx')
+     console.log('[smoke] sherpa-onnx OK')
+   } catch (e) {
+     if (e.code !== 'MODULE_NOT_FOUND') throw e
+   }
+   ```
+
+**Go/no-go criteria:**
+
+| Criterium                     | Go-drempel           |
+| ----------------------------- | -------------------- |
+| Laadt zonder crash (CPU)      | Vereist              |
+| RTF op CPU (AMD Ryzen AI MAX) | < 1.0 (liefst < 0.5) |
+| Dutch WER (informele test)    | < 15%                |
+| Model laadtijd                | < 10s                |
+
+**Bij no-go:** documenteer de meting in ADR 0001 en stop. Cloud ASR blijft de default.
+
+**Bij go:** ga door naar stap B. Vul de spike-metingen in ADR 0001 in.
+
+**TDD:** geen productiecode in deze stap. Spike-script is lokaal, niet gecommit.
+
+---
+
+#### Stap B — Opruimen bestaande onnxruntime-genai code + SherpaSession interface
+
+**Doel:** de codebase klaarmaken voor de sherpa-onnx implementatie.
+
+**Wat:**
+
+- Verwijder `src/main/providers/nemotron/DefaultOnnxSessionFactory.ts`
+- Verwijder `src/main/providers/nemotron/OnnxSession.ts`
+- Hernoem `src/main/providers/nemotron/` → `src/main/providers/sherpa/`
+- Schrijf `src/main/providers/sherpa/SherpaSession.ts`: interface + `FakeSherpaSession` +
+  `FakeSherpaSessionFactory` (testbaar, geen echte inferentie):
+  ```typescript
+  export interface SherpaSession {
+    transcribe(audioPcm: Float32Array, sampleRate: number): Promise<string>
+    free(): void
+  }
+  export interface SherpaSessionFactory {
+    createSession(modelDir: string): Promise<SherpaSession>
+  }
+  ```
+- Schrijf `src/main/providers/sherpa/DefaultSherpaSessionFactory.ts`: wraps
+  `sherpa-onnx.OfflineRecognizer` (Whisper offline) of `sherpa-onnx.OnlineRecognizer`
+  (Zipformer streaming, als beschikbaar voor Dutch) — keuze afhankelijk van spike-uitkomst.
+- Update `src/main/providers/LocalAsrProvider.ts`: vervang `OnnxSessionFactory` door
+  `SherpaSessionFactory`; pas chunk-verwerking aan voor sherpa-onnx API (sync decode na
+  `acceptWaveform`).
+- Update `src/main/providers/LocalAsrProvider.test.ts`: vervang
+  `FakeOnnxSessionFactory` door `FakeSherpaSessionFactory`.
+
+**TDD:** bestaande `LocalAsrProvider.test.ts` tests blijven groen met de nieuwe fake.
+Voeg toe: `SherpaSession` interface tests (fake emiteert gescripte tekst).
+
+**DoD:** gate groen; geen verwijzingen naar `onnxruntime-genai` of `OnnxSession` meer.
+
+---
+
+#### Stap C — ModelDownloader: update voor Whisper sherpa-onnx model
+
+**Doel:** `ModelDownloader` downloadt de juiste bestanden voor het gekozen Whisper model.
+
+**Wat:**
+
+- Update `src/main/providers/sherpa/ModelDownloader.ts`:
+  - Definieer de verwachte bestanden voor het sherpa-onnx Whisper model (bijv.
+    `model.onnx`, `tokens.txt`, `config.json` — exacte lijst bepalen na spike).
+  - `isDownloaded()`: true als alle bestanden aanwezig zijn.
+  - `download(onProgress)`: download van de sherpa-onnx releases of HuggingFace,
+    verificeer via SHA-256.
+- Update `src/main/settings/providerFactory.ts`: modelDir path aanpassen naar
+  `userData/models/whisper-large-v3-sherpa/` (of de naam van het gekozen model).
+- Update `src/shared/ipc.ts` `ModelStatusResponseSchema`: voeg `modelId` correcte waarde
+  toe.
+
+**TDD:** `ModelDownloader.test.ts` — `isDownloaded()` false bij lege map; `download()`
+schrijft bestanden en roept `onProgress` aan (mock fetcher); `verify()` gooit bij corrupt
+bestand.
+
+**DoD:** gate groen; `tryBuildAsrProvider` geeft `{ ok: false }` terug als model niet
+gedownload, `{ ok: true }` als het er wel is.
+
+---
+
+#### Stap D — Settings screen: update download-UI en model ID
+
+**Doel:** de bestaande download-UI in Settings werkt voor het Whisper sherpa-onnx model.
+
+**Wat:**
+
+- Update `src/renderer/src/screens/SettingsScreen.tsx`: model ID en verwachte bestandslijst
+  aanpassen. UI-structuur (download-knop, progress-bar, installed-state) blijft hetzelfde.
+- Update i18n-strings als de modelnaam in de UI veranderd is.
+
+**TDD:** bestaande SettingsScreen-tests bijwerken voor het nieuwe model ID.
+
+**DoD:** gate groen; gebruiker kan het model downloaden vanuit Settings en daarna lokale ASR
+selecteren.
+
+---
+
+#### Stap E — DoD gate + ADR 0001 afronden
+
+**Wat:**
+
+```sh
+npm run build && npm test && npm run test:native && npm run lint && npm run format
+```
+
+- Vul de spike-metingen in `docs/adr/0001-electron-shell-with-onnx-local-asr.md` in.
+- Verwijder `local-ASR-plan.md` uit de repo root (was het werkdocument voor de mislukte
+  onnxruntime-genai aanpak).
+- Eén commit via `/git-commit`.
+
+**DoD:** alle vijf gates groen; ADR 0001 bijgewerkt met echte meetwaarden; geen dode code
+meer.
 
 ### 0025 — Speaker-label mapping UI (cloud diarizer only)
 

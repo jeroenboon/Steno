@@ -15,28 +15,43 @@ The primary dev/target machine is an AMD Ryzen AI MAX, so there is no CUDA and R
 
 The ONNX/DirectML streaming spike is **deferred**, not abandoned. Because the ASR Provider is a swappable seam, V1 ships with a **cloud ASR provider as the dependable default**, and local Parakeet via ONNX/DirectML is brought up behind the same interface afterward. Local-first remains the intended end state (privacy, cost), but it is no longer a V1 gate: if DirectML streaming doesn't pan out, cloud ASR carries the product and the local path stays a best-effort upgrade. This keeps the single biggest technical risk off the critical path.
 
-## Update — spike + implementatie (item 0024, stap 1)
+## Update — onnxruntime-genai: no-go (item 0024)
 
-Model: `onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4` (Cache-Aware
-FastConformer-RNNT, MIT-licentie). Geen Python/NeMo-export nodig; model al als ONNX INT4
-beschikbaar.
+Geïmplementeerd met `onnxruntime-genai` als runtime en het
+`onnx-community/nemotron-3.5-asr-streaming-0.6b-onnx-int4` model. Resultaat: **no-go.**
 
-Runtime: `onnxruntime-genai`, DirectML EP met CPU-fallback. Werkt op AMD/Intel/NVIDIA
-via DirectML zonder aparte GPU-builds.
+Root cause: `onnxruntime-genai` heeft geen Node.js npm-pakket. De ASR API bestaat alleen in
+Python, C# en C++. De dynamische import faalt silent; de provider stopt onmiddellijk zonder
+ooit een span te emitteren. De spike is niet uitgevoerd vóór de implementatie — de
+placeholder `DefaultOnnxSessionFactory.transcribe()` bevestigt dit.
 
-Spike resultaten (in te vullen na test op doelhardware):
+Tevens onderzocht: Transformers.js (WebGPU renderer-only, botst met ADR 0005) en Python
+sidecar (te veel distributiehoofdpijn voor de geboden meerwaarde).
 
-- RTF op DirectML (AMD Ryzen AI): [meetwaarde]
-- RTF op CPU: [meetwaarde]
+## Update — pivot naar sherpa-onnx + Whisper (item 0024, v2)
+
+**Runtime:** `sherpa-onnx` (`npm install sherpa-onnx`), native addon, zelfde dual-ABI
+patroon als `better-sqlite3`. Production-quality (~18k GitHub stars, v1.13.3, actief).
+
+**Model:** Whisper large-v3 multilingual (pre-converted sherpa-onnx formaat, direct
+downloadbaar). Dutch fine-tune als post-launch upgrade zodra conversie-kwaliteit gemeten is.
+
+**Nemotron losgelaten:** het ONNX INT4 model is verpakt voor onnxruntime-genai en niet
+compatibel met sherpa-onnx. Conversie vereist Python/NeMo — meer werk dan overstappen op
+een Whisper model dat sherpa-onnx al ondersteunt.
+
+**DirectML:** standaard `npm install sherpa-onnx` is CPU-only op Windows. DirectML vereist
+een custom sherpa-onnx build (AMD productiegids beschikbaar, jan 2026). V1 draait op CPU;
+DirectML is een post-launch stretch goal, niet een V1-gate.
+
+**Streaming:** sherpa-onnx Whisper is batch-per-chunk (niet token-streaming). Elke chunk
+levert één `TranscriptSpan` zonder `isFinal` veld — per ADR 0011 behandeld als final. Past
+in het bestaande `ASRProvider` patroon.
+
+Spike resultaten (in te vullen na de sherpa-onnx spike):
+
+- RTF op CPU (AMD Ryzen AI MAX): [meetwaarde]
 - Dutch WER (informele test, ~2 min vergadering): [meetwaarde]
-- DirectML laadtijd: [meetwaarde]
+- Model laadtijd eerste keer: [meetwaarde]
 
-Implementatie: `LocalAsrProvider` in `src/main/providers/LocalAsrProvider.ts`.
-Chunk-formaat 560 ms, geen `isFinal`-veld (per ADR 0011: isFinal absent = treated as final).
-ONNX session hidden achter `OnnxSessionFactory` interface (testbaar via `FakeOnnxSessionFactory`).
-Model gedownload naar `userData/models/nemotron-3.5-asr-streaming-0.6b-int4/` bij eerste gebruik
-vanuit Settings via `ModelDownloader` met SHA-256 verificatie.
-
-Beslissing omtrent go/no-go: go-pad geïmplementeerd. Spike-metingen worden ingevuld bij
-eerste run op AMD Ryzen AI hardware. Als WER > 15% blijft, is stap 2 (Dutch fine-tune via
-`yuriyvnv/parakeet-tdt-0.6b-dutch`) het vervolgtraject.
+Zie `docs/handoff-sherpa-onnx-pivot.md` voor de volledige onderzoekscontext.
