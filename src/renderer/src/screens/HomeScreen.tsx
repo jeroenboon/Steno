@@ -100,7 +100,7 @@ export function HomeScreen(): React.JSX.Element {
             </button>
           </div>
         )}
-        {interruptedMeetings.length > 0 && (
+        {interruptedMeetings.length > 0 && activeLiveMeeting === null && (
           <div className="home__interrupted-callout" data-testid="home-interrupted-callout">
             <span className="home__interrupted-label">
               {t('home.interrupted.callout')} · {interruptedMeetings[0]?.title ?? ''}
