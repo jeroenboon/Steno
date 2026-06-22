@@ -27,11 +27,14 @@
  * - `fetch`       — Injected for testability. Defaults to global fetch.
  */
 
+import type { TranscriptSpan } from '@shared/domain/types'
 import {
   ExtractionResponseSchema,
+  InferredContextSchema,
   type ExtractionProvider,
   type ExtractionRequest,
   type ExtractionResponse,
+  type InferredContext,
 } from '@shared/providers'
 
 // ---------------------------------------------------------------------------
@@ -79,6 +82,79 @@ export class CustomOpenAIExtractionProvider implements ExtractionProvider {
       `[CustomOpenAIExtractionProvider:${this._displayName}] Retry failed, skipping turn`,
     )
     return { proposedDecisions: [], proposedActions: [] }
+  }
+
+  /**
+   * Infer Agenda Items and Participants from a whole transcript, for an
+   * Imported Meeting where the user did not supply them (item 0026). Mirrors
+   * extract()'s one-retry-then-empty strategy so a bad response degrades to an
+   * empty context rather than throwing into the import.
+   *
+   * Never logs transcript content or the API key (principle #12).
+   */
+  async inferContext(spans: TranscriptSpan[]): Promise<InferredContext> {
+    if (spans.length === 0) return { agendaItems: [], participants: [] }
+
+    const first = await this._callAndValidateInfer(spans)
+    if (first !== null) return first
+
+    console.error(
+      `[CustomOpenAIExtractionProvider:${this._displayName}] Context inference failed, retrying`,
+    )
+    const retry = await this._callAndValidateInfer(spans)
+    if (retry !== null) return retry
+
+    console.error(
+      `[CustomOpenAIExtractionProvider:${this._displayName}] Context inference retry failed, returning empty`,
+    )
+    return { agendaItems: [], participants: [] }
+  }
+
+  private async _callAndValidateInfer(spans: TranscriptSpan[]): Promise<InferredContext | null> {
+    const spanLines = spans
+      .map((s) => `[${s.id}] ${s.speakerLabel ? `${s.speakerLabel}: ` : ''}${s.text}`)
+      .join('\n')
+
+    const url = `${this._baseUrl}/chat/completions`
+    const body = JSON.stringify({
+      model: this._model,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: buildInferSystemPrompt() },
+        { role: 'user', content: `Transcript:\n${spanLines}` },
+      ],
+    })
+
+    const response = await this._fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this._apiKey}`,
+      },
+      body,
+    })
+
+    if (!response.ok) {
+      console.error(
+        `[CustomOpenAIExtractionProvider:${this._displayName}] HTTP ${String(response.status)} on inference`,
+      )
+      return null
+    }
+
+    const json: unknown = await response.json()
+    const content = extractContent(json)
+    if (content === null) return null
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(content) as unknown
+    } catch {
+      return null
+    }
+
+    const validated = InferredContextSchema.safeParse(parsed)
+    if (!validated.success) return null
+    return validated.data
   }
 
   private async _callAndValidate(request: ExtractionRequest): Promise<ExtractionResponse | null> {
@@ -173,6 +249,15 @@ Deelnemers: ${participantNames}${summariesInstruction}
 
 Schema voor proposedDecisions items: { "rationale": string, "sourceSpanId": string, "agendaItemHint"?: string }
 Schema voor proposedActions items: { "description": string, "sourceSpanId": string, "ownerHint"?: string, "agendaItemHint"?: string }`
+}
+
+function buildInferSystemPrompt(): string {
+  return `Je leidt de agenda en de deelnemers af uit een vergadertranscript. Stuur je antwoord als JSON-object met de velden "agendaItems" (array) en "participants" (array).
+
+Schema voor agendaItems items: { "title": string, "topic": string }
+Schema voor participants items: { "name": string }
+
+Geef alleen namen van deelnemers die echt in het transcript voorkomen; verzin niemand. Bij twijfel laat je de lijst leeg.`
 }
 
 function buildUserMessage(request: ExtractionRequest): string {
