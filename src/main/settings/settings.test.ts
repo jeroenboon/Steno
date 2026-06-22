@@ -498,7 +498,7 @@ describe('buildProviders', () => {
       primaryLanguage: 'nl',
     }
 
-    // Model dir /fake/userData/models/whisper-large-v3-sherpa won't exist
+    // Model dir /fake/userData/models/whisper-small-sherpa won't exist
     expect(() => buildProviders(settings, storage)).toThrow(/gedownload/i)
   })
 
@@ -520,7 +520,7 @@ describe('buildProviders', () => {
     beforeEach(async () => {
       // Point the electron mock to a temp dir that contains the expected model files
       modelDir = join(tmpdir(), `provider-test-model-${String(Date.now())}`)
-      const whisperDir = join(modelDir, 'models', 'whisper-large-v3-sherpa')
+      const whisperDir = join(modelDir, 'models', 'whisper-small-sherpa')
       mkdirSync(whisperDir, { recursive: true })
 
       // Create ALL expected files so isDownloaded() returns true

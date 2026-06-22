@@ -143,7 +143,7 @@ export function SettingsScreen(): React.JSX.Element {
       // Check local model status
       try {
         const status = await window.api.modelStatus({
-          modelId: 'whisper-large-v3-sherpa',
+          modelId: 'whisper-small-sherpa',
         })
         setModelDownloaded(status.downloaded)
       } catch (err) {
@@ -274,7 +274,7 @@ export function SettingsScreen(): React.JSX.Element {
     setModelError(null)
     setModelProgress({ received: 0, total: 1 })
     try {
-      await window.api.modelDownload({ modelId: 'whisper-large-v3-sherpa' })
+      await window.api.modelDownload({ modelId: 'whisper-small-sherpa' })
     } catch (err) {
       setModelProgress(null)
       setModelError(err instanceof Error ? err.message : String(err))

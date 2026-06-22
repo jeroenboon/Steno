@@ -334,7 +334,7 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
         summaries: dsRepo.listByMeeting(meetingId),
       }
     },
-    modelDownloader: new ModelDownloader(join(userData, 'models', 'whisper-large-v3-sherpa')),
+    modelDownloader: new ModelDownloader(join(userData, 'models', 'whisper-small-sherpa')),
     pushModelProgress: (evt) => {
       mainWindow.webContents.send('model:progress', evt)
     },

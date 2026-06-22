@@ -92,14 +92,14 @@ describe('ModelDownloader', () => {
 
   it('EXPECTED_FILES match the filenames published in the HuggingFace repo', () => {
     // These names double as the remote download path AND the local filename, so
-    // they must match csukuangfj/sherpa-onnx-whisper-large-v3 exactly. The repo
-    // ships the tokens as `large-v3-tokens.txt`, not `tokens.txt`; getting this
-    // wrong 404s and sherpa's ReadTokens fails on the error-page body.
+    // they must match csukuangfj/sherpa-onnx-whisper-small exactly. Getting a
+    // name wrong 404s and the error-page body gets saved as the model file
+    // (that is how tokens.txt once became 15 bytes of "Entry not found").
     const names = ModelDownloader.EXPECTED_FILES.map((f) => f.name)
     expect(names).toEqual([
-      'large-v3-encoder.int8.onnx',
-      'large-v3-decoder.int8.onnx',
-      'large-v3-tokens.txt',
+      'small-encoder.int8.onnx',
+      'small-decoder.int8.onnx',
+      'small-tokens.txt',
     ])
   })
 
@@ -108,21 +108,21 @@ describe('ModelDownloader', () => {
   // -------------------------------------------------------------------------
 
   it('isDownloaded() returns false when the model directory is empty', () => {
-    const expectedFiles = makeExpectedFiles(['large-v3-encoder.int8.onnx', 'tokens.txt'])
+    const expectedFiles = makeExpectedFiles(['small-encoder.int8.onnx', 'tokens.txt'])
     const dl = new ModelDownloader(dir, fetch, expectedFiles)
     expect(dl.isDownloaded()).toBe(false)
   })
 
   it('isDownloaded() returns false when only some files are present', () => {
-    const expectedFiles = makeExpectedFiles(['large-v3-encoder.int8.onnx', 'tokens.txt'])
-    writeFileSync(join(dir, 'large-v3-encoder.int8.onnx'), 'content')
+    const expectedFiles = makeExpectedFiles(['small-encoder.int8.onnx', 'tokens.txt'])
+    writeFileSync(join(dir, 'small-encoder.int8.onnx'), 'content')
     const dl = new ModelDownloader(dir, fetch, expectedFiles)
     expect(dl.isDownloaded()).toBe(false)
   })
 
   it('isDownloaded() returns true when all expected files are present', () => {
-    const expectedFiles = makeExpectedFiles(['large-v3-encoder.int8.onnx', 'tokens.txt'])
-    writeFileSync(join(dir, 'large-v3-encoder.int8.onnx'), 'content')
+    const expectedFiles = makeExpectedFiles(['small-encoder.int8.onnx', 'tokens.txt'])
+    writeFileSync(join(dir, 'small-encoder.int8.onnx'), 'content')
     writeFileSync(join(dir, 'tokens.txt'), 'content')
     const dl = new ModelDownloader(dir, fetch, expectedFiles)
     expect(dl.isDownloaded()).toBe(true)
@@ -148,8 +148,8 @@ describe('ModelDownloader', () => {
   })
 
   it('verify() throws when an expected file is missing', async () => {
-    const expectedFiles = makeExpectedFiles(['large-v3-encoder.int8.onnx', 'tokens.txt'])
-    writeFileSync(join(dir, 'large-v3-encoder.int8.onnx'), 'content')
+    const expectedFiles = makeExpectedFiles(['small-encoder.int8.onnx', 'tokens.txt'])
+    writeFileSync(join(dir, 'small-encoder.int8.onnx'), 'content')
     const dl = new ModelDownloader(dir, fetch, expectedFiles)
     await expect(dl.verify()).rejects.toThrow(/missing/i)
   })
@@ -211,7 +211,7 @@ describe('ModelDownloader', () => {
     // A 404 from HuggingFace returns a small "Entry not found" body. Without an
     // ok-check that body gets written as if it were the model file — exactly how
     // tokens.txt ended up as 15 bytes of garbage and sherpa's ReadTokens failed.
-    const expectedFiles = makeExpectedFiles(['large-v3-tokens.txt'])
+    const expectedFiles = makeExpectedFiles(['small-tokens.txt'])
     const notFoundFetch = vi.fn(
       (): Promise<Response> => Promise.resolve(new Response('Entry not found', { status: 404 })),
     ) as unknown as typeof fetch
@@ -223,7 +223,7 @@ describe('ModelDownloader', () => {
       }),
     ).rejects.toThrow(/404|not found/i)
 
-    expect(existsSync(join(dir, 'large-v3-tokens.txt'))).toBe(false)
+    expect(existsSync(join(dir, 'small-tokens.txt'))).toBe(false)
   })
 
   it('download() creates modelDir if it does not exist', async () => {

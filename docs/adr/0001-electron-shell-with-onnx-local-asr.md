@@ -55,3 +55,29 @@ Spike resultaten (in te vullen na de sherpa-onnx spike):
 - Model laadtijd eerste keer: [meetwaarde]
 
 Zie `docs/handoff-sherpa-onnx-pivot.md` voor de volledige onderzoekscontext.
+
+## Update: WASM-build kan large-v3 niet laden, voorlopig terug naar Whisper small
+
+Bij het echt opstarten van de lokale provider bleek het `sherpa-onnx` npm-pakket de
+**pure-WASM build** te zijn (`sherpa-onnx-wasm-nodejs.js`), niet een native addon. Dat is
+32-bits emscripten: de heap kan geen ONNX-decodersessie van large-v3 opzetten (encoder
+766 MB + decoder 1 GB). De recognizer faalt op
+`offline-whisper-model.cc:InitDecoder:401` met `exit(-1)`. Geheugen, geen configfout.
+
+Daarvóór zat een aparte bug: de tokens werden gedownload als `tokens.txt`, maar de HF-repo
+publiceert ze als `large-v3-tokens.txt`. Die URL gaf 404 en `download()` controleerde geen
+`response.ok`, dus de foutpagina ("Entry not found", 15 bytes) belandde als modelbestand op
+schijf. Native `ReadTokens` brak daarop af. Gefixt: juiste bestandsnaam + ok-check in
+`download()`.
+
+**Beslissing:** voorlopig Whisper **small** multilingual (`sherpa-onnx-whisper-small`,
+~357 MB int8: encoder 107 MB, decoder 250 MB, tokens 1 MB). Die laadt wél onder de
+WASM-build; end-to-end transcriptie (model laden, `acceptWaveform`, `decode`, `getResult`)
+is geverifieerd onder de Electron-runtime met een testfragment. Modelmap en `modelId`
+heten nu `whisper-small-sherpa`.
+
+Dit houdt lokale ASR nu werkend. De kwaliteitskeuze staat nog open: als small voor
+Nederlands te zwak is, zijn de opties (a) een native sherpa-onnx build / `sherpa-onnx-node`
+(64-bits ONNX Runtime, geen 2 GB-plafond, herintroduceert native ABI-zorgen) zodat large-v3
+of een distil-variant past, of (b) een groter model dat nog binnen de WASM-heap valt. Die
+afweging is bewust uitgesteld tot de Dutch WER van small gemeten is.

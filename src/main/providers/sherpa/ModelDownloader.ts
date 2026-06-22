@@ -1,8 +1,12 @@
 /**
  * ModelDownloader (item 0024).
  *
- * Downloads all files for the sherpa-onnx Whisper large-v3 model and verifies
+ * Downloads all files for the sherpa-onnx Whisper small model and verifies
  * their SHA-256 hashes.
+ *
+ * The small (multilingual) model is used because the bundled sherpa-onnx is the
+ * 32-bit WASM build, whose heap cannot stand up a large-v3 decoder session
+ * (~1.7 GB of weights). Small (~357 MB int8) fits and still handles Dutch.
  *
  * Expected files and hashes are injected at construction time so tests can use
  * controlled data without real HTTP calls. Production code uses
@@ -32,7 +36,7 @@ export interface ExpectedFile {
 // HuggingFace URL helper
 // ---------------------------------------------------------------------------
 
-const HF_BASE = 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-large-v3/resolve/main'
+const HF_BASE = 'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/main'
 
 function hfUrl(filename: string): string {
   return `${HF_BASE}/${filename}`
@@ -44,16 +48,16 @@ function hfUrl(filename: string): string {
 
 export class ModelDownloader {
   /**
-   * Expected files in the sherpa-onnx Whisper large-v3 model.
+   * Expected files in the sherpa-onnx Whisper small model.
    *
    * NOTE: sha256 values are placeholders ('') until the spike is completed on
    * the target hardware. Fill them in after running scripts/spike-sherpa-asr.mjs
    * and verifying the downloads.
    */
   static readonly EXPECTED_FILES: ExpectedFile[] = [
-    { name: 'large-v3-encoder.int8.onnx', sha256: '' },
-    { name: 'large-v3-decoder.int8.onnx', sha256: '' },
-    { name: 'large-v3-tokens.txt', sha256: '' },
+    { name: 'small-encoder.int8.onnx', sha256: '' },
+    { name: 'small-decoder.int8.onnx', sha256: '' },
+    { name: 'small-tokens.txt', sha256: '' },
   ]
 
   constructor(

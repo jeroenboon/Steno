@@ -151,7 +151,7 @@ export function tryBuildExtractionProvider(
 function buildAsrProvider(settings: AppSettings, storage: SecretStorage): ASRProvider {
   switch (settings.asrProvider) {
     case 'local-parakeet': {
-      const modelDir = join(app.getPath('userData'), 'models', 'whisper-large-v3-sherpa')
+      const modelDir = join(app.getPath('userData'), 'models', 'whisper-small-sherpa')
       const downloader = new ModelDownloader(modelDir)
       if (!downloader.isDownloaded()) {
         throw new Error(

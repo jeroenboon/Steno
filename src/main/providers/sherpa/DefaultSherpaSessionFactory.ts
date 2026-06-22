@@ -24,9 +24,9 @@ export class DefaultSherpaSessionFactory implements SherpaSessionFactory {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const sherpa = await import('sherpa-onnx')
 
-    const encoder = join(modelDir, 'large-v3-encoder.int8.onnx')
-    const decoder = join(modelDir, 'large-v3-decoder.int8.onnx')
-    const tokens = join(modelDir, 'large-v3-tokens.txt')
+    const encoder = join(modelDir, 'small-encoder.int8.onnx')
+    const decoder = join(modelDir, 'small-decoder.int8.onnx')
+    const tokens = join(modelDir, 'small-tokens.txt')
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const recognizer = sherpa.createOfflineRecognizer({
