@@ -26,6 +26,7 @@ import {
   TranscriptSpanSchema,
 } from '@shared/ipc'
 
+import { onValidated } from '../ipc/onValidated'
 import { AudioCaptureService, PermissionDeniedError } from '../services/AudioCaptureService'
 import { useAppStore } from '../store/appStore'
 
@@ -67,42 +68,40 @@ export function useLiveSession(activeMeeting: string | null): UseLiveSessionResu
     serviceRef.current = service
 
     // Transcript spans
-    const unsubSpan = window.api.onTranscriptSpan((raw) => {
-      const result = TranscriptSpanSchema.safeParse(raw)
-      if (result.success) {
-        addTranscriptSpan(result.data)
-      }
+    const unsubSpan = onValidated(window.api.onTranscriptSpan, TranscriptSpanSchema, (span) => {
+      addTranscriptSpan(span)
     })
 
     // Proposed items
-    const unsubItems = window.api.onItemsChanged((raw) => {
-      const result = ItemsChangedPayloadSchema.safeParse(raw)
-      if (result.success) {
-        const payload = result.data
-        mergeProposedItems({
-          decisions: payload.decisions,
-          actions: payload.actions,
-        })
-      }
-    })
+    const unsubItems = onValidated(
+      window.api.onItemsChanged,
+      ItemsChangedPayloadSchema,
+      (payload) => {
+        mergeProposedItems({ decisions: payload.decisions, actions: payload.actions })
+      },
+    )
 
     // Nudges (item 0019)
-    const unsubNudges = window.api.onNudgesChanged((raw) => {
-      const result = NudgesChangedPayloadSchema.safeParse(raw)
-      if (result.success) {
-        setNudges(result.data.nudges)
-      }
-    })
+    const unsubNudges = onValidated(
+      window.api.onNudgesChanged,
+      NudgesChangedPayloadSchema,
+      (payload) => {
+        setNudges(payload.nudges)
+      },
+    )
 
     // Running summary (item 0020)
-    const unsubSummary = window.api.onSummaryChanged((raw) => {
-      const result = SummaryChangedPayloadSchema.safeParse(raw)
-      if (result.success) {
-        setRunningSummary(result.data.summary)
-      }
-    })
+    const unsubSummary = onValidated(
+      window.api.onSummaryChanged,
+      SummaryChangedPayloadSchema,
+      (payload) => {
+        setRunningSummary(payload.summary)
+      },
+    )
 
-    // Discussion summaries (item 0021) — save to store and navigate to Review
+    // Discussion summaries (item 0021) — save to store and navigate to Review.
+    // NOT onValidated: navigation to Review must happen whenever the meeting
+    // ends, even if the payload is malformed, so the side-effect is unconditional.
     const unsubSummaries = window.api.onItemsSummaries((raw) => {
       const result = ItemsSummariesPayloadSchema.safeParse(raw)
       if (result.success) {
