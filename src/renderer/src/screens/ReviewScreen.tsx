@@ -280,6 +280,7 @@ export function ReviewScreen(): React.JSX.Element {
   const confirmItem = useAppStore((s) => s.confirmItem)
   const meetingTitle = useAppStore((s) => s.meetingTitle)
   const meetingCreatedAt = useAppStore((s) => s.meetingCreatedAt)
+  const meetingSource = useAppStore((s) => s.meetingSource)
 
   const [editState, setEditState] = useState<EditState | null>(null)
   const [copyFeedback, setCopyFeedback] = useState(false)
@@ -439,7 +440,14 @@ export function ReviewScreen(): React.JSX.Element {
   return (
     <main data-testid="screen-review" className="screen screen--review">
       <header className="screen__header">
-        <h1 className="screen__title">{headerTitle}</h1>
+        <h1 className="screen__title">
+          {headerTitle}
+          {meetingSource === 'import' && (
+            <span className="review-imported-badge" data-testid="review-imported-badge">
+              {t('review.imported.badge')}
+            </span>
+          )}
+        </h1>
         <p className="screen__subtitle">
           {metaLine.length > 0 ? metaLine : t('screen.review.subtitle')}
         </p>

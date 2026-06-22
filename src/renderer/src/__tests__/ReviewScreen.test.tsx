@@ -122,6 +122,18 @@ describe('ReviewScreen — basic rendering', () => {
     renderReview()
     expect(screen.getByText('Notulen — Roadmap Q3')).toBeInTheDocument()
   })
+
+  it('shows an imported badge when the meeting came from a file', () => {
+    useAppStore.setState({ meetingSource: 'import' })
+    renderReview()
+    expect(screen.getByTestId('review-imported-badge')).toBeInTheDocument()
+  })
+
+  it('does not show the imported badge for a live meeting', () => {
+    useAppStore.setState({ meetingSource: 'live' })
+    renderReview()
+    expect(screen.queryByTestId('review-imported-badge')).not.toBeInTheDocument()
+  })
 })
 
 describe('ReviewScreen — Discussion Summaries', () => {

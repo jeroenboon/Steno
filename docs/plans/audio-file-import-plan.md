@@ -1,15 +1,15 @@
 # Plan: Audio file import → meeting notes
 
-Status: in progress. Owner: Jeroen. Target: a new "item 0026" feature, decomposed
-into atomic TDD steps. Each step below is one `/tdd` red-green-refactor cycle and
-one Conventional Commit. Do not start a step until the previous one is green
-against the full Definition of Done gate (build, test, `test:native`, lint,
-format).
+Status: done. Owner: Jeroen. Target: a new "item 0026" feature, decomposed into
+atomic TDD steps. Each step below was one `/tdd` red-green-refactor cycle and one
+Conventional Commit, green against the full Definition of Done gate (build, test,
+`test:native`, lint, format).
 
-**Progress (2026-06-22):** Steps 1-7 done and committed (the whole main side).
-Step 8 (preload bridge) was folded into Step 6 so RendererApi never referenced an
-unimplemented method. Remaining: Step 9 (renderer decode/stream service), Step 10
-(Import screen + Home entry), Step 11 (Review label + reflect).
+**Completed (2026-06-22):** all steps done and committed. Step 8 (preload bridge)
+was folded into Step 6 so RendererApi never referenced an unimplemented method.
+The feature is end-to-end: Home → Import screen → decode/stream in the renderer →
+ImportSessionController transcribes + (optionally) infers context + runs the final
+pass → meeting opens in Review with a "Geïmporteerd" badge.
 
 ## Goal
 

@@ -21,6 +21,7 @@ import type {
   Nudge,
   NudgeId,
   DiscussionSummary,
+  RecordingSource,
 } from '@shared/domain/types'
 import type { ItemsChangedPayload, MeetingLoadResponse } from '@shared/ipc'
 import { MeetingLoadResponseSchema } from '@shared/ipc'
@@ -77,6 +78,12 @@ export interface AppState {
    * header. Null when no meeting is loaded.
    */
   meetingCreatedAt: string | null
+
+  /**
+   * Where the loaded/active meeting's transcript came from (item 0026).
+   * 'import' surfaces a badge in Review; defaults to 'live'.
+   */
+  meetingSource: RecordingSource
 
   /**
    * Microphone permission state (item 0015).
@@ -256,6 +263,7 @@ export const useAppStore = create<AppState>()((set) => ({
   activeMeeting: null,
   meetingTitle: '',
   meetingCreatedAt: null,
+  meetingSource: 'live',
   micPermission: 'unknown',
   transcriptSpans: [],
   captureMode: 'remote',
@@ -393,6 +401,7 @@ export const useAppStore = create<AppState>()((set) => ({
       activeMeeting: id,
       meetingTitle: payload.meeting.title,
       meetingCreatedAt: payload.meeting.createdAt,
+      meetingSource: payload.meeting.source,
       // Only confirmed items matter in Review; clear proposed from any prior session.
       proposedDecisions: [],
       proposedActions: [],
