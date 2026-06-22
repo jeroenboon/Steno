@@ -27,23 +27,17 @@
  */
 
 import { AnimatePresence, motion } from 'framer-motion'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 
 import { OffAgenda } from '@shared/domain/types'
-import {
-  ItemsChangedPayloadSchema,
-  ItemsSummariesPayloadSchema,
-  NudgesChangedPayloadSchema,
-  SummaryChangedPayloadSchema,
-  TranscriptSpanSchema,
-} from '@shared/ipc'
 
 import { NudgePanel } from '../components/NudgePanel'
 import { RunningSummaryPanel } from '../components/RunningSummaryPanel'
 import { t } from '../i18n'
-import { AudioCaptureService, PermissionDeniedError } from '../services/AudioCaptureService'
 import { useAppStore } from '../store/appStore'
 import type { ProposedDecision, ProposedAction } from '../store/appStore'
+
+import { useLiveSession } from './useLiveSession'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -465,12 +459,9 @@ export function LiveScreen(): React.JSX.Element {
   // --- Store ---
   const micPermission = useAppStore((s) => s.micPermission)
   const transcriptSpans = useAppStore((s) => s.transcriptSpans)
-  const setMicPermission = useAppStore((s) => s.setMicPermission)
-  const addTranscriptSpan = useAppStore((s) => s.addTranscriptSpan)
   const captureMode = useAppStore((s) => s.captureMode)
   const loopbackState = useAppStore((s) => s.loopbackState)
   const setCaptureMode = useAppStore((s) => s.setCaptureMode)
-  const setLoopbackState = useAppStore((s) => s.setLoopbackState)
 
   const proposedDecisions = useAppStore((s) => s.proposedDecisions)
   const proposedActions = useAppStore((s) => s.proposedActions)
@@ -480,29 +471,23 @@ export function LiveScreen(): React.JSX.Element {
   const participants = useAppStore((s) => s.participants)
   const activeMeeting = useAppStore((s) => s.activeMeeting)
   const setRoute = useAppStore((s) => s.setRoute)
-  const setDiscussionSummaries = useAppStore((s) => s.setDiscussionSummaries)
 
-  const mergeProposedItems = useAppStore((s) => s.mergeProposedItems)
   const confirmItem = useAppStore((s) => s.confirmItem)
   const removeProposedItem = useAppStore((s) => s.removeProposedItem)
   const addConfirmedItem = useAppStore((s) => s.addConfirmedItem)
 
   const nudges = useAppStore((s) => s.nudges)
   const dismissedNudgeIds = useAppStore((s) => s.dismissedNudgeIds)
-  const setNudges = useAppStore((s) => s.setNudges)
   const dismissNudge = useAppStore((s) => s.dismissNudge)
-  const setRunningSummary = useAppStore((s) => s.setRunningSummary)
+
+  // --- Session orchestration (audio capture + IPC subscriptions) ---
+  const { audioLevel } = useLiveSession(activeMeeting)
 
   // --- Local UI state ---
   const [transcriptOpen, setTranscriptOpen] = useState(false)
   const [editState, setEditState] = useState<EditState | null>(null)
   const [addingKind, setAddingKind] = useState<ItemKind | null>(null)
   const [endingMeeting, setEndingMeeting] = useState(false)
-  const [audioLevel, setAudioLevel] = useState(0)
-
-  // --- Refs ---
-  const serviceRef = useRef<AudioCaptureService | null>(null)
-  const audioLevelRef = useRef(0)
 
   // --- Derived maps ---
   const transcriptSpanMap = React.useMemo(() => {
@@ -520,115 +505,6 @@ export function LiveScreen(): React.JSX.Element {
     }
     return m
   }, [participants])
-
-  // --- IPC subscriptions ---
-  useEffect(() => {
-    // Guard: do not start audio if no meeting is active. App mounts LiveScreen
-    // permanently (it is always in the DOM, only hidden via CSS) so audio capture
-    // survives tab switches. That means this effect first runs at app startup with
-    // no meeting — bail until one is active. `activeMeeting` IS in the dependency
-    // array below precisely so the effect re-fires (and starts capture) the moment
-    // a meeting goes live; without it, start() would never be called.
-    if (activeMeeting === null) return
-
-    const service = new AudioCaptureService()
-    serviceRef.current = service
-
-    // Transcript spans
-    const unsubSpan = window.api.onTranscriptSpan((raw) => {
-      const result = TranscriptSpanSchema.safeParse(raw)
-      if (result.success) {
-        addTranscriptSpan(result.data)
-      }
-    })
-
-    // Proposed items
-    const unsubItems = window.api.onItemsChanged((raw) => {
-      const result = ItemsChangedPayloadSchema.safeParse(raw)
-      if (result.success) {
-        const payload = result.data
-        mergeProposedItems({
-          decisions: payload.decisions,
-          actions: payload.actions,
-        })
-      }
-    })
-
-    // Nudges (item 0019)
-    const unsubNudges = window.api.onNudgesChanged((raw) => {
-      const result = NudgesChangedPayloadSchema.safeParse(raw)
-      if (result.success) {
-        setNudges(result.data.nudges)
-      }
-    })
-
-    // Running summary (item 0020)
-    const unsubSummary = window.api.onSummaryChanged((raw) => {
-      const result = SummaryChangedPayloadSchema.safeParse(raw)
-      if (result.success) {
-        setRunningSummary(result.data.summary)
-      }
-    })
-
-    // Discussion summaries (item 0021) — save to store and navigate to Review
-    const unsubSummaries = window.api.onItemsSummaries((raw) => {
-      const result = ItemsSummariesPayloadSchema.safeParse(raw)
-      if (result.success) {
-        setDiscussionSummaries(result.data.summaries)
-      }
-      setRoute('review')
-    })
-
-    // Start audio capture
-    let lastLevelTick = 0
-    void service
-      .start(captureMode, (level) => {
-        const now = Date.now()
-        if (now - lastLevelTick >= 80) {
-          lastLevelTick = now
-          audioLevelRef.current = level
-          setAudioLevel(level)
-        }
-      })
-      .then((result) => {
-        setMicPermission('granted')
-        setLoopbackState(result.loopbackState)
-      })
-      .catch((err: unknown) => {
-        if (err instanceof PermissionDeniedError) {
-          setMicPermission('denied')
-        } else {
-          setMicPermission('denied')
-          console.error('[LiveScreen] Audio capture error:', err)
-        }
-      })
-
-    return () => {
-      unsubSpan()
-      unsubItems()
-      unsubNudges()
-      unsubSummary()
-      unsubSummaries()
-      void service.stop().catch((err: unknown) => {
-        console.error('[LiveScreen] Error stopping audio capture:', err)
-      })
-    }
-    // captureMode is intentionally omitted: the mode is locked once capture
-    // begins (the selector is disabled while micPermission !== 'unknown'), so a
-    // re-run on mode change would never be desirable. activeMeeting IS included
-    // so capture starts when the meeting goes live and stops when it clears.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    activeMeeting,
-    addTranscriptSpan,
-    setMicPermission,
-    setLoopbackState,
-    mergeProposedItems,
-    setNudges,
-    setRunningSummary,
-    setDiscussionSummaries,
-    setRoute,
-  ])
 
   // --- Item actions ---
   const handleConfirm = useCallback(
