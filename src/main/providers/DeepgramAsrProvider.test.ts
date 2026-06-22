@@ -469,3 +469,86 @@ describe('DeepgramAsrProvider', () => {
     logSpy.mockRestore()
   })
 })
+
+// ---------------------------------------------------------------------------
+// transcribeBatch — prerecorded REST (item 0026)
+// ---------------------------------------------------------------------------
+
+describe('DeepgramAsrProvider.transcribeBatch', () => {
+  function okResponse(body: unknown): Response {
+    return { ok: true, status: 200, json: () => Promise.resolve(body) } as unknown as Response
+  }
+
+  function makeBatchProvider(fetchImpl: typeof globalThis.fetch) {
+    return new DeepgramAsrProvider({ apiKey: 'test-key', language: 'nl', fetch: fetchImpl })
+  }
+
+  const utterancesBody = {
+    metadata: { duration: 3 },
+    results: {
+      utterances: [
+        { start: 0, end: 1.5, transcript: 'Hallo allemaal', speaker: 0, confidence: 0.9 },
+        { start: 1.5, end: 3, transcript: 'We beginnen met de begroting', speaker: 1 },
+      ],
+    },
+  }
+
+  it('maps prerecorded utterances to time-ordered spans with speaker labels', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(utterancesBody))
+    const provider = makeBatchProvider(fetchMock)
+
+    const spans = await provider.transcribeBatch(new Uint8Array([1, 2, 3, 4]))
+
+    expect(spans.map((s) => s.text)).toEqual(['Hallo allemaal', 'We beginnen met de begroting'])
+    expect(spans[0]).toMatchObject({
+      startMs: 0,
+      endMs: 1500,
+      speakerLabel: 'Speaker 0',
+      isFinal: true,
+    })
+    expect(spans[1]).toMatchObject({ startMs: 1500, endMs: 3000, speakerLabel: 'Speaker 1' })
+  })
+
+  it('POSTs the PCM to the prerecorded endpoint with token auth and linear16 params', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(utterancesBody))
+    const provider = makeBatchProvider(fetchMock)
+
+    await provider.transcribeBatch(new Uint8Array([1, 2, 3, 4]))
+
+    const call = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(call[0]).toContain('api.deepgram.com/v1/listen')
+    expect(call[0]).toContain('encoding=linear16')
+    expect(call[0]).toContain('sample_rate=16000')
+    const headers = call[1].headers as Record<string, string>
+    expect(headers.Authorization).toBe('Token test-key')
+    expect(call[1].method).toBe('POST')
+  })
+
+  it('falls back to the channel transcript when no utterances are present', async () => {
+    const body = {
+      metadata: { duration: 2 },
+      results: { channels: [{ alternatives: [{ transcript: 'Korte notitie', confidence: 0.8 }] }] },
+    }
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(body))
+    const provider = makeBatchProvider(fetchMock)
+
+    const spans = await provider.transcribeBatch(new Uint8Array([1, 2]))
+
+    expect(spans.map((s) => s.text)).toEqual(['Korte notitie'])
+    expect(spans[0]).toMatchObject({ startMs: 0, endMs: 2000 })
+  })
+
+  it('throws on a non-ok response without logging the key', async () => {
+    const logged: string[] = []
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
+      logged.push(a.map(String).join(' '))
+    })
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 401 })
+    const provider = makeBatchProvider(fetchMock)
+
+    await expect(provider.transcribeBatch(new Uint8Array([1, 2]))).rejects.toThrow()
+    expect(logged.join('\n')).not.toContain('test-key')
+
+    errorSpy.mockRestore()
+  })
+})

@@ -86,6 +86,23 @@ function buildDeepgramUrl(language: string): string {
   return `${DEEPGRAM_WSS_BASE}?${params.toString()}`
 }
 
+const DEEPGRAM_REST_BASE = 'https://api.deepgram.com/v1/listen'
+
+/** URL for the prerecorded (batch) REST API used by the file-import path. */
+function buildDeepgramRestUrl(language: string): string {
+  const params = new URLSearchParams({
+    language,
+    model: 'nova-2',
+    encoding: 'linear16',
+    sample_rate: '16000',
+    channels: '1',
+    diarize: 'true',
+    punctuate: 'true',
+    utterances: 'true',
+  })
+  return `${DEEPGRAM_REST_BASE}?${params.toString()}`
+}
+
 // ---------------------------------------------------------------------------
 // Deepgram response payload schema (Zod at the boundary — principle #8)
 // ---------------------------------------------------------------------------
@@ -112,6 +129,35 @@ const DeepgramResultSchema = z.object({
 })
 
 type DeepgramResult = z.infer<typeof DeepgramResultSchema>
+
+// Prerecorded (batch) REST response — only the fields the import path needs.
+const DeepgramPrerecordedSchema = z.object({
+  metadata: z.object({ duration: z.number().optional() }).optional(),
+  results: z.object({
+    channels: z
+      .array(
+        z.object({
+          alternatives: z
+            .array(z.object({ transcript: z.string(), confidence: z.number().optional() }))
+            .min(1),
+        }),
+      )
+      .optional(),
+    utterances: z
+      .array(
+        z.object({
+          start: z.number(),
+          end: z.number(),
+          transcript: z.string(),
+          confidence: z.number().optional(),
+          speaker: z.number().optional(),
+        }),
+      )
+      .optional(),
+  }),
+})
+
+type DeepgramPrerecorded = z.infer<typeof DeepgramPrerecordedSchema>
 
 // ---------------------------------------------------------------------------
 // Constructor options
@@ -142,6 +188,11 @@ export interface DeepgramAsrProviderOptions {
    * because the Electron main process has no global WebSocket.
    */
   webSocketFactory?: WebSocketFactory
+  /**
+   * Fetch implementation for the prerecorded (batch) REST call used by
+   * transcribeBatch. Injected for tests; defaults to the global fetch.
+   */
+  fetch?: typeof globalThis.fetch
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +212,7 @@ export class DeepgramAsrProvider implements ASRProvider {
   private readonly _sleep: (ms: number) => Promise<void>
   private readonly _maxBackoffMs: number
   private readonly _wsFactory: WebSocketFactory
+  private readonly _fetch: typeof globalThis.fetch
 
   private _socket: WebSocketLike | null = null
   private _stopped = false
@@ -178,6 +230,46 @@ export class DeepgramAsrProvider implements ASRProvider {
     this._wsFactory =
       options.webSocketFactory ??
       ((url, protocols) => new WebSocketImpl(url, protocols) as unknown as WebSocketLike)
+    this._fetch = options.fetch ?? globalThis.fetch
+  }
+
+  /**
+   * Transcribe a complete PCM buffer via Deepgram's prerecorded REST API
+   * (item 0026 — file import). No realtime socket: one HTTP POST of the raw
+   * linear16 audio, then map the returned utterances (or the channel transcript
+   * as a fallback) to final spans.
+   *
+   * Throws on a non-ok HTTP response or a response that fails validation, so the
+   * import surfaces the failure instead of silently producing an empty
+   * transcript. Never logs the key, audio, or transcript (principle #12).
+   */
+  async transcribeBatch(pcm: Uint8Array): Promise<TranscriptSpan[]> {
+    const response = await this._fetch(buildDeepgramRestUrl(this._language), {
+      method: 'POST',
+      headers: {
+        Authorization: `Token ${this._apiKey}`,
+        'Content-Type': 'application/octet-stream',
+      },
+      // The PCM bytes are a valid fetch body; cast past the ArrayBufferLike
+      // generic mismatch between the Uint8Array and the DOM BodyInit type.
+      body: pcm as unknown as BodyInit,
+    })
+
+    if (!response.ok) {
+      console.error(
+        `[DeepgramAsrProvider] Prerecorded request failed (HTTP ${String(response.status)})`,
+      )
+      throw new Error(`Deepgram prerecorded request failed with status ${String(response.status)}`)
+    }
+
+    const json: unknown = await response.json()
+    const parsed = DeepgramPrerecordedSchema.safeParse(json)
+    if (!parsed.success) {
+      console.error('[DeepgramAsrProvider] Prerecorded response failed validation')
+      throw new Error('Deepgram prerecorded response did not match the expected shape')
+    }
+
+    return prerecordedToSpans(parsed.data)
   }
 
   // -------------------------------------------------------------------------
@@ -359,4 +451,52 @@ export class DeepgramAsrProvider implements ASRProvider {
     const parsed = TranscriptSpanSchema.safeParse(raw)
     return parsed.success ? parsed.data : null
   }
+}
+
+// ---------------------------------------------------------------------------
+// Prerecorded response → spans
+// ---------------------------------------------------------------------------
+
+function prerecordedToSpans(data: DeepgramPrerecorded): TranscriptSpan[] {
+  const spans: TranscriptSpan[] = []
+
+  const utterances = data.results.utterances
+  if (utterances !== undefined && utterances.length > 0) {
+    for (const u of utterances) {
+      const text = u.transcript.trim()
+      if (text.length === 0) continue
+      const raw = {
+        id: randomUUID(),
+        text,
+        startMs: Math.round(u.start * 1000),
+        endMs: Math.round(u.end * 1000),
+        confidence: u.confidence,
+        speakerLabel: u.speaker !== undefined ? `Speaker ${String(u.speaker)}` : undefined,
+        isFinal: true,
+      }
+      const parsed = TranscriptSpanSchema.safeParse(raw)
+      if (parsed.success) spans.push(parsed.data)
+    }
+    return spans
+  }
+
+  // Fallback: no utterances — use the channel transcript as a single span.
+  const alt = data.results.channels?.[0]?.alternatives[0]
+  if (alt !== undefined) {
+    const text = alt.transcript.trim()
+    if (text.length > 0) {
+      const raw = {
+        id: randomUUID(),
+        text,
+        startMs: 0,
+        endMs: Math.round((data.metadata?.duration ?? 0) * 1000),
+        confidence: alt.confidence,
+        isFinal: true,
+      }
+      const parsed = TranscriptSpanSchema.safeParse(raw)
+      if (parsed.success) spans.push(parsed.data)
+    }
+  }
+
+  return spans
 }
