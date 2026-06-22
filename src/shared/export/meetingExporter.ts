@@ -9,7 +9,14 @@
  */
 
 import { OffAgenda } from '../domain/types'
-import type { AgendaItem, Participant, Decision, Action, DiscussionSummary } from '../domain/types'
+import type {
+  AgendaItem,
+  Participant,
+  Decision,
+  Action,
+  DiscussionSummary,
+  TranscriptSpan,
+} from '../domain/types'
 
 // ---------------------------------------------------------------------------
 // Input shape
@@ -129,4 +136,22 @@ export function toMarkdown(input: ExportInput): string {
   }
 
   return lines.join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Transcript serializer
+// ---------------------------------------------------------------------------
+
+/**
+ * Serialise transcript spans to plain text: one line per span, ordered by start
+ * time, with an optional "Speaker: " prefix when a speaker label is present.
+ *
+ * Used for the "copy transcript" action once transcription is complete. Pure —
+ * no clipboard or Electron APIs here.
+ */
+export function toTranscriptText(spans: TranscriptSpan[]): string {
+  return [...spans]
+    .sort((a, b) => a.startMs - b.startMs)
+    .map((s) => (s.speakerLabel !== undefined ? `${s.speakerLabel}: ${s.text}` : s.text))
+    .join('\n')
 }

@@ -418,6 +418,61 @@ describe('IPC registry — import:start and import:finish (item 0026)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// transcript:copy (item 0026)
+// ---------------------------------------------------------------------------
+
+describe('IPC registry — transcript:copy (item 0026)', () => {
+  const mockSettingsStore = {
+    current: {
+      asrProvider: 'deepgram' as const,
+      extractionProvider: 'anthropic' as const,
+      primaryLanguage: 'nl',
+    },
+    save: async () => {
+      // no-op
+    },
+    load: async () => {
+      // no-op
+    },
+  }
+
+  it('copies the transcript via onCopyTranscript and returns ok', async () => {
+    const copied: string[] = []
+    const registry = createIpcRegistry({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+      settingsStore: mockSettingsStore as any,
+      onCopyTranscript: (meetingId) => copied.push(meetingId),
+    })
+
+    const response = await registry.dispatch('transcript:copy', { meetingId: 'mtg-1' })
+
+    expect(response).toEqual({ ok: true })
+    expect(copied).toEqual(['mtg-1'])
+  })
+
+  it('returns ok even when onCopyTranscript dep is absent', async () => {
+    const registry = createIpcRegistry({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+      settingsStore: mockSettingsStore as any,
+    })
+
+    const response = await registry.dispatch('transcript:copy', { meetingId: 'mtg-1' })
+
+    expect(response).toEqual({ ok: true })
+  })
+
+  it('rejects an empty meeting id', async () => {
+    const registry = createIpcRegistry({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+      settingsStore: mockSettingsStore as any,
+      onCopyTranscript: () => undefined,
+    })
+
+    await expect(registry.dispatch('transcript:copy', { meetingId: '' })).rejects.toThrow()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // model:status and model:download (item 0024)
 // ---------------------------------------------------------------------------
 

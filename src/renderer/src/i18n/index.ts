@@ -252,6 +252,8 @@ const nl = {
   'review.export.copy': 'Kopieer als Markdown',
   'review.export.copied': 'Gekopieerd!',
   'review.export.error': 'Export mislukt',
+  'review.transcript.copy': 'Kopieer transcript',
+  'review.transcript.copied': 'Transcript gekopieerd!',
 
   // Generic
   'app.name': 'LiveTranscriber',

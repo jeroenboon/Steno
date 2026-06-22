@@ -58,6 +58,8 @@ import type {
   ExportMarkdownResponse,
   ExportCopyMarkdownRequest,
   ExportCopyMarkdownResponse,
+  TranscriptCopyRequest,
+  TranscriptCopyResponse,
   MeetingListRequest,
   MeetingListResponse,
   MeetingLoadRequest,
@@ -216,6 +218,9 @@ const api: RendererApi = {
     ipcRenderer.invoke('export:markdown', req) as Promise<ExportMarkdownResponse>,
   exportCopyMarkdown: (req: ExportCopyMarkdownRequest) =>
     ipcRenderer.invoke('export:copyMarkdown', req) as Promise<ExportCopyMarkdownResponse>,
+
+  transcriptCopy: (req: TranscriptCopyRequest) =>
+    ipcRenderer.invoke('transcript:copy', req) as Promise<TranscriptCopyResponse>,
 
   // ---------------------------------------------------------------------------
   // Meeting history (item 0023)

@@ -482,6 +482,23 @@ export type ExportCopyMarkdownRequest = z.infer<typeof ExportCopyMarkdownRequest
 export type ExportCopyMarkdownResponse = z.infer<typeof ExportCopyMarkdownResponseSchema>
 
 // ---------------------------------------------------------------------------
+// transcript:copy — copy the full transcript to the clipboard (item 0026)
+//
+// Main reads the meeting's persisted spans, serialises them to plain text, and
+// copies the result. The transcript never round-trips to the renderer; only the
+// meeting id is sent.
+// ---------------------------------------------------------------------------
+
+export const TranscriptCopyRequestSchema = z.object({
+  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
+})
+
+export const TranscriptCopyResponseSchema = z.object({ ok: z.literal(true) })
+
+export type TranscriptCopyRequest = z.infer<typeof TranscriptCopyRequestSchema>
+export type TranscriptCopyResponse = z.infer<typeof TranscriptCopyResponseSchema>
+
+// ---------------------------------------------------------------------------
 // meeting:list — returns all meetings ordered newest-first (item 0023)
 // ---------------------------------------------------------------------------
 
@@ -647,6 +664,7 @@ export type IpcChannel =
   | 'summary:query'
   | 'export:markdown'
   | 'export:copyMarkdown'
+  | 'transcript:copy'
   | 'meeting:list'
   | 'meeting:load'
   | 'model:status'
@@ -795,6 +813,11 @@ export interface RendererApi {
    * (item 0022)
    */
   exportCopyMarkdown: (req: ExportCopyMarkdownRequest) => Promise<ExportCopyMarkdownResponse>
+  /**
+   * Copy the full transcript of a meeting to the clipboard (item 0026).
+   * Main serialises the persisted spans; only the meeting id is sent.
+   */
+  transcriptCopy: (req: TranscriptCopyRequest) => Promise<TranscriptCopyResponse>
   /**
    * List all meetings ordered newest-first (item 0023).
    * Used by the Home screen to show past meetings.

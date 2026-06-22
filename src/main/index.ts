@@ -14,6 +14,7 @@ import {
   clipboard,
 } from 'electron'
 
+import { toTranscriptText } from '@shared/export/meetingExporter'
 import type { IpcChannel } from '@shared/ipc'
 import { RealClock } from '@shared/providers'
 
@@ -184,6 +185,7 @@ const IPC_CHANNELS: IpcChannel[] = [
   'meeting:end',
   'export:markdown',
   'export:copyMarkdown',
+  'transcript:copy',
   'meeting:list',
   'meeting:load',
   'model:status',
@@ -351,6 +353,10 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     },
     onCopyToClipboard: (content) => {
       clipboard.writeText(content)
+    },
+    onCopyTranscript: (meetingId) => {
+      const spans = spanRepo.listByMeeting(meetingId)
+      clipboard.writeText(toTranscriptText(spans))
     },
     meetingList: () => {
       return mRepo.list().filter((m) => m.state !== 'draft')

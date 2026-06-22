@@ -281,9 +281,11 @@ export function ReviewScreen(): React.JSX.Element {
   const meetingTitle = useAppStore((s) => s.meetingTitle)
   const meetingCreatedAt = useAppStore((s) => s.meetingCreatedAt)
   const meetingSource = useAppStore((s) => s.meetingSource)
+  const activeMeeting = useAppStore((s) => s.activeMeeting)
 
   const [editState, setEditState] = useState<EditState | null>(null)
   const [copyFeedback, setCopyFeedback] = useState(false)
+  const [transcriptCopyFeedback, setTranscriptCopyFeedback] = useState(false)
   const [exportState, setExportState] = useState<'idle' | 'saving' | 'saved'>('idle')
 
   const participantMap = React.useMemo(() => {
@@ -404,6 +406,19 @@ export function ReviewScreen(): React.JSX.Element {
     }
   }, [buildExportInput])
 
+  const handleCopyTranscript = useCallback(async () => {
+    if (activeMeeting === null) return
+    try {
+      await window.api.transcriptCopy({ meetingId: activeMeeting })
+      setTranscriptCopyFeedback(true)
+      setTimeout(() => {
+        setTranscriptCopyFeedback(false)
+      }, 2000)
+    } catch (err) {
+      console.error('[ReviewScreen] transcriptCopy failed:', err)
+    }
+  }, [activeMeeting])
+
   const handleCopyMarkdown = useCallback(async () => {
     try {
       const content = toMarkdown(buildExportInput())
@@ -518,6 +533,17 @@ export function ReviewScreen(): React.JSX.Element {
           }}
         >
           {copyFeedback ? t('review.export.copied') : t('review.export.copy')}
+        </button>
+        <button
+          type="button"
+          className="btn btn--secondary"
+          data-testid="review-copy-transcript-btn"
+          disabled={activeMeeting === null}
+          onClick={() => {
+            void handleCopyTranscript()
+          }}
+        >
+          {transcriptCopyFeedback ? t('review.transcript.copied') : t('review.transcript.copy')}
         </button>
       </footer>
     </main>

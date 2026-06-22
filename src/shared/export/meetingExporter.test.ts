@@ -4,14 +4,22 @@
  * Covers:
  *   - toMarkdown: Markdown structure, agenda ordering, off-agenda placement,
  *     owner resolution, due date formatting, empty meeting edge case
+ *   - toTranscriptText: time-ordered plain-text transcript with optional speakers
  */
 
 import { describe, it, expect } from 'vitest'
 
-import type { AgendaItem, Participant, Decision, Action, DiscussionSummary } from '../domain/types'
+import type {
+  AgendaItem,
+  Participant,
+  Decision,
+  Action,
+  DiscussionSummary,
+  TranscriptSpan,
+} from '../domain/types'
 import { OffAgenda } from '../domain/types'
 
-import { toMarkdown } from './meetingExporter'
+import { toMarkdown, toTranscriptText } from './meetingExporter'
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -210,5 +218,39 @@ describe('toMarkdown', () => {
     })
     expect(md).toMatch(/^# Lege vergadering/)
     expect(md).not.toContain('##')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// toTranscriptText
+// ---------------------------------------------------------------------------
+
+describe('toTranscriptText', () => {
+  const SPAN_A: TranscriptSpan = {
+    id: 's-1',
+    text: 'Goedemorgen allemaal.',
+    startMs: 0,
+    endMs: 1500,
+  }
+  const SPAN_B: TranscriptSpan = {
+    id: 's-2',
+    text: 'We beginnen met de begroting.',
+    startMs: 1500,
+    endMs: 3000,
+  }
+
+  it('joins spans in time order, one line per span', () => {
+    // Provided out of order to prove it sorts by startMs.
+    const text = toTranscriptText([SPAN_B, SPAN_A])
+    expect(text).toBe('Goedemorgen allemaal.\nWe beginnen met de begroting.')
+  })
+
+  it('prefixes the speaker label when present', () => {
+    const text = toTranscriptText([{ ...SPAN_A, speakerLabel: 'Spreker 1' }])
+    expect(text).toBe('Spreker 1: Goedemorgen allemaal.')
+  })
+
+  it('returns an empty string when there are no spans', () => {
+    expect(toTranscriptText([])).toBe('')
   })
 })

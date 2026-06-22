@@ -49,6 +49,7 @@ const mockApi = {
   itemCreateConfirmed: vi.fn().mockResolvedValue({ state: 'confirmed' }),
   exportMarkdown: vi.fn().mockResolvedValue({ ok: true }),
   exportCopyMarkdown: vi.fn().mockResolvedValue({ ok: true }),
+  transcriptCopy: vi.fn().mockResolvedValue({ ok: true }),
 }
 
 Object.assign(window, { api: mockApi })
@@ -171,6 +172,28 @@ describe('ReviewScreen — Markdown export', () => {
     await waitFor(() => {
       expect(screen.getByTestId('review-export-markdown-btn')).not.toBeDisabled()
     })
+  })
+})
+
+describe('ReviewScreen — copy transcript', () => {
+  it('copies the transcript of the active meeting via IPC', async () => {
+    useAppStore.setState({ activeMeeting: 'mtg-1' })
+    renderReview()
+
+    fireEvent.click(screen.getByTestId('review-copy-transcript-btn'))
+
+    await waitFor(() => {
+      expect(mockApi.transcriptCopy).toHaveBeenCalledWith({ meetingId: 'mtg-1' })
+    })
+  })
+
+  it('shows copied feedback after copying the transcript', async () => {
+    useAppStore.setState({ activeMeeting: 'mtg-1' })
+    renderReview()
+
+    fireEvent.click(screen.getByTestId('review-copy-transcript-btn'))
+
+    expect(await screen.findByText('Transcript gekopieerd!')).toBeInTheDocument()
   })
 })
 

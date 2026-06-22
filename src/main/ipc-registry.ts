@@ -57,6 +57,8 @@ import {
   ExportMarkdownRequestSchema,
   ExportCopyMarkdownRequestSchema,
   ExportCopyMarkdownResponseSchema,
+  TranscriptCopyRequestSchema,
+  TranscriptCopyResponseSchema,
   MeetingListRequestSchema,
   MeetingListResponseSchema,
   MeetingLoadRequestSchema,
@@ -93,6 +95,7 @@ import type {
   MeetingEndResponse,
   ExportMarkdownResponse,
   ExportCopyMarkdownResponse,
+  TranscriptCopyResponse,
   MeetingListResponse,
   MeetingLoadResponse,
   ModelStatusResponse,
@@ -188,6 +191,12 @@ export interface IpcRegistryDependencies {
    * When absent, is a no-op.
    */
   onCopyToClipboard?: (content: string) => void
+  /**
+   * Copy a meeting's full transcript to the clipboard (item 0026).
+   * Main reads the persisted spans, serialises them, and copies the text.
+   * When absent, transcript:copy is a no-op (still returns ok).
+   */
+  onCopyTranscript?: (meetingId: string) => void
   /**
    * List all meetings ordered newest-first (item 0023).
    * When absent, returns an empty list.
@@ -492,6 +501,14 @@ function makeHandleExportCopyMarkdown(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleTranscriptCopy(deps: IpcRegistryDependencies) {
+  return function handleTranscriptCopy(raw: unknown): TranscriptCopyResponse {
+    const req = TranscriptCopyRequestSchema.parse(raw)
+    deps.onCopyTranscript?.(req.meetingId)
+    return TranscriptCopyResponseSchema.parse({ ok: true })
+  }
+}
+
 function makeHandleMeetingList(deps: IpcRegistryDependencies) {
   return function handleMeetingList(raw: unknown): MeetingListResponse {
     MeetingListRequestSchema.parse(raw)
@@ -604,6 +621,7 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'meeting:end': makeHandleMeetingEnd(deps),
     'export:markdown': makeHandleExportMarkdown(deps),
     'export:copyMarkdown': makeHandleExportCopyMarkdown(deps),
+    'transcript:copy': makeHandleTranscriptCopy(deps),
     'meeting:list': makeHandleMeetingList(deps),
     'meeting:load': makeHandleMeetingLoad(deps),
     'model:status': makeHandleModelStatus(deps),
