@@ -137,8 +137,9 @@ export interface IpcRegistryDependencies {
   /**
    * Called after audio:start succeeds (item 0018).
    * Use to spin up the LiveExtractionRuntime for the active session.
+   * Receives the real Meeting id the renderer is recording against.
    */
-  onAudioStart?: () => void
+  onAudioStart?: (meetingId: string) => void
   /**
    * Called after audio:stop succeeds (item 0018).
    * Use to tear down the LiveExtractionRuntime.
@@ -354,9 +355,9 @@ function makeHandleSecretHas(deps: IpcRegistryDependencies) {
 
 function makeHandleAudioStart(deps: IpcRegistryDependencies) {
   return function handleAudioStart(raw: unknown): AudioStartResponse {
-    AudioStartRequestSchema.parse(raw)
+    const req = AudioStartRequestSchema.parse(raw)
     deps.audioBridge?.start()
-    deps.onAudioStart?.()
+    deps.onAudioStart?.(req.meetingId)
     return AudioStartResponseSchema.parse({ ok: true })
   }
 }

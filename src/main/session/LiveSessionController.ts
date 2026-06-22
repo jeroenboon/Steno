@@ -33,10 +33,6 @@ import { tryBuildAsrProvider, tryBuildExtractionProvider } from '../settings/pro
 import type { SecretStorage } from '../settings/SecretStorage'
 import type { SettingsStore } from '../settings/SettingsStore'
 
-// Placeholder meeting ID for the active session. In a future task (architecture
-// task 3) this will come from the real Meeting id threaded through audio:start.
-const PLACEHOLDER_MEETING_ID = 'active-session'
-
 const CADENCE_MS = 20_000
 
 // ---------------------------------------------------------------------------
@@ -99,7 +95,7 @@ export class LiveSessionController {
    * provider switched after app startup is picked up without a restart), builds
    * the runtime and bridge, and starts the bridge.
    */
-  start(): void {
+  start(meetingId: string): void {
     // Stop any running bridge/runtime first.
     this._currentBridge?.stop()
     this._activeRuntime?.stop()
@@ -113,7 +109,7 @@ export class LiveSessionController {
     }
     const asrProvider = asrResult.ok ? asrResult.provider : new FakeASRProvider()
 
-    this._activeRuntime = this._buildRuntime()
+    this._activeRuntime = this._buildRuntime(meetingId)
 
     this._currentBridge = new AudioCaptureBridge({
       asrProvider,
@@ -142,12 +138,12 @@ export class LiveSessionController {
    * Run the final extraction pass on the active runtime (emits items:summaries
    * and any final items:changed). Safe no-op when no runtime is active.
    *
-   * The meeting row id is still the placeholder; architecture task 3 will thread
-   * the real Meeting id through audio:start and into this lookup.
+   * `meetingId` is the row the renderer recorded against — the same id passed to
+   * start() — so the final pass ends exactly that meeting.
    */
-  async endMeeting(): Promise<void> {
+  async endMeeting(meetingId: string): Promise<void> {
     if (this._activeRuntime === null) return
-    const meeting = this._meetingRepo.findById(PLACEHOLDER_MEETING_ID)
+    const meeting = this._meetingRepo.findById(meetingId)
     if (meeting !== null) {
       await this._activeRuntime.endMeeting(meeting)
     }
@@ -170,12 +166,13 @@ export class LiveSessionController {
   // Internal
   // -------------------------------------------------------------------------
 
-  private _buildRuntime(): LiveExtractionRuntime {
-    // Ensure the meeting row exists in the DB (upsert-style for the placeholder).
-    // Needed because transcriptSpanRepo.insert has a foreign key on meetings.
-    if (this._meetingRepo.findById(PLACEHOLDER_MEETING_ID) === null) {
+  private _buildRuntime(meetingId: string): LiveExtractionRuntime {
+    // Ensure the meeting row exists in the DB before spans reference it.
+    // The renderer's meeting:create returns a UUID but does not persist a row,
+    // so upsert it here (transcriptSpanRepo.insert has a foreign key on meetings).
+    if (this._meetingRepo.findById(meetingId) === null) {
       this._meetingRepo.insert({
-        id: PLACEHOLDER_MEETING_ID,
+        id: meetingId,
         title: 'Active Meeting',
         state: 'live',
         paused: false,
@@ -202,7 +199,7 @@ export class LiveSessionController {
       : null
 
     return new LiveExtractionRuntime({
-      meetingId: PLACEHOLDER_MEETING_ID,
+      meetingId,
       context: {
         agendaItems: [],
         participants: [],

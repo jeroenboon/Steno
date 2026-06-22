@@ -293,14 +293,14 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     settingsStore,
     secretStorage,
     itemLifecycleService: itemService,
-    onAudioStart: () => {
-      liveSession.start()
+    onAudioStart: (meetingId) => {
+      liveSession.start(meetingId)
     },
     onAudioStop: () => {
       liveSession.stop()
     },
     summaryQuery: (question) => liveSession.querySummary(question),
-    onMeetingEnd: () => liveSession.endMeeting(),
+    onMeetingEnd: (meetingId) => liveSession.endMeeting(meetingId),
     onExportFile: async ({ content, defaultFilename, filters }) => {
       const result = await dialog.showSaveDialog(mainWindow, {
         defaultPath: defaultFilename,

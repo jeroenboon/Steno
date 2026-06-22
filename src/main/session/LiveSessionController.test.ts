@@ -120,6 +120,9 @@ function makeSpan(id: string): import('@shared/domain').TranscriptSpan {
   return { id, text: `Text ${id}`, startMs: 0, endMs: 1000, isFinal: true }
 }
 
+// A real Meeting id (UUID-like), as the renderer threads through audio:start.
+const MEETING_ID = 'mtg-real-9f1c'
+
 // ---------------------------------------------------------------------------
 // start()
 // ---------------------------------------------------------------------------
@@ -129,7 +132,7 @@ describe('start()', () => {
     const { controller, sender, asr } = await buildHarness()
     const pushSpy = vi.spyOn(asr, 'pushAudioFrame')
 
-    controller.start()
+    controller.start(MEETING_ID)
 
     // A frame pushed after start() reaches the ASR provider.
     controller.pushAudioFrame(new Uint8Array([1, 2, 3]))
@@ -143,29 +146,28 @@ describe('start()', () => {
     expect(spans).toHaveLength(1)
   })
 
-  it('persists final spans handled by the runtime', async () => {
+  it('builds a runtime scoped to the given meeting id; spans persist under it', async () => {
     const { controller, asr, spanRepo, mRepo } = await buildHarness()
-    controller.start()
+    controller.start(MEETING_ID)
 
     asr.pushScriptedSpan(makeSpan('s1'))
     await flush()
 
-    // The runtime built by start() persists under the active session meeting row.
+    // The meeting row is upserted under the threaded id (not a placeholder).
     const meetings = mRepo.list()
     expect(meetings).toHaveLength(1)
-    const meetingId = meetings[0]?.id
-    expect(meetingId).toBeDefined()
-    if (meetingId !== undefined) {
-      expect(spanRepo.listByMeeting(meetingId)).toHaveLength(1)
-    }
+    expect(meetings[0]?.id).toBe(MEETING_ID)
+
+    // The span persists under that same row.
+    expect(spanRepo.listByMeeting(MEETING_ID)).toHaveLength(1)
   })
 
   it('called twice tears down the first bridge/runtime before building the second', async () => {
     const { controller, asr } = await buildHarness()
     const stopSpy = vi.spyOn(asr, 'stop')
 
-    controller.start()
-    controller.start()
+    controller.start(MEETING_ID)
+    controller.start(MEETING_ID)
 
     // The first session's ASR provider was stopped before the second start.
     expect(stopSpy).toHaveBeenCalled()
@@ -175,7 +177,7 @@ describe('start()', () => {
     const { controller, sender, asr } = await buildHarness({ asrOk: false })
 
     expect(() => {
-      controller.start()
+      controller.start(MEETING_ID)
     }).not.toThrow()
 
     // The injected fake (asrOk:false) is NOT used; a frame is still accepted.
@@ -197,7 +199,7 @@ describe('start()', () => {
 describe('stop()', () => {
   it('tears down so a frame pushed after stop() is a no-op', async () => {
     const { controller, asr } = await buildHarness()
-    controller.start()
+    controller.start(MEETING_ID)
     controller.stop()
 
     const pushSpy = vi.spyOn(asr, 'pushAudioFrame')
@@ -218,23 +220,36 @@ describe('stop()', () => {
 // ---------------------------------------------------------------------------
 
 describe('endMeeting()', () => {
-  it('runs the final pass when a runtime is active', async () => {
-    const { controller, extraction } = await buildHarness()
+  it('runs the final pass on the row scoped to the threaded meeting id', async () => {
+    const { controller, extraction, mRepo } = await buildHarness()
     extraction.scriptFinalPassResponse({
       proposedDecisions: [],
       proposedActions: [],
-      discussionSummaries: [],
+      discussionSummaries: [{ agendaItemId: '__off-agenda__', text: 'Klaar.' }],
     })
 
-    controller.start()
-    await controller.endMeeting()
+    controller.start(MEETING_ID)
+    await controller.endMeeting(MEETING_ID)
 
+    // The final pass ran exactly once, against the meeting started under MEETING_ID.
     expect(extraction.calls().filter((c) => c.isFinalPass)).toHaveLength(1)
+    expect(mRepo.findById(MEETING_ID)).not.toBeNull()
+  })
+
+  it('does not run the final pass when the id does not match a known row', async () => {
+    const { controller, extraction } = await buildHarness()
+    extraction.scriptFinalPassResponse({ proposedDecisions: [], proposedActions: [] })
+
+    controller.start(MEETING_ID)
+    // A different id has no row → endMeeting finds nothing and the pass is skipped.
+    await controller.endMeeting('mtg-other')
+
+    expect(extraction.calls().filter((c) => c.isFinalPass)).toHaveLength(0)
   })
 
   it('is a safe no-op when no runtime is active', async () => {
     const { controller, extraction } = await buildHarness()
-    await expect(controller.endMeeting()).resolves.toBeUndefined()
+    await expect(controller.endMeeting(MEETING_ID)).resolves.toBeUndefined()
     expect(extraction.calls().filter((c) => c.isFinalPass)).toHaveLength(0)
   })
 })
@@ -253,7 +268,7 @@ describe('querySummary()', () => {
     const { controller, extraction, asr } = await buildHarness()
     extraction.scriptQueryResponse('Jeroen pakt het op.')
 
-    controller.start()
+    controller.start(MEETING_ID)
     asr.pushScriptedSpan(makeSpan('s1'))
     await flush()
 

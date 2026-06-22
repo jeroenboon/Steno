@@ -156,7 +156,7 @@ export type MeetingStartResponse = z.infer<typeof MeetingStartResponseSchema>
 // audio:start — tell main to open an ASR session (item 0015)
 // ---------------------------------------------------------------------------
 
-export const AudioStartRequestSchema = z.object({})
+export const AudioStartRequestSchema = z.object({ meetingId: z.string().min(1) })
 export const AudioStartResponseSchema = z.object({ ok: z.literal(true) })
 
 export type AudioStartRequest = z.infer<typeof AudioStartRequestSchema>
@@ -655,7 +655,7 @@ export interface RendererApi {
    * Tell main to open an ASR session. Call before sending audio frames.
    * (item 0015)
    */
-  audioStart: () => Promise<AudioStartResponse>
+  audioStart: (req: AudioStartRequest) => Promise<AudioStartResponse>
   /**
    * Tell main to close the active ASR session.
    * (item 0015)

@@ -36,6 +36,7 @@ import type {
   MeetingStartResponse,
   MeetingEndRequest,
   MeetingEndResponse,
+  AudioStartRequest,
   AudioStartResponse,
   AudioStopResponse,
   UnsubscribeFn,
@@ -102,7 +103,8 @@ const api: RendererApi = {
   // Audio capture (item 0015)
   // ---------------------------------------------------------------------------
 
-  audioStart: () => ipcRenderer.invoke('audio:start', {}) as Promise<AudioStartResponse>,
+  audioStart: (req: AudioStartRequest) =>
+    ipcRenderer.invoke('audio:start', req) as Promise<AudioStartResponse>,
   audioStop: () => ipcRenderer.invoke('audio:stop', {}) as Promise<AudioStopResponse>,
 
   /**

@@ -111,10 +111,11 @@ export function useLiveSession(activeMeeting: string | null): UseLiveSessionResu
       setRoute('review')
     })
 
-    // Start audio capture
+    // Start audio capture. activeMeeting is non-null here (guarded above), so the
+    // real Meeting id is threaded through to main — spans persist under that row.
     let lastLevelTick = 0
     void service
-      .start(captureMode, (level) => {
+      .start(activeMeeting, captureMode, (level) => {
         const now = Date.now()
         if (now - lastLevelTick >= 80) {
           lastLevelTick = now

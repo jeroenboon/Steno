@@ -108,6 +108,8 @@ export class AudioCaptureService {
   /**
    * Start audio capture.
    *
+   * @param meetingId  The Meeting id the renderer is recording against; passed
+   *                   to main on audio:start so spans persist under the right row.
    * @param mode  'remote' (default) to also request system loopback via
    *              getDisplayMedia, 'mic-only' to capture microphone only.
    *
@@ -119,6 +121,7 @@ export class AudioCaptureService {
    *          (not an error) and the service continues in mic-only mode.
    */
   async start(
+    meetingId: string,
     mode: CaptureMode = 'remote',
     onAudioLevel?: (level: number) => void,
   ): Promise<StartResult> {
@@ -212,7 +215,7 @@ export class AudioCaptureService {
     }
 
     // Tell main to open the ASR session
-    await window.api.audioStart()
+    await window.api.audioStart({ meetingId })
 
     return { loopbackState }
   }
