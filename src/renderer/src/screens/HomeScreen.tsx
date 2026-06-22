@@ -128,6 +128,16 @@ export function HomeScreen(): React.JSX.Element {
           >
             {t('home.new.button')}
           </button>
+          <button
+            type="button"
+            className="btn btn--secondary"
+            data-testid="home-import"
+            onClick={() => {
+              setRoute('import')
+            }}
+          >
+            {t('home.import.button')}
+          </button>
         </div>
 
         <div className="home__history">

@@ -47,8 +47,8 @@ export interface DecodedAudio {
   sampleRate: number
 }
 
-/** Decodes file bytes into channel data. Injected for testability. */
-export type AudioDecoder = (data: ArrayBuffer) => Promise<DecodedAudio>
+/** Decodes a file blob into channel data. Injected for testability. */
+export type AudioDecoder = (source: Blob) => Promise<DecodedAudio>
 
 /** The subset of the IPC api this service needs. */
 export interface ImportApi {
@@ -85,17 +85,18 @@ export class AudioFileImportService {
   }
 
   /**
-   * Decode `data`, stream it to main, and finish the import. Resolves with the
-   * imported meeting's id so the caller can open it in Review.
+   * Decode `source` (the picked file), stream it to main, and finish the
+   * import. Resolves with the imported meeting's id so the caller can open it
+   * in Review.
    */
   async streamFile(
-    data: ArrayBuffer,
+    source: Blob,
     req: ImportStartRequest,
     opts: StreamFileOptions = {},
   ): Promise<string> {
     const { meetingId } = await this._api.importStart(req)
 
-    const decoded = await this._decoder(data)
+    const decoded = await this._decoder(source)
     const mono = downmixToMono(decoded.channelData)
 
     const framer = new PcmFramer({
@@ -153,9 +154,10 @@ function delay(ms: number): Promise<void> {
  * Electron) decodes mp3/wav/m4a/flac/ogg. Not exercised in unit tests (jsdom has
  * no Web Audio); covered by the real app.
  */
-async function defaultDecoder(data: ArrayBuffer): Promise<DecodedAudio> {
+async function defaultDecoder(source: Blob): Promise<DecodedAudio> {
   // A 1-frame context is enough to call decodeAudioData; the decoded buffer
   // carries its own sample rate regardless of the context's.
+  const data = await source.arrayBuffer()
   const ctx = new OfflineAudioContext(1, 1, TARGET_SAMPLE_RATE)
   const buffer = await ctx.decodeAudioData(data)
   const channelData: Float32Array[] = []

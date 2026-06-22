@@ -36,7 +36,7 @@ export type ProposedAction = ItemsChangedPayload['actions'][number]
 // ---------------------------------------------------------------------------
 
 /** The top-level screens of the app. */
-export type AppRoute = 'home' | 'draft' | 'live' | 'review' | 'settings'
+export type AppRoute = 'home' | 'draft' | 'live' | 'review' | 'settings' | 'import'
 
 // ---------------------------------------------------------------------------
 // Mic permission type (item 0015)

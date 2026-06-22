@@ -61,6 +61,16 @@ describe('HomeScreen', () => {
 
     expect(useAppStore.getState().route).toBe('draft')
   })
+
+  it('"Importeer opname" navigates to import', async () => {
+    const user = userEvent.setup()
+    mockApi.meetingList.mockResolvedValue({ meetings: [] })
+    render(<HomeScreen />)
+
+    await user.click(screen.getByTestId('home-import'))
+
+    expect(useAppStore.getState().route).toBe('import')
+  })
   it('shows empty state when no past meetings exist', async () => {
     mockApi.meetingList.mockResolvedValue({ meetings: [] })
     render(<HomeScreen />)

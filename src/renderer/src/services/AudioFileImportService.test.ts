@@ -63,7 +63,7 @@ describe('AudioFileImportService', () => {
       decoder: () => Promise.resolve(decoded),
     })
 
-    const meetingId = await service.streamFile(new ArrayBuffer(8), startReq)
+    const meetingId = await service.streamFile(new Blob([new Uint8Array([1, 2, 3, 4])]), startReq)
 
     expect(meetingId).toBe('imp-1')
     expect(api.importStart).toHaveBeenCalledTimes(1)
@@ -88,7 +88,7 @@ describe('AudioFileImportService', () => {
       decoder: () => Promise.resolve(decoded),
     })
 
-    await service.streamFile(new ArrayBuffer(8), startReq)
+    await service.streamFile(new Blob([new Uint8Array([1, 2, 3, 4])]), startReq)
 
     expect(api.frames.length).toBeGreaterThan(0)
     for (const frame of api.frames) {
@@ -107,7 +107,7 @@ describe('AudioFileImportService', () => {
     })
 
     const progress: number[] = []
-    await service.streamFile(new ArrayBuffer(8), startReq, {
+    await service.streamFile(new Blob([new Uint8Array([1, 2, 3, 4])]), startReq, {
       onProgress: (fraction) => progress.push(fraction),
     })
 
@@ -130,7 +130,7 @@ describe('AudioFileImportService', () => {
       decoder: () => Promise.resolve(decoded),
     })
 
-    await service.streamFile(new ArrayBuffer(8), startReq)
+    await service.streamFile(new Blob([new Uint8Array([1, 2, 3, 4])]), startReq)
 
     // 16384 mono samples at 16 kHz (no resample) → exactly 4 frames of 4096.
     expect(api.importSendFrame).toHaveBeenCalledTimes(4)

@@ -19,6 +19,7 @@ import { EgressIndicator } from './components/EgressIndicator'
 import { t } from './i18n'
 import { DraftScreen } from './screens/DraftScreen'
 import { HomeScreen } from './screens/HomeScreen'
+import { ImportScreen } from './screens/ImportScreen'
 import { LiveScreen } from './screens/LiveScreen'
 import { ReviewScreen } from './screens/ReviewScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
@@ -44,6 +45,7 @@ const DEFAULT_EGRESS: EgressState = {
 const SCREENS: Partial<Record<AppRoute, React.JSX.Element>> = {
   home: <HomeScreen />,
   draft: <DraftScreen />,
+  import: <ImportScreen />,
   review: <ReviewScreen />,
   settings: <SettingsScreen />,
 }
