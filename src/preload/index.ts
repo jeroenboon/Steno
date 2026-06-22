@@ -69,6 +69,11 @@ import type {
   ModelDownloadRequest,
   ModelDownloadResponse,
   ModelProgressEvent,
+  ImportStartRequest,
+  ImportStartResponse,
+  ImportFinishRequest,
+  ImportFinishResponse,
+  ImportProgressEvent,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -241,6 +246,31 @@ const api: RendererApi = {
     ipcRenderer.on('model:progress', listener)
     return () => {
       ipcRenderer.removeListener('model:progress', listener)
+    }
+  },
+
+  // ---------------------------------------------------------------------------
+  // Audio-file import (item 0026)
+  // ---------------------------------------------------------------------------
+
+  importStart: (req: ImportStartRequest) =>
+    ipcRenderer.invoke('import:start', req) as Promise<ImportStartResponse>,
+
+  /** Fire-and-forget: send a decoded PCM frame for the active import. */
+  importSendFrame: (frame: Uint8Array) => {
+    ipcRenderer.send('import:frame', frame)
+  },
+
+  importFinish: (req: ImportFinishRequest) =>
+    ipcRenderer.invoke('import:finish', req) as Promise<ImportFinishResponse>,
+
+  onImportProgress: (cb: (evt: ImportProgressEvent) => void): UnsubscribeFn => {
+    const listener = (_event: Electron.IpcRendererEvent, evt: ImportProgressEvent) => {
+      cb(evt)
+    }
+    ipcRenderer.on('import:progress', listener)
+    return () => {
+      ipcRenderer.removeListener('import:progress', listener)
     }
   },
 }

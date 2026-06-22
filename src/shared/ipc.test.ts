@@ -5,6 +5,10 @@ import {
   PingResponseSchema,
   MeetingEndRequestSchema,
   MeetingEndResponseSchema,
+  ImportStartRequestSchema,
+  ImportStartResponseSchema,
+  ImportFinishRequestSchema,
+  ImportProgressEventSchema,
 } from './ipc'
 
 // Slice 1 — Zod schema validation: valid payloads parse, invalid ones throw
@@ -60,5 +64,85 @@ describe('MeetingEndResponseSchema', () => {
 
   it('rejects when ok is false', () => {
     expect(() => MeetingEndResponseSchema.parse({ ok: false })).toThrow()
+  })
+})
+
+// Slice 3 — import channels (item 0026)
+
+describe('ImportStartRequestSchema', () => {
+  const valid = {
+    title: 'Geïmporteerde opname',
+    primaryLanguage: 'nl',
+    agendaItems: [{ title: 'Planning', topic: 'Q3' }],
+    participants: [{ name: 'Jeroen' }],
+    inferContext: false,
+  }
+
+  it('parses a valid import-start request', () => {
+    expect(ImportStartRequestSchema.parse(valid)).toEqual(valid)
+  })
+
+  it('allows empty agenda + participants (inference path)', () => {
+    const result = ImportStartRequestSchema.parse({
+      ...valid,
+      agendaItems: [],
+      participants: [],
+      inferContext: true,
+    })
+    expect(result.inferContext).toBe(true)
+  })
+
+  it('rejects an empty title', () => {
+    expect(() => ImportStartRequestSchema.parse({ ...valid, title: '' })).toThrow()
+  })
+
+  it('rejects an agenda item with an empty topic', () => {
+    expect(() =>
+      ImportStartRequestSchema.parse({ ...valid, agendaItems: [{ title: 'x', topic: '' }] }),
+    ).toThrow()
+  })
+
+  it('rejects a missing inferContext flag', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { inferContext: _drop, ...rest } = valid
+    expect(() => ImportStartRequestSchema.parse(rest)).toThrow()
+  })
+})
+
+describe('ImportStartResponseSchema', () => {
+  it('parses a response carrying the new meeting id', () => {
+    expect(ImportStartResponseSchema.parse({ meetingId: 'imp-1' })).toEqual({ meetingId: 'imp-1' })
+  })
+
+  it('rejects an empty meeting id', () => {
+    expect(() => ImportStartResponseSchema.parse({ meetingId: '' })).toThrow()
+  })
+})
+
+describe('ImportFinishRequestSchema', () => {
+  it('parses a valid finish request', () => {
+    expect(ImportFinishRequestSchema.parse({ meetingId: 'imp-1' })).toEqual({ meetingId: 'imp-1' })
+  })
+
+  it('rejects a missing meeting id', () => {
+    expect(() => ImportFinishRequestSchema.parse({})).toThrow()
+  })
+})
+
+describe('ImportProgressEventSchema', () => {
+  it('parses each known stage', () => {
+    for (const stage of ['transcribing', 'inferring', 'extracting', 'done', 'error'] as const) {
+      expect(ImportProgressEventSchema.parse({ stage }).stage).toBe(stage)
+    }
+  })
+
+  it('allows an optional percent and error', () => {
+    const result = ImportProgressEventSchema.parse({ stage: 'error', error: 'no key', percent: 50 })
+    expect(result.error).toBe('no key')
+    expect(result.percent).toBe(50)
+  })
+
+  it('rejects an unknown stage', () => {
+    expect(() => ImportProgressEventSchema.parse({ stage: 'pondering' })).toThrow()
   })
 })
