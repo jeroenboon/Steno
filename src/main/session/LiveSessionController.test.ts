@@ -1,0 +1,262 @@
+/**
+ * @vitest-environment node
+ *
+ * Tests for LiveSessionController (architecture task 1).
+ *
+ * The controller owns the lifecycle of one live meeting session that previously
+ * lived as closures and mutable vars inside `registerIpcHandlers` in index.ts:
+ *   - start()        builds the ASR provider, the LiveExtractionRuntime and the
+ *                    AudioCaptureBridge, then starts the bridge.
+ *   - stop()         tears the bridge + runtime down.
+ *   - endMeeting()   runs the final extraction pass on the active runtime.
+ *   - querySummary() forwards a question to the active runtime.
+ *   - pushAudioFrame forwards PCM frames to the active bridge.
+ *
+ * No Electron: a fake IpcSender, injected build functions returning fakes, and
+ * an in-memory DB make every path deterministic (principle #11).
+ */
+
+import Database from 'better-sqlite3'
+import { describe, it, expect, vi } from 'vitest'
+
+import { FakeASRProvider, FakeClock, FakeExtractionProvider } from '@shared/providers'
+
+import { runMigrations } from '../db/migrate'
+import { actionRepo } from '../db/repos/actionRepo'
+import { decisionRepo } from '../db/repos/decisionRepo'
+import { discussionSummaryRepo } from '../db/repos/discussionSummaryRepo'
+import { meetingRepo } from '../db/repos/meetingRepo'
+import { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
+import { MemorySecretStorage } from '../settings/SecretStorage'
+import { SettingsStore } from '../settings/SettingsStore'
+
+import { LiveSessionController } from './LiveSessionController'
+
+// ---------------------------------------------------------------------------
+// Fakes / helpers
+// ---------------------------------------------------------------------------
+
+class FakeIpcSender {
+  readonly sent: { channel: string; payload: unknown }[] = []
+
+  send(channel: string, payload: unknown): void {
+    this.sent.push({ channel, payload })
+  }
+
+  sentOn(channel: string): unknown[] {
+    return this.sent.filter((s) => s.channel === channel).map((s) => s.payload)
+  }
+}
+
+/** Flush the microtask + timer queue so the bridge span loop can run. */
+async function flush(): Promise<void> {
+  await new Promise<void>((r) => {
+    setTimeout(r, 0)
+  })
+}
+
+async function makeSettingsStore(): Promise<SettingsStore> {
+  const store = new SettingsStore({
+    userDataPath: '/fake',
+    readFile: () => Promise.reject(new Error('no file')),
+    writeFile: () => Promise.resolve(),
+  })
+  await store.load()
+  return store
+}
+
+interface Harness {
+  controller: LiveSessionController
+  sender: FakeIpcSender
+  asr: FakeASRProvider
+  extraction: FakeExtractionProvider
+  spanRepo: ReturnType<typeof transcriptSpanRepo>
+  mRepo: ReturnType<typeof meetingRepo>
+  buildAsr: ReturnType<typeof vi.fn>
+}
+
+async function buildHarness(opts: { asrOk?: boolean } = {}): Promise<Harness> {
+  const db = new Database(':memory:')
+  db.pragma('foreign_keys = ON')
+  runMigrations(db)
+
+  const settingsStore = await makeSettingsStore()
+  const secretStorage = new MemorySecretStorage()
+  const sender = new FakeIpcSender()
+  const clock = new FakeClock(0)
+
+  const asr = new FakeASRProvider()
+  const extraction = new FakeExtractionProvider()
+
+  const asrOk = opts.asrOk ?? true
+  const buildAsr = vi.fn(() =>
+    asrOk
+      ? { ok: true as const, provider: asr }
+      : { ok: false as const, error: 'Deepgram API key is not set' },
+  )
+  const buildExtraction = vi.fn(() => ({ ok: true as const, provider: extraction }))
+
+  const spanRepo = transcriptSpanRepo(db)
+  const mRepo = meetingRepo(db)
+
+  const controller = new LiveSessionController({
+    settingsStore,
+    secretStorage,
+    decisionRepo: decisionRepo(db),
+    actionRepo: actionRepo(db),
+    transcriptSpanRepo: spanRepo,
+    discussionSummaryRepo: discussionSummaryRepo(db),
+    meetingRepo: mRepo,
+    sender,
+    clock,
+    buildAsr,
+    buildExtraction,
+  })
+
+  return { controller, sender, asr, extraction, spanRepo, mRepo, buildAsr }
+}
+
+function makeSpan(id: string): import('@shared/domain').TranscriptSpan {
+  return { id, text: `Text ${id}`, startMs: 0, endMs: 1000, isFinal: true }
+}
+
+// ---------------------------------------------------------------------------
+// start()
+// ---------------------------------------------------------------------------
+
+describe('start()', () => {
+  it('builds a bridge and runtime, forwards frames to the ASR provider, and flows spans to the sender', async () => {
+    const { controller, sender, asr } = await buildHarness()
+    const pushSpy = vi.spyOn(asr, 'pushAudioFrame')
+
+    controller.start()
+
+    // A frame pushed after start() reaches the ASR provider.
+    controller.pushAudioFrame(new Uint8Array([1, 2, 3]))
+    expect(pushSpy).toHaveBeenCalledTimes(1)
+
+    // A span emitted by the ASR provider flows out on 'transcript:span'.
+    asr.pushScriptedSpan(makeSpan('s1'))
+    await flush()
+
+    const spans = sender.sentOn('transcript:span')
+    expect(spans).toHaveLength(1)
+  })
+
+  it('persists final spans handled by the runtime', async () => {
+    const { controller, asr, spanRepo, mRepo } = await buildHarness()
+    controller.start()
+
+    asr.pushScriptedSpan(makeSpan('s1'))
+    await flush()
+
+    // The runtime built by start() persists under the active session meeting row.
+    const meetings = mRepo.list()
+    expect(meetings).toHaveLength(1)
+    const meetingId = meetings[0]?.id
+    expect(meetingId).toBeDefined()
+    if (meetingId !== undefined) {
+      expect(spanRepo.listByMeeting(meetingId)).toHaveLength(1)
+    }
+  })
+
+  it('called twice tears down the first bridge/runtime before building the second', async () => {
+    const { controller, asr } = await buildHarness()
+    const stopSpy = vi.spyOn(asr, 'stop')
+
+    controller.start()
+    controller.start()
+
+    // The first session's ASR provider was stopped before the second start.
+    expect(stopSpy).toHaveBeenCalled()
+  })
+
+  it('falls back to FakeASRProvider when the ASR key is missing (no throw)', async () => {
+    const { controller, sender, asr } = await buildHarness({ asrOk: false })
+
+    expect(() => {
+      controller.start()
+    }).not.toThrow()
+
+    // The injected fake (asrOk:false) is NOT used; a frame is still accepted.
+    expect(() => {
+      controller.pushAudioFrame(new Uint8Array([1]))
+    }).not.toThrow()
+
+    // The scripted fake never receives anything because it wasn't wired in.
+    asr.pushScriptedSpan(makeSpan('s1'))
+    await flush()
+    expect(sender.sentOn('transcript:span')).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// stop()
+// ---------------------------------------------------------------------------
+
+describe('stop()', () => {
+  it('tears down so a frame pushed after stop() is a no-op', async () => {
+    const { controller, asr } = await buildHarness()
+    controller.start()
+    controller.stop()
+
+    const pushSpy = vi.spyOn(asr, 'pushAudioFrame')
+    controller.pushAudioFrame(new Uint8Array([1, 2, 3]))
+    expect(pushSpy).not.toHaveBeenCalled()
+  })
+
+  it('is safe to call without a started session', async () => {
+    const { controller } = await buildHarness()
+    expect(() => {
+      controller.stop()
+    }).not.toThrow()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// endMeeting()
+// ---------------------------------------------------------------------------
+
+describe('endMeeting()', () => {
+  it('runs the final pass when a runtime is active', async () => {
+    const { controller, extraction } = await buildHarness()
+    extraction.scriptFinalPassResponse({
+      proposedDecisions: [],
+      proposedActions: [],
+      discussionSummaries: [],
+    })
+
+    controller.start()
+    await controller.endMeeting()
+
+    expect(extraction.calls().filter((c) => c.isFinalPass)).toHaveLength(1)
+  })
+
+  it('is a safe no-op when no runtime is active', async () => {
+    const { controller, extraction } = await buildHarness()
+    await expect(controller.endMeeting()).resolves.toBeUndefined()
+    expect(extraction.calls().filter((c) => c.isFinalPass)).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// querySummary()
+// ---------------------------------------------------------------------------
+
+describe('querySummary()', () => {
+  it('returns the empty string when no runtime is active', async () => {
+    const { controller } = await buildHarness()
+    await expect(controller.querySummary('Wat werd besproken?')).resolves.toBe('')
+  })
+
+  it('forwards the question to the active runtime', async () => {
+    const { controller, extraction, asr } = await buildHarness()
+    extraction.scriptQueryResponse('Jeroen pakt het op.')
+
+    controller.start()
+    asr.pushScriptedSpan(makeSpan('s1'))
+    await flush()
+
+    await expect(controller.querySummary('Wie pakt het op?')).resolves.toBe('Jeroen pakt het op.')
+  })
+})

@@ -14,9 +14,8 @@ import {
 } from 'electron'
 
 import type { IpcChannel } from '@shared/ipc'
-import { FakeASRProvider, RealClock } from '@shared/providers'
+import { RealClock } from '@shared/providers'
 
-import { AudioCaptureBridge } from './audio/AudioCaptureBridge'
 import { buildContentSecurityPolicy } from './csp'
 import { runMigrations } from './db/migrate'
 import { actionRepo } from './db/repos/actionRepo'
@@ -29,8 +28,8 @@ import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
 import { createIpcRegistry } from './ipc-registry'
 import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
-import { LiveExtractionRuntime } from './services/liveExtractionRuntime'
-import { tryBuildAsrProvider, tryBuildExtractionProvider } from './settings/providerFactory'
+import { LiveSessionController } from './session/LiveSessionController'
+import { tryBuildExtractionProvider } from './settings/providerFactory'
 import { ElectronSecretStorage } from './settings/SecretStorage'
 import { SettingsStore } from './settings/SettingsStore'
 import { createWindowOptions } from './window-options'
@@ -265,76 +264,29 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   }
 
   // ---------------------------------------------------------------------------
-  // Live extraction runtime (item 0018)
+  // Live session controller (architecture task 1)
   //
-  // Holds the active LiveExtractionRuntime for the current live meeting.
-  // Created when audio:start fires; torn down on audio:stop.
+  // Owns the lifecycle of one live meeting: build ASR provider + runtime +
+  // AudioCaptureBridge on start, tear down on stop, run the final pass on end.
+  // Extracted out of this function so the lifecycle (where the audio start/stop
+  // bugs hid) has locality and a unit-test surface — no Electron dependency.
   // ---------------------------------------------------------------------------
-  let activeRuntime: LiveExtractionRuntime | null = null
-
-  const clock = new RealClock()
-
-  // Placeholder meeting ID for the active session. In a future item this will
-  // come from the persisted Meeting selected by the user in the Draft screen.
-  const PLACEHOLDER_MEETING_ID = 'active-session'
-
-  const buildRuntime = (): LiveExtractionRuntime => {
-    // Ensure the meeting row exists in the DB (upsert-style for the placeholder).
-    // This is needed because transcriptSpanRepo.insert has a foreign key on meetings.
-    if (mRepo.findById(PLACEHOLDER_MEETING_ID) === null) {
-      mRepo.insert({
-        id: PLACEHOLDER_MEETING_ID,
-        title: 'Active Meeting',
-        state: 'live',
-        paused: false,
-        createdAt: new Date().toISOString(),
-        primaryLanguage: settingsStore.current.primaryLanguage,
-        startedAt: new Date().toISOString(),
-      })
-    }
-
-    // Rebuild extraction provider from current settings so a key entered after
-    // startup is picked up without restarting the app.
-    const freshExtractionResult = tryBuildExtractionProvider(settingsStore.current, secretStorage)
-    const schedulerDeps = freshExtractionResult.ok
-      ? {
-          provider: freshExtractionResult.provider,
-          discussionSummaryRepo: dsRepo,
-          spanRepo,
-          clock,
-          cadenceMs: 20_000,
-        }
-      : null
-
-    return new LiveExtractionRuntime({
-      meetingId: PLACEHOLDER_MEETING_ID,
-      context: {
-        agendaItems: [],
-        participants: [],
-        primaryLanguage: settingsStore.current.primaryLanguage,
-      },
-      schedulerDeps,
-      decisionsRepo: dRepo,
-      actionsRepo: aRepo,
-      spanRepo,
-      dsRepo,
-      sender: mainWindow.webContents,
-    })
-  }
-
-  // ---------------------------------------------------------------------------
-  // Audio capture bridge
-  //
-  // Rebuilt on every audio:start so the ASR provider reflects the settings
-  // active at that moment (e.g. user downloaded the model and switched to
-  // local-parakeet after the app was already running).
-  // ---------------------------------------------------------------------------
-  let currentBridge: AudioCaptureBridge | null = null
+  const liveSession = new LiveSessionController({
+    settingsStore,
+    secretStorage,
+    decisionRepo: dRepo,
+    actionRepo: aRepo,
+    transcriptSpanRepo: spanRepo,
+    discussionSummaryRepo: dsRepo,
+    meetingRepo: mRepo,
+    sender: mainWindow.webContents,
+    clock: new RealClock(),
+  })
 
   // One-way channel: renderer sends PCM frames; no invoke/response.
   // Forwards to whichever bridge is currently active.
   ipcMain.on('audio:frame', (_event, frame: Uint8Array) => {
-    currentBridge?.pushAudioFrame(frame)
+    liveSession.pushAudioFrame(frame)
   })
 
   const registry = createIpcRegistry({
@@ -342,55 +294,13 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     secretStorage,
     itemLifecycleService: itemService,
     onAudioStart: () => {
-      // Stop any running bridge/runtime first.
-      currentBridge?.stop()
-      activeRuntime?.stop()
-
-      // Build a fresh ASR provider from the settings active RIGHT NOW.
-      // This ensures a model downloaded or a provider switched after app startup
-      // is picked up without restarting the app.
-      const asrResult = tryBuildAsrProvider(settingsStore.current, secretStorage)
-      if (!asrResult.ok) {
-        console.warn(
-          '[LiveTranscriber] ASR provider not ready at audio:start — ' +
-            `falling back to FakeASRProvider. Reason: ${asrResult.error}`,
-        )
-      }
-      const asrProvider = asrResult.ok ? asrResult.provider : new FakeASRProvider()
-
-      activeRuntime = buildRuntime()
-
-      currentBridge = new AudioCaptureBridge({
-        asrProvider,
-        sender: mainWindow.webContents,
-        onSpan: (span) => {
-          if (activeRuntime !== null) {
-            activeRuntime.handleSpan(span)
-            // tick() is a no-op when the cadence threshold hasn't been crossed.
-            void activeRuntime.tick()
-          }
-        },
-      })
-      currentBridge.start()
+      liveSession.start()
     },
     onAudioStop: () => {
-      currentBridge?.stop()
-      currentBridge = null
-      activeRuntime?.stop()
-      activeRuntime = null
+      liveSession.stop()
     },
-    summaryQuery: (question) => {
-      return activeRuntime !== null ? activeRuntime.querySummary(question) : Promise.resolve('')
-    },
-    onMeetingEnd: async () => {
-      if (activeRuntime !== null) {
-        const meeting = mRepo.findById(PLACEHOLDER_MEETING_ID)
-        if (meeting !== null) {
-          await activeRuntime.endMeeting(meeting)
-        }
-        activeRuntime = null
-      }
-    },
+    summaryQuery: (question) => liveSession.querySummary(question),
+    onMeetingEnd: () => liveSession.endMeeting(),
     onExportFile: async ({ content, defaultFilename, filters }) => {
       const result = await dialog.showSaveDialog(mainWindow, {
         defaultPath: defaultFilename,
