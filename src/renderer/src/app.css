@@ -474,6 +474,105 @@ body,
   color: var(--color-text-tertiary);
 }
 
+/* ---------------------------------------------------------------------------
+ * Live screen — two-column "notebook" layout.
+ * Transcript is the canvas (left); items, nudges, add bar and the running
+ * summary sit in the right margin. Source order is margin-then-transcript;
+ * CSS `order` places the transcript on the left so the DOM move was avoided.
+ * --------------------------------------------------------------------------- */
+
+.live-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.live-header__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.live-header__title {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-rec-dot {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background-color: var(--color-live);
+  box-shadow: 0 0 0 4px rgba(168, 50, 45, 0.15);
+  animation: live-rec-pulse 2s var(--ease-in-out) infinite;
+}
+
+@keyframes live-rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.live-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border-dim);
+}
+
+.live-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.live-layout__transcript {
+  order: 1;
+  min-width: 0;
+}
+
+.live-layout__margin {
+  order: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* The transcript pane is the canvas: always render its body in the left column
+   (no extra top border the collapsed-at-bottom version used). */
+.live-layout__transcript.live-transcript-section {
+  border-top: none;
+  padding-top: 0;
+}
+
+@media (max-width: 980px) {
+  .live-layout {
+    grid-template-columns: 1fr;
+  }
+  /* On narrow widths, items lead and the transcript follows. */
+  .live-layout__transcript {
+    order: 2;
+  }
+  .live-layout__margin {
+    order: 1;
+  }
+}
+
 /* --- Loopback toggle + selects (recessed wells) --- */
 
 .screen__body--loopback-toggle {

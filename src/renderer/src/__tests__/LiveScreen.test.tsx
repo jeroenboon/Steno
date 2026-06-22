@@ -242,8 +242,10 @@ describe('LiveScreen — item 0018 items UI', () => {
     // The item text
     expect(await screen.findByText(/Release in Q4/i)).toBeInTheDocument()
 
-    // Source span text shown (or a subset of it)
-    expect(screen.getByText(/We beslissen de release/i)).toBeInTheDocument()
+    // Source span text shown (or a subset of it). The transcript is open by
+    // default, so this text legitimately appears both there and in the item's
+    // source quote — assert at least one occurrence.
+    expect(screen.getAllByText(/We beslissen de release/i).length).toBeGreaterThan(0)
   })
 
   it('proposed items are visually distinct from confirmed items', async () => {
@@ -405,26 +407,30 @@ describe('LiveScreen — item 0018 items UI', () => {
   // Transcript pane collapsed by default
   // -------------------------------------------------------------------------
 
-  it('transcript pane is collapsed by default', () => {
+  it('transcript pane is open by default (it is the live canvas)', async () => {
     render(<LiveScreen />)
 
-    // The transcript list should not be visible initially
-    expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument()
-
-    // But a toggle button to expand it should be present
+    // A toggle button to collapse it is present...
     expect(screen.getByTestId('transcript-toggle')).toBeInTheDocument()
+
+    // ...and a pushed span is visible without any interaction.
+    pushSpan(SPAN_1)
+    expect(await screen.findByTestId('transcript-list')).toBeInTheDocument()
   })
 
-  it('clicking transcript toggle expands the pane', async () => {
+  it('clicking transcript toggle collapses the pane', async () => {
     const user = userEvent.setup()
     render(<LiveScreen />)
 
     pushSpan(SPAN_1)
+    expect(await screen.findByTestId('transcript-list')).toBeInTheDocument()
 
     const toggle = screen.getByTestId('transcript-toggle')
     await user.click(toggle)
 
-    expect(await screen.findByTestId('transcript-list')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument()
+    })
   })
 
   // -------------------------------------------------------------------------
@@ -432,14 +438,10 @@ describe('LiveScreen — item 0018 items UI', () => {
   // -------------------------------------------------------------------------
 
   it('low-confidence span gets a visual low-confidence flag', async () => {
-    const user = userEvent.setup()
     render(<LiveScreen />)
 
+    // Transcript is open by default, so the span shows without toggling.
     pushSpan(LOW_CONFIDENCE_SPAN)
-
-    // Expand transcript
-    const toggle = screen.getByTestId('transcript-toggle')
-    await user.click(toggle)
 
     const spanEl = await screen.findByTestId(`transcript-span-${LOW_CONFIDENCE_SPAN.id}`)
     expect(spanEl).toHaveAttribute('data-low-confidence', 'true')

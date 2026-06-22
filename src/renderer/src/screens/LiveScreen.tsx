@@ -474,6 +474,7 @@ export function LiveScreen(): React.JSX.Element {
   const agendaItems = useAppStore((s) => s.agendaItems)
   const participants = useAppStore((s) => s.participants)
   const activeMeeting = useAppStore((s) => s.activeMeeting)
+  const meetingTitle = useAppStore((s) => s.meetingTitle)
   const setRoute = useAppStore((s) => s.setRoute)
 
   const confirmItem = useAppStore((s) => s.confirmItem)
@@ -488,7 +489,8 @@ export function LiveScreen(): React.JSX.Element {
   const { audioLevel } = useLiveSession(activeMeeting)
 
   // --- Local UI state ---
-  const [transcriptOpen, setTranscriptOpen] = useState(false)
+  // Transcript is the live canvas: open by default, collapsible via the toggle.
+  const [transcriptOpen, setTranscriptOpen] = useState(true)
   const [editState, setEditState] = useState<EditState | null>(null)
   const [addingKind, setAddingKind] = useState<ItemKind | null>(null)
   const [endingMeeting, setEndingMeeting] = useState(false)
@@ -654,12 +656,16 @@ export function LiveScreen(): React.JSX.Element {
       {/* ------------------------------------------------------------------ */}
       {/* Header */}
       {/* ------------------------------------------------------------------ */}
-      <header className="screen__header">
-        <h1 className="screen__title">{t('screen.live.title')}</h1>
-        <p className="screen__subtitle">{t('screen.live.subtitle')}</p>
+      <header className="live-header">
+        <div className="live-header__heading">
+          {isRecording && <span className="live-rec-dot" aria-hidden="true" />}
+          <h1 className="screen__title live-header__title">
+            {meetingTitle.length > 0 ? meetingTitle : t('screen.live.title')}
+          </h1>
+        </div>
         <button
           type="button"
-          className="btn btn--danger live-end-btn"
+          className="btn btn--secondary live-end-btn"
           data-testid="end-meeting-btn"
           disabled={endingMeeting}
           onClick={() => {
@@ -673,259 +679,273 @@ export function LiveScreen(): React.JSX.Element {
       {/* ------------------------------------------------------------------ */}
       {/* Session controls (loopback toggle + mic status) */}
       {/* ------------------------------------------------------------------ */}
-      <section className="screen__body screen__body--loopback-toggle">
-        <label htmlFor="capture-mode-select" className="loopback-toggle__label">
-          {t('live.loopback.toggle.label')}
-        </label>
-        <select
-          id="capture-mode-select"
-          data-testid="capture-mode-select"
-          value={captureMode}
-          onChange={(e) => {
-            const value = e.target.value
-            if (value === 'remote' || value === 'mic-only') {
-              setCaptureMode(value)
-            }
-          }}
-          disabled={micPermission !== 'unknown'}
-          className="loopback-toggle__select"
-        >
-          <option value="remote">{t('live.loopback.mode.remote')}</option>
-          <option value="mic-only">{t('live.loopback.mode.mic-only')}</option>
-        </select>
+      <div className="live-controls">
+        <section className="screen__body screen__body--loopback-toggle">
+          <label htmlFor="capture-mode-select" className="loopback-toggle__label">
+            {t('live.loopback.toggle.label')}
+          </label>
+          <select
+            id="capture-mode-select"
+            data-testid="capture-mode-select"
+            value={captureMode}
+            onChange={(e) => {
+              const value = e.target.value
+              if (value === 'remote' || value === 'mic-only') {
+                setCaptureMode(value)
+              }
+            }}
+            disabled={micPermission !== 'unknown'}
+            className="loopback-toggle__select"
+          >
+            <option value="remote">{t('live.loopback.mode.remote')}</option>
+            <option value="mic-only">{t('live.loopback.mode.mic-only')}</option>
+          </select>
 
-        {loopbackState === 'denied' && (
-          <p
-            className="loopback-status loopback-status--denied"
-            role="status"
-            data-testid="loopback-denied-message"
-          >
-            {t('live.loopback.state.denied')}
-          </p>
-        )}
-        {loopbackState === 'active' && (
-          <p
-            className="loopback-status loopback-status--active"
-            role="status"
-            data-testid="loopback-active-message"
-          >
-            {t('live.loopback.state.active')}
-          </p>
-        )}
-        {loopbackState === 'off' && (
-          <p
-            className="loopback-status loopback-status--off"
-            role="status"
-            data-testid="loopback-off-message"
-          >
-            {t('live.loopback.state.off')}
-          </p>
-        )}
-      </section>
-
-      <section
-        className="screen__body"
-        data-testid="mic-status"
-        data-mic-permission={micPermission}
-      >
-        {micPermission === 'denied' && (
-          <p className="mic-denied-message" role="alert" data-testid="mic-denied-message">
-            {t('live.mic.denied')}
-          </p>
-        )}
-        {micPermission === 'unknown' && (
-          <p className="mic-starting-message" data-testid="mic-starting-message">
-            {t('live.mic.starting')}
-          </p>
-        )}
-        {micPermission === 'granted' && (
-          <div className="mic-active-row">
-            <p className="mic-active-message" data-testid="mic-active-message">
-              {t('live.mic.active')}
+          {loopbackState === 'denied' && (
+            <p
+              className="loopback-status loopback-status--denied"
+              role="status"
+              data-testid="loopback-denied-message"
+            >
+              {t('live.loopback.state.denied')}
             </p>
-            <div className="audio-level-meter" aria-hidden="true">
-              <div
-                className="audio-level-bar"
-                style={{ width: String(Math.min(100, audioLevel * 400)) + '%' }}
-              />
+          )}
+          {loopbackState === 'active' && (
+            <p
+              className="loopback-status loopback-status--active"
+              role="status"
+              data-testid="loopback-active-message"
+            >
+              {t('live.loopback.state.active')}
+            </p>
+          )}
+          {loopbackState === 'off' && (
+            <p
+              className="loopback-status loopback-status--off"
+              role="status"
+              data-testid="loopback-off-message"
+            >
+              {t('live.loopback.state.off')}
+            </p>
+          )}
+        </section>
+
+        <section
+          className="screen__body"
+          data-testid="mic-status"
+          data-mic-permission={micPermission}
+        >
+          {micPermission === 'denied' && (
+            <p className="mic-denied-message" role="alert" data-testid="mic-denied-message">
+              {t('live.mic.denied')}
+            </p>
+          )}
+          {micPermission === 'unknown' && (
+            <p className="mic-starting-message" data-testid="mic-starting-message">
+              {t('live.mic.starting')}
+            </p>
+          )}
+          {micPermission === 'granted' && (
+            <div className="mic-active-row">
+              <p className="mic-active-message" data-testid="mic-active-message">
+                {t('live.mic.active')}
+              </p>
+              <div className="audio-level-meter" aria-hidden="true">
+                <div
+                  className="audio-level-bar"
+                  style={{ width: String(Math.min(100, audioLevel * 400)) + '%' }}
+                />
+              </div>
             </div>
-          </div>
-        )}
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Nudge panel (item 0019) */}
-      {/* ------------------------------------------------------------------ */}
-      <NudgePanel nudges={nudges} dismissedNudgeIds={dismissedNudgeIds} onDismiss={dismissNudge} />
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Items panel — keyboard shortcut legend */}
-      {/* ------------------------------------------------------------------ */}
-      <p className="live-shortcuts-hint">{t('live.items.shortcuts')}</p>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Agenda groups */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="live-groups">
-        {allGroups.map((group) => {
-          const groupProposedDecisions = proposedDecisions.filter(
-            (d) => d.agendaItemId === group.id,
-          )
-          const groupProposedActions = proposedActions.filter((a) => a.agendaItemId === group.id)
-          const groupConfirmedDecisions = confirmedDecisions.filter(
-            (d) => d.agendaItemId === group.id,
-          )
-          const groupConfirmedActions = confirmedActions.filter((a) => a.agendaItemId === group.id)
-
-          return (
-            <AgendaGroup
-              key={group.id}
-              agendaId={group.id}
-              agendaTitle={group.title}
-              decisions={groupProposedDecisions}
-              actions={groupProposedActions}
-              confirmedDecisions={groupConfirmedDecisions}
-              confirmedActions={groupConfirmedActions}
-              transcriptSpanMap={transcriptSpanMap}
-              participantMap={participantMap}
-              onConfirm={(kind, id) => void handleConfirm(kind, id)}
-              onDismiss={(kind, id) => void handleDismiss(kind, id)}
-              onEdit={handleEditOpen}
-              editState={editState}
-              editParticipants={participants}
-              onEditChange={handleEditChange}
-              onEditSave={() => void handleEditSave()}
-              onEditCancel={handleEditCancel}
-            />
-          )
-        })}
+          )}
+        </section>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Manual add bar */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="live-add-bar screen__body">
-        <AnimatePresence mode="wait">
-          {addingKind !== null ? (
-            <AddForm
-              key={addingKind}
-              kind={addingKind}
-              onSubmit={(kind, text) => void handleManualAdd(kind, text)}
-              onCancel={() => {
-                setAddingKind(null)
-              }}
-            />
-          ) : (
-            <motion.div
-              key="add-buttons"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="live-add-bar__buttons"
-            >
-              <button
-                type="button"
-                className="btn btn--secondary live-add-bar__btn"
-                data-testid="add-decision-btn"
-                onClick={() => {
-                  setAddingKind('decision')
-                }}
-              >
-                + {t('live.items.add.decision')}
-              </button>
-              <button
-                type="button"
-                className="btn btn--secondary live-add-bar__btn"
-                data-testid="add-action-btn"
-                onClick={() => {
-                  setAddingKind('action')
-                }}
-              >
-                + {t('live.items.add.action')}
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </section>
+      <div className="live-layout">
+        <aside className="live-layout__margin">
+          {/* ------------------------------------------------------------------ */}
+          {/* Nudge panel (item 0019) */}
+          {/* ------------------------------------------------------------------ */}
+          <NudgePanel
+            nudges={nudges}
+            dismissedNudgeIds={dismissedNudgeIds}
+            onDismiss={dismissNudge}
+          />
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Running summary panel (item 0020) */}
-      {/* ------------------------------------------------------------------ */}
-      <RunningSummaryPanel />
+          {/* ------------------------------------------------------------------ */}
+          {/* Items panel — keyboard shortcut legend */}
+          {/* ------------------------------------------------------------------ */}
+          <p className="live-shortcuts-hint">{t('live.items.shortcuts')}</p>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Collapsible transcript pane (collapsed by default) */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="live-transcript-section screen__body">
-        <button
-          type="button"
-          className="live-transcript__toggle"
-          data-testid="transcript-toggle"
-          aria-expanded={transcriptOpen}
-          onClick={() => {
-            setTranscriptOpen((o) => !o)
-          }}
-        >
-          <span className="live-transcript__toggle-icon">{transcriptOpen ? '▾' : '▸'}</span>
-          {transcriptOpen ? t('live.transcript.toggle.hide') : t('live.transcript.toggle.show')}
-        </button>
+          {/* ------------------------------------------------------------------ */}
+          {/* Agenda groups */}
+          {/* ------------------------------------------------------------------ */}
+          <div className="live-groups">
+            {allGroups.map((group) => {
+              const groupProposedDecisions = proposedDecisions.filter(
+                (d) => d.agendaItemId === group.id,
+              )
+              const groupProposedActions = proposedActions.filter(
+                (a) => a.agendaItemId === group.id,
+              )
+              const groupConfirmedDecisions = confirmedDecisions.filter(
+                (d) => d.agendaItemId === group.id,
+              )
+              const groupConfirmedActions = confirmedActions.filter(
+                (a) => a.agendaItemId === group.id,
+              )
 
-        <AnimatePresence>
-          {transcriptOpen && (
-            <motion.div
-              key="transcript-pane"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="live-transcript__pane"
-            >
-              <h2 className="transcript__heading">{t('live.transcript.heading')}</h2>
-              {transcriptSpans.length === 0 ? (
-                <p className="transcript__empty" data-testid="transcript-empty">
-                  {t('live.transcript.empty')}
-                </p>
+              return (
+                <AgendaGroup
+                  key={group.id}
+                  agendaId={group.id}
+                  agendaTitle={group.title}
+                  decisions={groupProposedDecisions}
+                  actions={groupProposedActions}
+                  confirmedDecisions={groupConfirmedDecisions}
+                  confirmedActions={groupConfirmedActions}
+                  transcriptSpanMap={transcriptSpanMap}
+                  participantMap={participantMap}
+                  onConfirm={(kind, id) => void handleConfirm(kind, id)}
+                  onDismiss={(kind, id) => void handleDismiss(kind, id)}
+                  onEdit={handleEditOpen}
+                  editState={editState}
+                  editParticipants={participants}
+                  onEditChange={handleEditChange}
+                  onEditSave={() => void handleEditSave()}
+                  onEditCancel={handleEditCancel}
+                />
+              )
+            })}
+          </div>
+
+          {/* ------------------------------------------------------------------ */}
+          {/* Manual add bar */}
+          {/* ------------------------------------------------------------------ */}
+          <section className="live-add-bar screen__body">
+            <AnimatePresence mode="wait">
+              {addingKind !== null ? (
+                <AddForm
+                  key={addingKind}
+                  kind={addingKind}
+                  onSubmit={(kind, text) => void handleManualAdd(kind, text)}
+                  onCancel={() => {
+                    setAddingKind(null)
+                  }}
+                />
               ) : (
-                <ul className="transcript__list" data-testid="transcript-list">
-                  {transcriptSpans.map((span) => {
-                    const isLowConfidence =
-                      span.confidence !== undefined && span.confidence < LOW_CONFIDENCE_THRESHOLD
-                    return (
-                      <li
-                        key={span.id}
-                        data-testid={`transcript-span-${span.id}`}
-                        data-low-confidence={isLowConfidence ? 'true' : undefined}
-                        className={[
-                          'transcript__span',
-                          span.isFinal === false ? 'transcript__span--interim' : '',
-                          isLowConfidence ? 'transcript__span--low-confidence' : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                      >
-                        <span className="transcript__text">{span.text}</span>
-                        {span.isFinal === false && (
-                          <span className="transcript__interim-label">
-                            {t('live.transcript.interim')}
-                          </span>
-                        )}
-                        {isLowConfidence && (
-                          <span
-                            className="transcript__low-confidence-flag"
-                            title={t('live.items.low-confidence')}
-                          >
-                            ~
-                          </span>
-                        )}
-                      </li>
-                    )
-                  })}
-                </ul>
+                <motion.div
+                  key="add-buttons"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="live-add-bar__buttons"
+                >
+                  <button
+                    type="button"
+                    className="btn btn--secondary live-add-bar__btn"
+                    data-testid="add-decision-btn"
+                    onClick={() => {
+                      setAddingKind('decision')
+                    }}
+                  >
+                    + {t('live.items.add.decision')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--secondary live-add-bar__btn"
+                    data-testid="add-action-btn"
+                    onClick={() => {
+                      setAddingKind('action')
+                    }}
+                  >
+                    + {t('live.items.add.action')}
+                  </button>
+                </motion.div>
               )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </section>
+            </AnimatePresence>
+          </section>
+
+          {/* ------------------------------------------------------------------ */}
+          {/* Running summary panel (item 0020) */}
+          {/* ------------------------------------------------------------------ */}
+          <RunningSummaryPanel />
+        </aside>
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Transcript — the live canvas (left column, open by default) */}
+        {/* ------------------------------------------------------------------ */}
+        <section className="live-layout__transcript live-transcript-section screen__body">
+          <button
+            type="button"
+            className="live-transcript__toggle"
+            data-testid="transcript-toggle"
+            aria-expanded={transcriptOpen}
+            onClick={() => {
+              setTranscriptOpen((o) => !o)
+            }}
+          >
+            <span className="live-transcript__toggle-icon">{transcriptOpen ? '▾' : '▸'}</span>
+            {transcriptOpen ? t('live.transcript.toggle.hide') : t('live.transcript.toggle.show')}
+          </button>
+
+          <AnimatePresence>
+            {transcriptOpen && (
+              <motion.div
+                key="transcript-pane"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                className="live-transcript__pane"
+              >
+                <h2 className="transcript__heading">{t('live.transcript.heading')}</h2>
+                {transcriptSpans.length === 0 ? (
+                  <p className="transcript__empty" data-testid="transcript-empty">
+                    {t('live.transcript.empty')}
+                  </p>
+                ) : (
+                  <ul className="transcript__list" data-testid="transcript-list">
+                    {transcriptSpans.map((span) => {
+                      const isLowConfidence =
+                        span.confidence !== undefined && span.confidence < LOW_CONFIDENCE_THRESHOLD
+                      return (
+                        <li
+                          key={span.id}
+                          data-testid={`transcript-span-${span.id}`}
+                          data-low-confidence={isLowConfidence ? 'true' : undefined}
+                          className={[
+                            'transcript__span',
+                            span.isFinal === false ? 'transcript__span--interim' : '',
+                            isLowConfidence ? 'transcript__span--low-confidence' : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                        >
+                          <span className="transcript__text">{span.text}</span>
+                          {span.isFinal === false && (
+                            <span className="transcript__interim-label">
+                              {t('live.transcript.interim')}
+                            </span>
+                          )}
+                          {isLowConfidence && (
+                            <span
+                              className="transcript__low-confidence-flag"
+                              title={t('live.items.low-confidence')}
+                            >
+                              ~
+                            </span>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
+      </div>
     </main>
   )
 }
