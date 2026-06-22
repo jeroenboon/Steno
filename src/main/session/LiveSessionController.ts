@@ -175,6 +175,7 @@ export class LiveSessionController {
         id: meetingId,
         title: 'Active Meeting',
         state: 'live',
+        source: 'live',
         paused: false,
         createdAt: new Date().toISOString(),
         primaryLanguage: this._settingsStore.current.primaryLanguage,

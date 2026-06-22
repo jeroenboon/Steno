@@ -44,6 +44,18 @@ export type NudgeId = z.infer<typeof NudgeIdSchema>
 export const MeetingStateSchema = z.enum(['draft', 'live', 'ended'])
 export type MeetingState = z.infer<typeof MeetingStateSchema>
 
+/**
+ * Where a Meeting's Transcript came from.
+ *
+ * 'live'   = captured from microphone/loopback in real time (the default).
+ * 'import' = transcribed from an uploaded audio file (item 0026).
+ *
+ * Same downstream notes either way; this only drives labelling. Defaults to
+ * 'live' so pre-import rows parse unchanged (back-compat).
+ */
+export const RecordingSourceSchema = z.enum(['live', 'import'])
+export type RecordingSource = z.infer<typeof RecordingSourceSchema>
+
 export const ItemStateSchema = z.enum(['proposed', 'confirmed'])
 export type ItemState = z.infer<typeof ItemStateSchema>
 
@@ -251,6 +263,11 @@ export const MeetingSchema = z.object({
   title: z.string().min(1, 'Meeting title cannot be empty'),
   /** Lifecycle state: draft (setup), live (capturing), or ended (final). */
   state: MeetingStateSchema,
+  /**
+   * Where the Transcript came from: 'live' capture or 'import' from a file.
+   * Defaults to 'live' so rows written before item 0026 parse unchanged.
+   */
+  source: RecordingSourceSchema.default('live'),
   /**
    * Whether the meeting is currently paused. Only meaningful when state = 'live'.
    * Pause is a sub-state within Live, not a fourth top-level state.

@@ -239,6 +239,7 @@ describe('IPC registry — meeting:list and meeting:load (item 0023)', () => {
     id: 'mtg-ended',
     title: 'Q3 Planning',
     state: 'ended' as const,
+    source: 'live' as const,
     paused: false,
     createdAt: '2026-06-01T10:00:00.000Z',
     primaryLanguage: 'nl',

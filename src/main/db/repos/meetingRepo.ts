@@ -13,6 +13,7 @@ interface MeetingRow {
   id: string
   title: string
   state: string
+  source: string
   paused: number // SQLite stores booleans as 0/1
   created_at: string
   updated_at: string | null
@@ -26,6 +27,7 @@ function rowToDomain(row: MeetingRow): Meeting {
     id: row.id,
     title: row.title,
     state: row.state,
+    source: row.source,
     paused: row.paused === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? undefined,
@@ -39,12 +41,13 @@ export function meetingRepo(db: Database.Database) {
   return {
     insert(m: Meeting): void {
       db.prepare(
-        `INSERT INTO meetings (id, title, state, paused, created_at, updated_at, started_at, ended_at, primary_language)
-         VALUES (@id, @title, @state, @paused, @createdAt, @updatedAt, @startedAt, @endedAt, @primaryLanguage)`,
+        `INSERT INTO meetings (id, title, state, source, paused, created_at, updated_at, started_at, ended_at, primary_language)
+         VALUES (@id, @title, @state, @source, @paused, @createdAt, @updatedAt, @startedAt, @endedAt, @primaryLanguage)`,
       ).run({
         id: m.id,
         title: m.title,
         state: m.state,
+        source: m.source,
         paused: m.paused ? 1 : 0,
         createdAt: m.createdAt,
         updatedAt: m.updatedAt ?? null,

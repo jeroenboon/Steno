@@ -456,6 +456,42 @@ describe('Meeting', () => {
       }),
     ).toThrow()
   })
+
+  it('defaults source to live when absent (back-compat)', () => {
+    const meeting = MeetingSchema.parse({
+      id: 'meeting-4',
+      state: 'ended',
+      createdAt: new Date().toISOString(),
+      title: 'Legacy meeting',
+      primaryLanguage: 'nl',
+    })
+    expect(meeting.source).toBe('live')
+  })
+
+  it('accepts an imported source', () => {
+    const meeting = MeetingSchema.parse({
+      id: 'meeting-5',
+      state: 'ended',
+      source: 'import',
+      createdAt: new Date().toISOString(),
+      title: 'Imported recording',
+      primaryLanguage: 'nl',
+    })
+    expect(meeting.source).toBe('import')
+  })
+
+  it('rejects an unknown source', () => {
+    expect(() =>
+      MeetingSchema.parse({
+        id: 'meeting-6',
+        state: 'ended',
+        source: 'telepathy',
+        createdAt: new Date().toISOString(),
+        title: 'Nope',
+        primaryLanguage: 'nl',
+      }),
+    ).toThrow()
+  })
 })
 
 // ============================================================================

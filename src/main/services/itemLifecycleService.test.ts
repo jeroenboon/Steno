@@ -47,6 +47,7 @@ function seedMeeting(db: Database.Database): void {
     id: MEETING_ID,
     title: 'Test meeting',
     state: 'live',
+    source: 'live',
     paused: false,
     createdAt: '2026-06-14T10:00:00.000Z',
     primaryLanguage: 'nl',

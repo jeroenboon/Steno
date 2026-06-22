@@ -33,6 +33,7 @@ function makeMeeting(id: MeetingId, state: Meeting['state'] = 'draft'): Meeting 
     id,
     title: 'Test meeting',
     state,
+    source: 'live',
     paused: false,
     createdAt: '2026-06-14T10:00:00.000Z',
     primaryLanguage: 'nl',

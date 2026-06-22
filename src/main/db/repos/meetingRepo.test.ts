@@ -21,6 +21,7 @@ const sample: Meeting = {
   id: 'mtg-1',
   title: 'Q3 Planning',
   state: 'draft',
+  source: 'live',
   paused: false,
   createdAt: '2026-06-14T10:00:00.000Z',
   primaryLanguage: 'nl',
@@ -42,6 +43,23 @@ describe('meetingRepo', () => {
     expect(found?.title).toBe('Q3 Planning')
     expect(found?.state).toBe('draft')
     expect(found?.primaryLanguage).toBe('nl')
+  })
+
+  it('round-trips an imported meeting source', () => {
+    const repo = meetingRepo(db)
+    repo.insert({ ...sample, id: 'mtg-import', source: 'import' })
+    expect(repo.findById('mtg-import')?.source).toBe('import')
+  })
+
+  it('defaults source to live for rows written before the source column', () => {
+    const repo = meetingRepo(db)
+    // Simulate a legacy row written without the source column; the migration's
+    // column DEFAULT 'live' supplies the value.
+    db.prepare(
+      `INSERT INTO meetings (id, title, state, paused, created_at, primary_language)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run('legacy', 'Legacy', 'ended', 0, '2026-06-14T10:00:00.000Z', 'nl')
+    expect(repo.findById('legacy')?.source).toBe('live')
   })
 
   it('returns null for unknown id', () => {

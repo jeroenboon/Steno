@@ -43,6 +43,15 @@ The swappable component that turns microphone audio into a Transcript. Either lo
 **Extraction Provider**:
 The swappable component (a cloud LLM in V1) that reads the Transcript and produces Decisions and Actions. Independent from the ASR Provider. Local LLM is a future option, not built in V1.
 
+**Recording Source**:
+Where a Meeting's Transcript came from: `live` (captured from microphone/loopback in real time) or `import` (transcribed from an uploaded audio file). A field on the Meeting, defaulting to `live` so pre-import meetings are unaffected. It only drives labelling; the downstream notes are identical either way. See ADR 0026.
+
+**Imported Meeting**:
+A Meeting with `source: 'import'`. Its audio came from a file the user uploaded rather than live capture. The file is decoded to PCM in the renderer and streamed through the same ASR Provider as live, then the same final extraction pass produces the notes. Imported Meetings reuse the `Draft → Live → Ended` lifecycle (the Live phase is the transcription the user waits on), not a new state.
+
+**Inferred Agenda / Inferred Participants**:
+Agenda Items and Participants derived from the Transcript by the Extraction Provider (`inferContext`) when the user did not supply them for an Imported Meeting. Distinct from the user-entered agenda/participants set in Draft. Used as context for the final pass, exactly like an uploaded agenda.
+
 **Agenda Item**:
 One discrete planned topic in a Meeting's agenda. Acts as the structural spine: every Decision and Action carries the Agenda Item it belongs to, and the notes are grouped by Agenda Item. Fed to the Extraction Provider as context. A built-in **Off-agenda** bucket catches Decisions and Actions that map to no planned item.
 

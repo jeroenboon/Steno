@@ -22,6 +22,7 @@ const meeting: Meeting = {
   id: 'mtg-1',
   title: 'Test',
   state: 'ended',
+  source: 'live',
   paused: false,
   createdAt: '2026-06-14T10:00:00.000Z',
   primaryLanguage: 'nl',

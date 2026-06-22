@@ -75,6 +75,7 @@ const MEETING: Meeting = {
   id: MTG_ID,
   title: 'Q3 Sprint planning',
   state: 'live',
+  source: 'live',
   paused: false,
   createdAt: '2026-06-18T09:00:00.000Z',
   primaryLanguage: 'nl',
