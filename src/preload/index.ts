@@ -56,8 +56,6 @@ import type {
   SummaryQueryResponse,
   ExportMarkdownRequest,
   ExportMarkdownResponse,
-  ExportJsonRequest,
-  ExportJsonResponse,
   ExportCopyMarkdownRequest,
   ExportCopyMarkdownResponse,
   MeetingListRequest,
@@ -216,8 +214,6 @@ const api: RendererApi = {
 
   exportMarkdown: (req: ExportMarkdownRequest) =>
     ipcRenderer.invoke('export:markdown', req) as Promise<ExportMarkdownResponse>,
-  exportJson: (req: ExportJsonRequest) =>
-    ipcRenderer.invoke('export:json', req) as Promise<ExportJsonResponse>,
   exportCopyMarkdown: (req: ExportCopyMarkdownRequest) =>
     ipcRenderer.invoke('export:copyMarkdown', req) as Promise<ExportCopyMarkdownResponse>,
 

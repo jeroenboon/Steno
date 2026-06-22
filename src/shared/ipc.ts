@@ -468,23 +468,6 @@ export type ExportMarkdownRequest = z.infer<typeof ExportMarkdownRequestSchema>
 export type ExportMarkdownResponse = z.infer<typeof ExportMarkdownResponseSchema>
 
 // ---------------------------------------------------------------------------
-// export:json — save JSON to a file chosen by the user (item 0022)
-// ---------------------------------------------------------------------------
-
-export const ExportJsonRequestSchema = z.object({
-  /** Pre-rendered JSON content to write to disk. */
-  content: z.string(),
-})
-
-export const ExportJsonResponseSchema = z.union([
-  z.object({ ok: z.literal(true) }),
-  z.object({ ok: z.literal(false), reason: z.string() }),
-])
-
-export type ExportJsonRequest = z.infer<typeof ExportJsonRequestSchema>
-export type ExportJsonResponse = z.infer<typeof ExportJsonResponseSchema>
-
-// ---------------------------------------------------------------------------
 // export:copyMarkdown — copy Markdown to the clipboard (item 0022)
 // ---------------------------------------------------------------------------
 
@@ -663,7 +646,6 @@ export type IpcChannel =
   | 'item:createConfirmed'
   | 'summary:query'
   | 'export:markdown'
-  | 'export:json'
   | 'export:copyMarkdown'
   | 'meeting:list'
   | 'meeting:load'
@@ -808,11 +790,6 @@ export interface RendererApi {
    * (item 0022)
    */
   exportMarkdown: (req: ExportMarkdownRequest) => Promise<ExportMarkdownResponse>
-  /**
-   * Save meeting notes as a JSON file. Main shows a save dialog.
-   * (item 0022)
-   */
-  exportJson: (req: ExportJsonRequest) => Promise<ExportJsonResponse>
   /**
    * Copy meeting notes as Markdown to the clipboard.
    * (item 0022)

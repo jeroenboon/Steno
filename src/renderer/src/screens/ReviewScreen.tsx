@@ -18,7 +18,7 @@ import React, { useCallback, useState } from 'react'
 
 import { OffAgenda } from '@shared/domain/types'
 import type { DiscussionSummary } from '@shared/domain/types'
-import { toMarkdown, toJson } from '@shared/export/meetingExporter'
+import { toMarkdown } from '@shared/export/meetingExporter'
 
 import { t } from '../i18n'
 import { useAppStore } from '../store/appStore'
@@ -284,6 +284,7 @@ export function ReviewScreen(): React.JSX.Element {
 
   const [editState, setEditState] = useState<EditState | null>(null)
   const [copyFeedback, setCopyFeedback] = useState(false)
+  const [exportState, setExportState] = useState<'idle' | 'saving' | 'saved'>('idle')
 
   const participantMap = React.useMemo(() => {
     const m = new Map<string, string>()
@@ -382,20 +383,24 @@ export function ReviewScreen(): React.JSX.Element {
   ])
 
   const handleExportMarkdown = useCallback(async () => {
+    // The native save dialog can take a moment to appear on Windows; show a
+    // 'saving' state so the UI never looks frozen (item 0022 follow-up).
+    setExportState('saving')
     try {
       const content = toMarkdown(buildExportInput())
-      await window.api.exportMarkdown({ content })
+      const result = await window.api.exportMarkdown({ content })
+      if (result.ok) {
+        setExportState('saved')
+        setTimeout(() => {
+          setExportState('idle')
+        }, 2000)
+      } else {
+        // Cancelled or failed: return to idle without a success flash.
+        setExportState('idle')
+      }
     } catch (err) {
       console.error('[ReviewScreen] exportMarkdown failed:', err)
-    }
-  }, [buildExportInput])
-
-  const handleExportJson = useCallback(async () => {
-    try {
-      const content = toJson(buildExportInput())
-      await window.api.exportJson({ content })
-    } catch (err) {
-      console.error('[ReviewScreen] exportJson failed:', err)
+      setExportState('idle')
     }
   }, [buildExportInput])
 
@@ -492,21 +497,17 @@ export function ReviewScreen(): React.JSX.Element {
           type="button"
           className="btn btn--secondary"
           data-testid="review-export-markdown-btn"
+          disabled={exportState === 'saving'}
+          aria-busy={exportState === 'saving'}
           onClick={() => {
             void handleExportMarkdown()
           }}
         >
-          {t('review.export.markdown')}
-        </button>
-        <button
-          type="button"
-          className="btn btn--secondary"
-          data-testid="review-export-json-btn"
-          onClick={() => {
-            void handleExportJson()
-          }}
-        >
-          {t('review.export.json')}
+          {exportState === 'saving'
+            ? t('review.export.saving')
+            : exportState === 'saved'
+              ? t('review.export.saved')
+              : t('review.export.markdown')}
         </button>
         <button
           type="button"

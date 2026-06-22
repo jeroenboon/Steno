@@ -47,6 +47,8 @@ const mockApi = {
   itemEditAndConfirm: vi.fn().mockResolvedValue({ state: 'confirmed' }),
   itemDismiss: vi.fn().mockResolvedValue({ ok: true }),
   itemCreateConfirmed: vi.fn().mockResolvedValue({ state: 'confirmed' }),
+  exportMarkdown: vi.fn().mockResolvedValue({ ok: true }),
+  exportCopyMarkdown: vi.fn().mockResolvedValue({ ok: true }),
 }
 
 Object.assign(window, { api: mockApi })
@@ -133,6 +135,42 @@ describe('ReviewScreen — basic rendering', () => {
     useAppStore.setState({ meetingSource: 'live' })
     renderReview()
     expect(screen.queryByTestId('review-imported-badge')).not.toBeInTheDocument()
+  })
+})
+
+describe('ReviewScreen — Markdown export', () => {
+  it('shows a saving state while exporting, then restores when done', async () => {
+    let resolveSave: (v: { ok: true }) => void = () => undefined
+    mockApi.exportMarkdown.mockReturnValueOnce(
+      new Promise<{ ok: true }>((resolve) => {
+        resolveSave = resolve
+      }),
+    )
+
+    renderReview()
+    const btn = screen.getByTestId('review-export-markdown-btn')
+    fireEvent.click(btn)
+
+    expect(await screen.findByText('Bezig met opslaan...')).toBeInTheDocument()
+    expect(btn).toBeDisabled()
+
+    resolveSave({ ok: true })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('review-export-markdown-btn')).not.toBeDisabled()
+    })
+  })
+
+  it('does not get stuck in the saving state when the dialog is cancelled', async () => {
+    mockApi.exportMarkdown.mockResolvedValueOnce({ ok: false, reason: 'cancelled' })
+
+    renderReview()
+    const btn = screen.getByTestId('review-export-markdown-btn')
+    fireEvent.click(btn)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('review-export-markdown-btn')).not.toBeDisabled()
+    })
   })
 })
 

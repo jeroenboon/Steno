@@ -183,7 +183,6 @@ const IPC_CHANNELS: IpcChannel[] = [
   'summary:query',
   'meeting:end',
   'export:markdown',
-  'export:json',
   'export:copyMarkdown',
   'meeting:list',
   'meeting:load',
@@ -333,8 +332,11 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     summaryQuery: (question) => liveSession.querySummary(question),
     onMeetingEnd: (meetingId) => liveSession.endMeeting(meetingId),
     onExportFile: async ({ content, defaultFilename, filters }) => {
+      // Anchor the dialog to a fast, known folder (Documents). A bare relative
+      // filename makes Windows resolve the default directory against the process
+      // CWD, which can make the native save dialog slow to appear.
       const result = await dialog.showSaveDialog(mainWindow, {
-        defaultPath: defaultFilename,
+        defaultPath: join(app.getPath('documents'), defaultFilename),
         filters,
       })
       if (result.canceled || result.filePath === '') {

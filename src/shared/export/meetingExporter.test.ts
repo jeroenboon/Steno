@@ -4,7 +4,6 @@
  * Covers:
  *   - toMarkdown: Markdown structure, agenda ordering, off-agenda placement,
  *     owner resolution, due date formatting, empty meeting edge case
- *   - toJson: valid JSON, Zod schema validation
  */
 
 import { describe, it, expect } from 'vitest'
@@ -12,7 +11,7 @@ import { describe, it, expect } from 'vitest'
 import type { AgendaItem, Participant, Decision, Action, DiscussionSummary } from '../domain/types'
 import { OffAgenda } from '../domain/types'
 
-import { toMarkdown, toJson, ExportedMeetingSchema } from './meetingExporter'
+import { toMarkdown } from './meetingExporter'
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -211,73 +210,5 @@ describe('toMarkdown', () => {
     })
     expect(md).toMatch(/^# Lege vergadering/)
     expect(md).not.toContain('##')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// toJson
-// ---------------------------------------------------------------------------
-
-describe('toJson', () => {
-  it('produces valid JSON that parses without error', () => {
-    const json = toJson({
-      title: 'Test vergadering',
-      agendaItems: [AGENDA_Q3],
-      participants: [ALICE, BOB],
-      decisions: [DECISION_A],
-      actions: [ACTION_BOB],
-      summaries: [SUMMARY_Q3],
-    })
-
-    expect(() => {
-      JSON.parse(json)
-    }).not.toThrow()
-  })
-
-  it('exported JSON satisfies ExportedMeetingSchema', () => {
-    const json = toJson({
-      title: 'Schema-test',
-      agendaItems: [AGENDA_Q3],
-      participants: [BOB],
-      decisions: [DECISION_A],
-      actions: [ACTION_BOB],
-      summaries: [],
-    })
-
-    const parsed = ExportedMeetingSchema.parse(JSON.parse(json))
-    expect(() => ExportedMeetingSchema.parse(parsed)).not.toThrow()
-  })
-
-  it('includes all agenda items, participants, decisions and actions', () => {
-    const json = toJson({
-      title: 'Volledig',
-      agendaItems: [AGENDA_Q3, AGENDA_RETRO],
-      participants: [ALICE, BOB],
-      decisions: [DECISION_A, DECISION_OFF],
-      actions: [ACTION_BOB],
-      summaries: [SUMMARY_Q3],
-    })
-
-    const parsed = ExportedMeetingSchema.parse(JSON.parse(json))
-
-    expect(parsed.agendaItems).toHaveLength(2)
-    expect(parsed.participants).toHaveLength(2)
-    expect(parsed.decisions).toHaveLength(2)
-    expect(parsed.actions).toHaveLength(1)
-  })
-
-  it('includes exportedAt timestamp', () => {
-    const json = toJson({
-      title: 'Tijdstempel',
-      agendaItems: [],
-      participants: [],
-      decisions: [],
-      actions: [],
-      summaries: [],
-    })
-
-    const parsed = JSON.parse(json) as { exportedAt: string }
-    expect(typeof parsed.exportedAt).toBe('string')
-    expect(parsed.exportedAt.length).toBeGreaterThan(0)
   })
 })

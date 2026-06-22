@@ -247,7 +247,8 @@ const nl = {
 
   // Export actions (item 0022)
   'review.export.markdown': 'Exporteer als Markdown',
-  'review.export.json': 'Exporteer als JSON',
+  'review.export.saving': 'Bezig met opslaan...',
+  'review.export.saved': 'Opgeslagen',
   'review.export.copy': 'Kopieer als Markdown',
   'review.export.copied': 'Gekopieerd!',
   'review.export.error': 'Export mislukt',

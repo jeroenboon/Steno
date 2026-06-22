@@ -55,7 +55,6 @@ import {
   MeetingEndRequestSchema,
   MeetingEndResponseSchema,
   ExportMarkdownRequestSchema,
-  ExportJsonRequestSchema,
   ExportCopyMarkdownRequestSchema,
   ExportCopyMarkdownResponseSchema,
   MeetingListRequestSchema,
@@ -93,7 +92,6 @@ import type {
   SummaryQueryResponse,
   MeetingEndResponse,
   ExportMarkdownResponse,
-  ExportJsonResponse,
   ExportCopyMarkdownResponse,
   MeetingListResponse,
   MeetingLoadResponse,
@@ -486,20 +484,6 @@ function makeHandleExportMarkdown(deps: IpcRegistryDependencies) {
   }
 }
 
-function makeHandleExportJson(deps: IpcRegistryDependencies) {
-  return async function handleExportJson(raw: unknown): Promise<ExportJsonResponse> {
-    const req = ExportJsonRequestSchema.parse(raw)
-    if (deps.onExportFile === undefined) {
-      return { ok: false, reason: 'not available' }
-    }
-    return deps.onExportFile({
-      content: req.content,
-      defaultFilename: 'notulen.json',
-      filters: [{ name: 'JSON', extensions: ['json'] }],
-    })
-  }
-}
-
 function makeHandleExportCopyMarkdown(deps: IpcRegistryDependencies) {
   return function handleExportCopyMarkdown(raw: unknown): ExportCopyMarkdownResponse {
     const req = ExportCopyMarkdownRequestSchema.parse(raw)
@@ -619,7 +603,6 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'summary:query': makeHandleSummaryQuery(deps),
     'meeting:end': makeHandleMeetingEnd(deps),
     'export:markdown': makeHandleExportMarkdown(deps),
-    'export:json': makeHandleExportJson(deps),
     'export:copyMarkdown': makeHandleExportCopyMarkdown(deps),
     'meeting:list': makeHandleMeetingList(deps),
     'meeting:load': makeHandleMeetingLoad(deps),

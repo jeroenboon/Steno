@@ -6,19 +6,9 @@
  *
  * toMarkdown: agenda headings, Discussion Summary + Decisions + Actions per
  *   item, owners/due dates inline, off-agenda last.
- * toJson: structured JSON validated by ExportedMeetingSchema.
  */
 
-import { z } from 'zod'
-
-import {
-  AgendaItemSchema,
-  ParticipantSchema,
-  DecisionSchema,
-  ActionSchema,
-  DiscussionSummarySchema,
-  OffAgenda,
-} from '../domain/types'
+import { OffAgenda } from '../domain/types'
 import type { AgendaItem, Participant, Decision, Action, DiscussionSummary } from '../domain/types'
 
 // ---------------------------------------------------------------------------
@@ -33,22 +23,6 @@ export interface ExportInput {
   actions: Action[]
   summaries: DiscussionSummary[]
 }
-
-// ---------------------------------------------------------------------------
-// JSON schema (used by toJson and by tests to validate the output)
-// ---------------------------------------------------------------------------
-
-export const ExportedMeetingSchema = z.object({
-  title: z.string(),
-  exportedAt: z.string(),
-  agendaItems: z.array(AgendaItemSchema),
-  participants: z.array(ParticipantSchema),
-  decisions: z.array(DecisionSchema),
-  actions: z.array(ActionSchema),
-  discussionSummaries: z.array(DiscussionSummarySchema),
-})
-
-export type ExportedMeeting = z.infer<typeof ExportedMeetingSchema>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -155,29 +129,4 @@ export function toMarkdown(input: ExportInput): string {
   }
 
   return lines.join('\n')
-}
-
-// ---------------------------------------------------------------------------
-// JSON serializer
-// ---------------------------------------------------------------------------
-
-/**
- * Serialise a meeting to a JSON string.
- *
- * The output is validated against ExportedMeetingSchema before serialisation
- * so that any future schema drift is caught at export time rather than silently
- * producing invalid JSON.
- */
-export function toJson(input: ExportInput): string {
-  const payload: ExportedMeeting = ExportedMeetingSchema.parse({
-    title: input.title,
-    exportedAt: new Date().toISOString(),
-    agendaItems: input.agendaItems,
-    participants: input.participants,
-    decisions: input.decisions,
-    actions: input.actions,
-    discussionSummaries: input.summaries,
-  })
-
-  return JSON.stringify(payload, null, 2)
 }
