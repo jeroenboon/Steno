@@ -97,7 +97,8 @@ export class ImportSessionController {
   private readonly _buildExtraction: typeof tryBuildExtractionProvider
 
   private _asrProvider: ASRProvider | null = null
-  private _drainDone: Promise<void> = Promise.resolve()
+  /** Decoded PCM frames accumulated from the renderer, transcribed in one batch on finish. */
+  private _pcmChunks: Uint8Array[] = []
   private _opts: ImportStartOptions | null = null
 
   constructor(deps: ImportSessionControllerDeps) {
@@ -117,12 +118,15 @@ export class ImportSessionController {
   }
 
   /**
-   * Begin an import: persist the meeting + user context, build the ASR provider,
-   * and start draining its spans into the transcript repo. If the ASR provider
-   * is not configured, emits an 'error' progress event and does not transcribe.
+   * Begin an import: persist the meeting + user context and build the ASR
+   * provider. Decoded PCM frames are accumulated (not streamed) and transcribed
+   * in one batch on finish(), so cloud providers use their prerecorded API and
+   * none of the realtime socket timing applies. If the ASR provider is not
+   * configured, emits an 'error' progress event and does not transcribe.
    */
   start(opts: ImportStartOptions): void {
     this._opts = opts
+    this._pcmChunks = []
 
     const now = new Date(this._clock.now()).toISOString()
     if (this._meetingRepo.findById(opts.meetingId) === null) {
@@ -157,40 +161,66 @@ export class ImportSessionController {
     }
 
     this._asrProvider = asrResult.provider
-    this._asrProvider.start()
-    this._drainDone = this._drainSpans(this._asrProvider, opts.meetingId)
     this._emitProgress('transcribing')
   }
 
-  /** Forward a decoded PCM frame to the ASR provider. No-op when not started. */
+  /** Accumulate a decoded PCM frame for the batch transcription. No-op when not started. */
   pushFrame(frame: Uint8Array): void {
-    this._asrProvider?.pushAudioFrame(frame)
+    if (this._asrProvider === null) return
+    this._pcmChunks.push(frame)
   }
 
   /**
-   * Finish the import: stop transcription, optionally infer context, run the
-   * final extraction pass, mark the meeting Ended, and resolve with its id.
+   * Finish the import: transcribe the accumulated audio in one batch, persist the
+   * spans, optionally infer context, run the final extraction pass, mark the
+   * meeting Ended, and resolve with its id. A transcription failure emits an
+   * 'error' stage and stops (no notes, meeting not ended) so the renderer can
+   * react instead of silently producing an empty meeting.
    */
   async finish(meetingId: string): Promise<{ meetingId: string }> {
     const opts = this._opts
-
-    // Stop the ASR provider and wait for every span to be persisted.
-    this._asrProvider?.stop()
-    await this._drainDone
+    const asrProvider = this._asrProvider
     this._asrProvider = null
 
+    // start() already emitted 'error' when the ASR provider was not configured.
+    if (asrProvider === null) return { meetingId }
+
+    if (asrProvider.transcribeBatch === undefined) {
+      this._emitProgress('error', { error: 'ASR provider does not support file import' })
+      return { meetingId }
+    }
+
+    // Transcribe the whole decoded buffer in one shot (prerecorded for cloud,
+    // chunked inference for local — no realtime socket either way).
+    const pcm = this._concatPcm()
+    this._pcmChunks = []
+    try {
+      const spans = await asrProvider.transcribeBatch(pcm)
+      for (const span of spans) {
+        if (span.isFinal === false) continue
+        this._spanRepo.insert(span, meetingId)
+      }
+    } catch (err) {
+      console.error(
+        '[ImportSessionController] Transcription failed:',
+        err instanceof Error ? err.message : 'unknown error',
+      )
+      this._emitProgress('error', { error: 'transcription failed' })
+      return { meetingId }
+    }
+
     const extractionResult = this._buildExtraction(this._settingsStore.current, this._secretStorage)
-    const provider = extractionResult.ok ? extractionResult.provider : null
+    const extractionProvider = extractionResult.ok ? extractionResult.provider : null
 
     // Optionally infer the agenda + participants from the transcript.
-    if (opts?.inferContext === true && provider?.inferContext !== undefined) {
+    if (opts?.inferContext === true && extractionProvider?.inferContext !== undefined) {
       this._emitProgress('inferring')
-      await this._inferAndPersistContext(provider, meetingId)
+      await this._inferAndPersistContext(extractionProvider, meetingId)
     }
 
     // Run the same final pass as a live meeting (reads ALL persisted spans).
     this._emitProgress('extracting')
-    await this._runFinalPass(provider, meetingId)
+    await this._runFinalPass(extractionProvider, meetingId)
 
     // Mark the meeting Ended.
     const meeting = this._meetingRepo.findById(meetingId)
@@ -207,13 +237,16 @@ export class ImportSessionController {
   // Internal
   // -------------------------------------------------------------------------
 
-  /** Drain the ASR span iterator, persisting every final span. */
-  private async _drainSpans(provider: ASRProvider, meetingId: string): Promise<void> {
-    for await (const span of provider.spans()) {
-      // Drop interim spans; only final spans feed persistence/extraction.
-      if (span.isFinal === false) continue
-      this._spanRepo.insert(span, meetingId)
+  /** Concatenate the accumulated PCM frames into one contiguous buffer. */
+  private _concatPcm(): Uint8Array {
+    const total = this._pcmChunks.reduce((sum, chunk) => sum + chunk.length, 0)
+    const pcm = new Uint8Array(total)
+    let offset = 0
+    for (const chunk of this._pcmChunks) {
+      pcm.set(chunk, offset)
+      offset += chunk.length
     }
+    return pcm
   }
 
   /** Infer agenda + participants from the transcript and persist them. */

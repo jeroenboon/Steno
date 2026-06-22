@@ -12,7 +12,7 @@
  */
 
 import Database from 'better-sqlite3'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { FakeASRProvider, FakeClock, FakeExtractionProvider } from '@shared/providers'
 import type { AppSettings } from '@shared/settings/settingsSchema'
@@ -118,6 +118,7 @@ describe('ImportSessionController', () => {
 
   it('transcribes an imported file and produces notes via the final pass', async () => {
     const fakeAsr = new FakeASRProvider()
+    fakeAsr.scriptBatchSpans([{ id: 'span-1', text: 'We launchen in Q3', startMs: 0, endMs: 2000 }])
     const fakeExtraction = new FakeExtractionProvider()
     fakeExtraction.scriptFinalPassResponse({
       proposedDecisions: [{ rationale: 'We launchen in Q3', sourceSpanId: 'span-1' }],
@@ -144,8 +145,8 @@ describe('ImportSessionController', () => {
     expect(repos.agendaItemRepo.listByMeeting('imp-1')).toHaveLength(1)
     expect(repos.participantRepo.listByMeeting('imp-1')).toHaveLength(1)
 
-    // Feed one transcription span, then finish.
-    fakeAsr.pushScriptedSpan({ id: 'span-1', text: 'We launchen in Q3', startMs: 0, endMs: 2000 })
+    // Feed a decoded PCM frame, then finish (batch transcription runs here).
+    controller.pushFrame(new Uint8Array([0, 0, 0, 0]))
 
     const result = await controller.finish('imp-1')
 
@@ -165,6 +166,9 @@ describe('ImportSessionController', () => {
 
   it('infers agenda + participants and feeds them to the final pass', async () => {
     const fakeAsr = new FakeASRProvider()
+    fakeAsr.scriptBatchSpans([
+      { id: 'span-1', text: 'Anika opent de begroting', startMs: 0, endMs: 2000 },
+    ])
     const fakeExtraction = new FakeExtractionProvider()
     fakeExtraction.scriptInferContextResponse({
       agendaItems: [{ title: 'Begroting', topic: 'Q3-begroting' }],
@@ -186,12 +190,7 @@ describe('ImportSessionController', () => {
       participants: [],
       inferContext: true,
     })
-    fakeAsr.pushScriptedSpan({
-      id: 'span-1',
-      text: 'Anika opent de begroting',
-      startMs: 0,
-      endMs: 2000,
-    })
+    controller.pushFrame(new Uint8Array([0, 0, 0, 0]))
 
     await controller.finish('imp-infer')
 
@@ -211,6 +210,9 @@ describe('ImportSessionController', () => {
 
   it('uses the user-supplied context and does not infer when inferContext is false', async () => {
     const fakeAsr = new FakeASRProvider()
+    fakeAsr.scriptBatchSpans([
+      { id: 'span-1', text: 'Planning besproken', startMs: 0, endMs: 1000 },
+    ])
     const fakeExtraction = new FakeExtractionProvider()
     fakeExtraction.scriptFinalPassResponse({ proposedDecisions: [], proposedActions: [] })
     const s = makeSender()
@@ -224,7 +226,7 @@ describe('ImportSessionController', () => {
       participants: [{ name: 'Jeroen' }],
       inferContext: false,
     })
-    fakeAsr.pushScriptedSpan({ id: 'span-1', text: 'Planning besproken', startMs: 0, endMs: 1000 })
+    controller.pushFrame(new Uint8Array([0, 0, 0, 0]))
 
     await controller.finish('imp-supplied')
 
@@ -237,6 +239,7 @@ describe('ImportSessionController', () => {
 
   it('still ends the meeting with no notes when no extraction provider is configured', async () => {
     const fakeAsr = new FakeASRProvider()
+    fakeAsr.scriptBatchSpans([{ id: 'span-1', text: 'Iets gezegd', startMs: 0, endMs: 1000 }])
     const s = makeSender()
     const controller = makeController(repos, fakeAsr, null, s.sender)
 
@@ -248,7 +251,7 @@ describe('ImportSessionController', () => {
       participants: [],
       inferContext: true,
     })
-    fakeAsr.pushScriptedSpan({ id: 'span-1', text: 'Iets gezegd', startMs: 0, endMs: 1000 })
+    controller.pushFrame(new Uint8Array([0, 0, 0, 0]))
 
     const result = await controller.finish('imp-degraded')
 
@@ -293,5 +296,32 @@ describe('ImportSessionController', () => {
     // The meeting row still exists (as a live import) so the renderer can react.
     expect(repos.meetingRepo.findById('imp-noasr')?.source).toBe('import')
     void fakeAsr
+  })
+
+  it('emits an error and produces no notes when transcription fails', async () => {
+    const fakeAsr = new FakeASRProvider()
+    vi.spyOn(fakeAsr, 'transcribeBatch').mockRejectedValue(new Error('deepgram 401'))
+    const fakeExtraction = new FakeExtractionProvider()
+    const s = makeSender()
+    const controller = makeController(repos, fakeAsr, fakeExtraction, s.sender)
+
+    controller.start({
+      meetingId: 'imp-fail',
+      title: 'Mislukte transcriptie',
+      primaryLanguage: 'nl',
+      agendaItems: [],
+      participants: [],
+      inferContext: false,
+    })
+    controller.pushFrame(new Uint8Array([0, 0, 0, 0]))
+
+    const result = await controller.finish('imp-fail')
+
+    expect(result).toEqual({ meetingId: 'imp-fail' })
+    expect(s.stages()).toContain('error')
+    expect(repos.transcriptSpanRepo.listByMeeting('imp-fail')).toHaveLength(0)
+    expect(repos.discussionSummaryRepo.listByMeeting('imp-fail')).toHaveLength(0)
+    // The final pass never ran, so the meeting was not marked ended.
+    expect(repos.meetingRepo.findById('imp-fail')?.state).toBe('live')
   })
 })

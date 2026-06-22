@@ -35,17 +35,26 @@ Alternative considered: decode in main with `ffmpeg-static`. Rejected for V1 (ne
 binary, packaging weight). It is the upgrade path if we hit a container/codec
 Chromium cannot decode; an unsupported file surfaces a clean error, never a crash.
 
-### 2. Reuse the streaming `ASRProvider` port; no Deepgram prerecorded adapter in V1
+### 2. Batch transcription for import via `transcribeBatch` (amended)
 
-Import frames go through the same configured `ASRProvider` as live. The local
-Whisper provider (`LocalAsrProvider`, batch-per-chunk) is ideal for files and fully
-offline, which is the privacy-preferred path. The cloud streaming provider also
-works when the renderer paces the frames so it does not flood the socket faster
-than realtime.
+**Original decision (V1):** reuse the streaming `ASRProvider` port for import — feed
+the decoded file frames through the same socket as live, pacing them to avoid
+flooding a cloud provider.
 
-Alternative considered: a dedicated Deepgram prerecorded REST adapter. That is the
-correct long-term tool for cloud file transcription, but it is a second ASR path
-and is deferred. Recorded here as future work.
+**Amended (2026-06-22):** the streaming reuse failed for Deepgram in practice.
+Pushing a decoded file through the realtime WebSocket drops frames sent before the
+socket is open, floods it faster than realtime (socket errors), and `stop()` closes
+before final results flush — the result is an empty transcript. The realtime API is
+simply the wrong tool for a file.
+
+Import now uses a dedicated batch path: an optional `transcribeBatch(pcm)` on the
+ASR port. The `ImportSessionController` accumulates the decoded PCM in main and
+transcribes it in one shot on `finish()`. `LocalAsrProvider.transcribeBatch` runs
+the existing chunked Whisper inference over the whole buffer (no realtime
+constraint); `DeepgramAsrProvider.transcribeBatch` calls Deepgram's prerecorded REST
+API (one POST of the raw linear16 audio, `utterances` + `diarize`). The streaming
+path is untouched and still used for live capture. A transcription failure surfaces
+an `error` progress stage instead of a silent empty meeting.
 
 ### 3. Imported meetings reuse the `draft → live → ended` state machine
 
@@ -76,8 +85,13 @@ transcription and before the final pass. `inferContext` is optional on the port
 
 ## Future work
 
-- Deepgram prerecorded REST adapter for faster, more robust cloud file
-  transcription.
 - `ffmpeg`-based main-process decode as a fallback for formats Chromium cannot
   decode.
 - Multi-file / batch import and speaker-label mapping for imported files.
+- Streaming the accumulated PCM to Deepgram's REST endpoint (rather than buffering
+  the whole file in main) for very long imports, to cap memory use.
+
+## Implemented since
+
+- Deepgram prerecorded REST adapter (`transcribeBatch`) for cloud file
+  transcription — see the amendment to decision 2.
