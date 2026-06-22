@@ -42,6 +42,7 @@ const DECISION_OFF: Decision = {
 
 const ACTION_BOB: Action = {
   id: 'a-bob',
+  description: 'API-keys regelen',
   agendaItemId: 'ai-q3',
   sourceSpanId: 'span-3',
   owner: 'p-bob',
@@ -103,6 +104,18 @@ describe('toMarkdown', () => {
       summaries: [],
     })
     expect(md).toContain('- We gaan door met optie A.')
+  })
+
+  it('renders the action description as the line text', () => {
+    const md = toMarkdown({
+      title: 'Test',
+      agendaItems: [AGENDA_Q3],
+      participants: [BOB],
+      decisions: [],
+      actions: [ACTION_BOB],
+      summaries: [],
+    })
+    expect(md).toContain('- API-keys regelen')
   })
 
   it('resolves action owner name from participants', () => {

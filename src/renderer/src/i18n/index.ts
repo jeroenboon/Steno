@@ -161,6 +161,7 @@ const nl = {
   'live.items.owner': 'Eigenaar',
   'live.items.owner.none': 'Geen eigenaar',
   'live.items.empty': 'Nog geen items.',
+  'live.items.action.untitled': 'Actie (geen omschrijving)',
   'live.items.add.decision': 'Beslissing toevoegen',
   'live.items.add.action': 'Actie toevoegen',
   'live.items.add.decision.placeholder': 'Beschrijf de beslissing...',

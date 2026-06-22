@@ -422,7 +422,11 @@ function AgendaGroup({
               <ItemCard
                 id={a.id}
                 kind="action"
-                text={`Actie${a.owner !== undefined ? ` → ${participantMap.get(a.owner) ?? a.owner}` : ''}`}
+                text={
+                  a.description !== undefined && a.description.length > 0
+                    ? a.description
+                    : t('live.items.action.untitled')
+                }
                 state={a.state}
                 sourceSpanText={transcriptSpanMap.get(a.sourceSpanId)}
                 ownerName={
@@ -543,9 +547,14 @@ export function LiveScreen(): React.JSX.Element {
     if (editState === null) return
     const { id, kind, text, owner } = editState
     try {
-      const updates =
-        kind === 'decision' ? { rationale: text } : { owner: owner.length > 0 ? owner : undefined }
-      await window.api.itemEditAndConfirm({ kind, id, updates })
+      if (kind === 'decision') {
+        await window.api.itemEditAndConfirm({ kind, id, updates: { rationale: text } })
+      } else {
+        const updates: { description?: string; owner?: string } = {}
+        if (text.length > 0) updates.description = text
+        if (owner.length > 0) updates.owner = owner
+        await window.api.itemEditAndConfirm({ kind, id, updates })
+      }
       confirmItem(kind, id)
       setEditState(null)
     } catch (err) {
@@ -585,6 +594,7 @@ export function LiveScreen(): React.JSX.Element {
             }
           : {
               id: newId,
+              description: text,
               agendaItemId: OffAgenda.id,
               sourceSpanId: 'manual',
               status: 'open' as const,

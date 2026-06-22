@@ -79,7 +79,7 @@ function participantName(participants: Participant[], id: string): string {
  *   ### Beslissingen
  *   - rationale
  *   ### Acties
- *   - Actie → Owner (vervalt: YYYY-MM-DD)
+ *   - Action description _(Owner, vervalt: YYYY-MM-DD)_
  *   ---
  *
  *   ## Off-agenda   ← always last; omitted when empty
@@ -133,7 +133,9 @@ export function toMarkdown(input: ExportInput): string {
         const metaParts = [ownerStr, dueStr].filter((p): p is string => p !== undefined)
         const meta = metaParts.length > 0 ? ` _(${metaParts.join(', ')})_` : ''
 
-        lines.push(`- Actie${meta}`)
+        const label =
+          a.description !== undefined && a.description.length > 0 ? a.description : 'Actie'
+        lines.push(`- ${label}${meta}`)
       }
       lines.push('')
     }

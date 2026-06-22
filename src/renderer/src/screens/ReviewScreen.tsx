@@ -248,7 +248,11 @@ function ReviewGroup({
                 <ReviewItemCard
                   id={a.id}
                   kind="action"
-                  text={`Actie${a.owner !== undefined ? ` \u2192 ${participantMap.get(a.owner) ?? a.owner}` : ''}`}
+                  text={
+                    a.description !== undefined && a.description.length > 0
+                      ? a.description
+                      : t('live.items.action.untitled')
+                  }
                   ownerName={
                     a.owner !== undefined ? (participantMap.get(a.owner) ?? a.owner) : undefined
                   }
@@ -321,7 +325,8 @@ export function ReviewScreen(): React.JSX.Element {
         }))
         confirmItem('decision', editState.id)
       } else {
-        const updates: { owner?: string } = {}
+        const updates: { description?: string; owner?: string } = {}
+        if (editState.text.length > 0) updates.description = editState.text
         if (editState.owner !== '') updates.owner = editState.owner
         await window.api.itemEditAndConfirm({
           kind: 'action',
@@ -331,7 +336,11 @@ export function ReviewScreen(): React.JSX.Element {
         useAppStore.setState((state) => ({
           confirmedActions: state.confirmedActions.map((a) =>
             a.id === editState.id
-              ? { ...a, owner: editState.owner !== '' ? editState.owner : a.owner }
+              ? {
+                  ...a,
+                  description: editState.text.length > 0 ? editState.text : a.description,
+                  owner: editState.owner !== '' ? editState.owner : a.owner,
+                }
               : a,
           ),
         }))
