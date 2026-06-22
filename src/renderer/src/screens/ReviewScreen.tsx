@@ -279,6 +279,7 @@ export function ReviewScreen(): React.JSX.Element {
   const discussionSummaries = useAppStore((s) => s.discussionSummaries)
   const confirmItem = useAppStore((s) => s.confirmItem)
   const meetingTitle = useAppStore((s) => s.meetingTitle)
+  const meetingCreatedAt = useAppStore((s) => s.meetingCreatedAt)
 
   const [editState, setEditState] = useState<EditState | null>(null)
   const [copyFeedback, setCopyFeedback] = useState(false)
@@ -412,43 +413,36 @@ export function ReviewScreen(): React.JSX.Element {
 
   const hasSummaries = discussionSummaries.length > 0
 
+  // Header title + metadata (date · N deelnemers), with graceful fallbacks.
+  const headerTitle =
+    meetingTitle.length > 0
+      ? `${t('review.title.prefix')} — ${meetingTitle}`
+      : t('screen.review.title')
+
+  const metaParts: string[] = []
+  if (meetingCreatedAt !== null) {
+    metaParts.push(
+      new Date(meetingCreatedAt).toLocaleDateString('nl-NL', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      }),
+    )
+  }
+  if (participants.length > 0) {
+    const word =
+      participants.length === 1 ? t('review.meta.participant') : t('review.meta.participants')
+    metaParts.push(`${String(participants.length)} ${word}`)
+  }
+  const metaLine = metaParts.join(' · ')
+
   return (
     <main data-testid="screen-review" className="screen screen--review">
       <header className="screen__header">
-        <h1 className="screen__title">{t('screen.review.title')}</h1>
-        <p className="screen__subtitle">{t('screen.review.subtitle')}</p>
-        <div className="review-export-actions" data-testid="review-export-actions">
-          <button
-            type="button"
-            className="btn btn--secondary"
-            data-testid="review-export-markdown-btn"
-            onClick={() => {
-              void handleExportMarkdown()
-            }}
-          >
-            {t('review.export.markdown')}
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary"
-            data-testid="review-export-json-btn"
-            onClick={() => {
-              void handleExportJson()
-            }}
-          >
-            {t('review.export.json')}
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary"
-            data-testid="review-export-copy-btn"
-            onClick={() => {
-              void handleCopyMarkdown()
-            }}
-          >
-            {copyFeedback ? t('review.export.copied') : t('review.export.copy')}
-          </button>
-        </div>
+        <h1 className="screen__title">{headerTitle}</h1>
+        <p className="screen__subtitle">
+          {metaLine.length > 0 ? metaLine : t('screen.review.subtitle')}
+        </p>
       </header>
 
       {!hasSummaries && (
@@ -484,6 +478,39 @@ export function ReviewScreen(): React.JSX.Element {
           )
         })}
       </div>
+
+      <footer className="review-export-actions" data-testid="review-export-actions">
+        <button
+          type="button"
+          className="btn btn--secondary"
+          data-testid="review-export-markdown-btn"
+          onClick={() => {
+            void handleExportMarkdown()
+          }}
+        >
+          {t('review.export.markdown')}
+        </button>
+        <button
+          type="button"
+          className="btn btn--secondary"
+          data-testid="review-export-json-btn"
+          onClick={() => {
+            void handleExportJson()
+          }}
+        >
+          {t('review.export.json')}
+        </button>
+        <button
+          type="button"
+          className="btn btn--secondary"
+          data-testid="review-export-copy-btn"
+          onClick={() => {
+            void handleCopyMarkdown()
+          }}
+        >
+          {copyFeedback ? t('review.export.copied') : t('review.export.copy')}
+        </button>
+      </footer>
     </main>
   )
 }

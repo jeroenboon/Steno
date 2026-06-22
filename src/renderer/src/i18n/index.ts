@@ -199,6 +199,9 @@ const nl = {
   'live.noactive.action': 'Naar voorbereiding',
 
   // Review screen (item 0021)
+  'review.title.prefix': 'Notulen',
+  'review.meta.participant': 'deelnemer',
+  'review.meta.participants': 'deelnemers',
   'review.summary.heading': 'Discussiesamenvatting',
   'review.summary.empty': 'Geen samenvatting beschikbaar.',
   'review.items.decisions.heading': 'Beslissingen',

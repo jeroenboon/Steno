@@ -73,6 +73,12 @@ export interface AppState {
   meetingTitle: string
 
   /**
+   * ISO 8601 creation timestamp of the loaded/active meeting, for the Review
+   * header. Null when no meeting is loaded.
+   */
+  meetingCreatedAt: string | null
+
+  /**
    * Microphone permission state (item 0015).
    * Updated when the renderer calls getUserMedia.
    */
@@ -249,6 +255,7 @@ export const useAppStore = create<AppState>()((set) => ({
   route: 'home',
   activeMeeting: null,
   meetingTitle: '',
+  meetingCreatedAt: null,
   micPermission: 'unknown',
   transcriptSpans: [],
   captureMode: 'remote',
@@ -385,6 +392,7 @@ export const useAppStore = create<AppState>()((set) => ({
     set({
       activeMeeting: id,
       meetingTitle: payload.meeting.title,
+      meetingCreatedAt: payload.meeting.createdAt,
       // Only confirmed items matter in Review; clear proposed from any prior session.
       proposedDecisions: [],
       proposedActions: [],

@@ -116,6 +116,12 @@ describe('ReviewScreen — basic rendering', () => {
     renderReview()
     expect(screen.getByText('Vergadering bekijken')).toBeInTheDocument()
   })
+
+  it('shows the meeting title in the header when one is loaded', () => {
+    useAppStore.setState({ meetingTitle: 'Roadmap Q3' })
+    renderReview()
+    expect(screen.getByText('Notulen — Roadmap Q3')).toBeInTheDocument()
+  })
 })
 
 describe('ReviewScreen — Discussion Summaries', () => {
