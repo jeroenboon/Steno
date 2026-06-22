@@ -18,6 +18,7 @@ export type { Clock } from './clock'
 export {
   ExtractionRequestSchema,
   ExtractionResponseSchema,
+  InferredContextSchema,
   ProposedActionSchema,
   ProposedDecisionSchema,
   ProposedDiscussionSummarySchema,
@@ -25,6 +26,7 @@ export {
 export type {
   ExtractionRequest,
   ExtractionResponse,
+  InferredContext,
   ProposedAction,
   ProposedDecision,
   ProposedDiscussionSummary,

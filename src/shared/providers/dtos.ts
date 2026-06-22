@@ -118,3 +118,24 @@ export const ExtractionResponseSchema = z.object({
 })
 
 export type ExtractionResponse = z.infer<typeof ExtractionResponseSchema>
+
+// ============================================================================
+// INFERRED CONTEXT — agenda + participants derived from a transcript (0026)
+// ============================================================================
+
+/**
+ * Agenda Items and Participants the ExtractionProvider inferred from a whole
+ * transcript, used for an Imported Meeting when the user did not supply them.
+ *
+ * Vendor-neutral and minimal: no domain IDs (assigned downstream), just the
+ * fields the user would otherwise have typed in Draft. Both lists may be empty
+ * when nothing could be inferred. See ADR 0026.
+ */
+export const InferredContextSchema = z.object({
+  /** Agenda Items inferred from the transcript. */
+  agendaItems: z.array(z.object({ title: z.string().min(1), topic: z.string().min(1) })),
+  /** Participants inferred from the transcript. */
+  participants: z.array(z.object({ name: z.string().min(1) })),
+})
+
+export type InferredContext = z.infer<typeof InferredContextSchema>

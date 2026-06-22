@@ -15,6 +15,7 @@ import { FakeClock, RealClock } from './clock'
 import {
   ExtractionRequestSchema,
   ExtractionResponseSchema,
+  InferredContextSchema,
   ProposedActionSchema,
   ProposedDecisionSchema,
 } from './dtos'
@@ -243,6 +244,42 @@ describe('ExtractionResponseSchema', () => {
   })
 })
 
+describe('InferredContextSchema', () => {
+  it('parses inferred agenda items and participants', () => {
+    const result = InferredContextSchema.parse({
+      agendaItems: [{ title: 'Budget', topic: 'Q3 spend' }],
+      participants: [{ name: 'Jeroen' }],
+    })
+    expect(result.agendaItems).toHaveLength(1)
+    expect(result.agendaItems[0]?.title).toBe('Budget')
+    expect(result.participants[0]?.name).toBe('Jeroen')
+  })
+
+  it('allows both lists to be empty (nothing could be inferred)', () => {
+    const result = InferredContextSchema.parse({ agendaItems: [], participants: [] })
+    expect(result.agendaItems).toEqual([])
+    expect(result.participants).toEqual([])
+  })
+
+  it('rejects an agenda item with an empty title', () => {
+    expect(() =>
+      InferredContextSchema.parse({
+        agendaItems: [{ title: '', topic: 'x' }],
+        participants: [],
+      }),
+    ).toThrow()
+  })
+
+  it('rejects a participant with an empty name', () => {
+    expect(() =>
+      InferredContextSchema.parse({
+        agendaItems: [],
+        participants: [{ name: '' }],
+      }),
+    ).toThrow()
+  })
+})
+
 // ============================================================================
 // FakeASRProvider
 // ============================================================================
@@ -401,5 +438,27 @@ describe('FakeExtractionProvider', () => {
     expect(provider.callCount()).toBe(2)
     expect(provider.calls()[0]?.isFinalPass).toBe(false)
     expect(provider.calls()[1]?.isFinalPass).toBe(true)
+  })
+
+  it('infers an empty context by default', async () => {
+    const provider = new FakeExtractionProvider()
+    const result = await provider.inferContext([])
+    expect(result).toEqual({ agendaItems: [], participants: [] })
+  })
+
+  it('returns the scripted inferred context and records the spans it was given', async () => {
+    const provider = new FakeExtractionProvider()
+    provider.scriptInferContextResponse({
+      agendaItems: [{ title: 'Roadmap', topic: 'Next quarter' }],
+      participants: [{ name: 'Anika' }],
+    })
+
+    const spans = [{ id: 'span-1', text: 'Anika opent de roadmap', startMs: 0, endMs: 1000 }]
+    const result = await provider.inferContext(spans)
+
+    expect(result.agendaItems[0]?.title).toBe('Roadmap')
+    expect(result.participants[0]?.name).toBe('Anika')
+    expect(provider.inferContextCalls()).toHaveLength(1)
+    expect(provider.inferContextCalls()[0]?.[0]?.id).toBe('span-1')
   })
 })

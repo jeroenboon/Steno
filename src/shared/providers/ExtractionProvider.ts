@@ -22,7 +22,7 @@
 
 import type { TranscriptSpan } from '../domain/types'
 
-import type { ExtractionRequest, ExtractionResponse } from './dtos'
+import type { ExtractionRequest, ExtractionResponse, InferredContext } from './dtos'
 
 export interface ExtractionProvider {
   /**
@@ -53,4 +53,17 @@ export interface ExtractionProvider {
    * @param question — The note-taker's question in natural language.
    */
   query?(spans: TranscriptSpan[], question: string): Promise<string>
+
+  /**
+   * Infer Agenda Items and Participants from a whole transcript, for an
+   * Imported Meeting where the user chose not to supply them (item 0026).
+   * Returns vendor-neutral InferredContext; both lists may be empty when
+   * nothing could be inferred.
+   *
+   * Optional — callers must guard with `provider.inferContext !== undefined`
+   * (same pattern as summarise/query). See ADR 0026.
+   *
+   * @param spans — All final transcript spans for the meeting.
+   */
+  inferContext?(spans: TranscriptSpan[]): Promise<InferredContext>
 }

@@ -14,7 +14,7 @@
 
 import type { TranscriptSpan } from '../domain/types'
 
-import type { ExtractionRequest, ExtractionResponse } from './dtos'
+import type { ExtractionRequest, ExtractionResponse, InferredContext } from './dtos'
 import type { ExtractionProvider } from './ExtractionProvider'
 
 export class FakeExtractionProvider implements ExtractionProvider {
@@ -25,6 +25,8 @@ export class FakeExtractionProvider implements ExtractionProvider {
   private _queryResponse: string | null = null
   private _summariseCalls: TranscriptSpan[][] = []
   private _queryCalls: { spans: TranscriptSpan[]; question: string }[] = []
+  private _inferContextResponse: InferredContext | null = null
+  private _inferContextCalls: TranscriptSpan[][] = []
 
   /**
    * Enqueue a scripted response for the next rolling (non-final-pass) call.
@@ -50,6 +52,16 @@ export class FakeExtractionProvider implements ExtractionProvider {
   /** Set the scripted answer returned by query(). */
   scriptQueryResponse(text: string): void {
     this._queryResponse = text
+  }
+
+  /** Set the scripted context returned by inferContext(). */
+  scriptInferContextResponse(context: InferredContext): void {
+    this._inferContextResponse = context
+  }
+
+  /** Returns all recorded inferContext() calls in order. */
+  inferContextCalls(): readonly TranscriptSpan[][] {
+    return this._inferContextCalls
   }
 
   /** Returns the number of extract() calls received so far. */
@@ -110,5 +122,10 @@ export class FakeExtractionProvider implements ExtractionProvider {
     return Promise.resolve(
       this._queryResponse ?? `Fake antwoord op "${question}" (${String(spans.length)} fragmenten).`,
     )
+  }
+
+  inferContext(spans: TranscriptSpan[]): Promise<InferredContext> {
+    this._inferContextCalls.push(spans)
+    return Promise.resolve(this._inferContextResponse ?? { agendaItems: [], participants: [] })
   }
 }
