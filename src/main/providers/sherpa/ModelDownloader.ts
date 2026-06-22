@@ -53,7 +53,7 @@ export class ModelDownloader {
   static readonly EXPECTED_FILES: ExpectedFile[] = [
     { name: 'large-v3-encoder.int8.onnx', sha256: '' },
     { name: 'large-v3-decoder.int8.onnx', sha256: '' },
-    { name: 'tokens.txt', sha256: '' },
+    { name: 'large-v3-tokens.txt', sha256: '' },
   ]
 
   constructor(
@@ -119,6 +119,12 @@ export class ModelDownloader {
     const responses: { file: ExpectedFile; response: Response }[] = []
     for (const file of this.expectedFiles) {
       const response = await this.fetcher(hfUrl(file.name))
+      if (!response.ok) {
+        throw new Error(
+          `[ModelDownloader] Failed to download ${file.name}: ` +
+            `HTTP ${String(response.status)} ${response.statusText} from ${hfUrl(file.name)}`,
+        )
+      }
       responses.push({ file, response })
       const cl = response.headers.get('content-length')
       if (cl !== null) {

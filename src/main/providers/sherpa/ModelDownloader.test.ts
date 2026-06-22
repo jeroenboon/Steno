@@ -6,7 +6,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -84,6 +84,23 @@ describe('ModelDownloader', () => {
 
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true })
+  })
+
+  // -------------------------------------------------------------------------
+  // EXPECTED_FILES
+  // -------------------------------------------------------------------------
+
+  it('EXPECTED_FILES match the filenames published in the HuggingFace repo', () => {
+    // These names double as the remote download path AND the local filename, so
+    // they must match csukuangfj/sherpa-onnx-whisper-large-v3 exactly. The repo
+    // ships the tokens as `large-v3-tokens.txt`, not `tokens.txt`; getting this
+    // wrong 404s and sherpa's ReadTokens fails on the error-page body.
+    const names = ModelDownloader.EXPECTED_FILES.map((f) => f.name)
+    expect(names).toEqual([
+      'large-v3-encoder.int8.onnx',
+      'large-v3-decoder.int8.onnx',
+      'large-v3-tokens.txt',
+    ])
   })
 
   // -------------------------------------------------------------------------
@@ -188,6 +205,25 @@ describe('ModelDownloader', () => {
         return
       }),
     ).rejects.toThrow()
+  })
+
+  it('download() rejects and writes nothing when the server responds non-OK', async () => {
+    // A 404 from HuggingFace returns a small "Entry not found" body. Without an
+    // ok-check that body gets written as if it were the model file — exactly how
+    // tokens.txt ended up as 15 bytes of garbage and sherpa's ReadTokens failed.
+    const expectedFiles = makeExpectedFiles(['large-v3-tokens.txt'])
+    const notFoundFetch = vi.fn(
+      (): Promise<Response> => Promise.resolve(new Response('Entry not found', { status: 404 })),
+    ) as unknown as typeof fetch
+    const dl = new ModelDownloader(dir, notFoundFetch, expectedFiles)
+
+    await expect(
+      dl.download(() => {
+        return
+      }),
+    ).rejects.toThrow(/404|not found/i)
+
+    expect(existsSync(join(dir, 'large-v3-tokens.txt'))).toBe(false)
   })
 
   it('download() creates modelDir if it does not exist', async () => {

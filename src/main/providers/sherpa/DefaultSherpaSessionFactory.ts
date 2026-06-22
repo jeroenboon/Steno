@@ -26,7 +26,7 @@ export class DefaultSherpaSessionFactory implements SherpaSessionFactory {
 
     const encoder = join(modelDir, 'large-v3-encoder.int8.onnx')
     const decoder = join(modelDir, 'large-v3-decoder.int8.onnx')
-    const tokens = join(modelDir, 'tokens.txt')
+    const tokens = join(modelDir, 'large-v3-tokens.txt')
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const recognizer = sherpa.createOfflineRecognizer({
