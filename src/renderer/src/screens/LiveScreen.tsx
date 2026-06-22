@@ -558,11 +558,10 @@ export function LiveScreen(): React.JSX.Element {
   }, [])
 
   const handleEndMeeting = useCallback(async () => {
-    if (endingMeeting) return
+    if (activeMeeting === null || endingMeeting) return
     setEndingMeeting(true)
     try {
-      const meetingId = activeMeeting ?? 'active-session'
-      await window.api.meetingEnd({ meetingId })
+      await window.api.meetingEnd({ meetingId: activeMeeting })
       // Navigation to 'review' happens when items:summaries arrives.
       // If the runtime has no provider, items:summaries may not fire — navigate anyway.
       setRoute('review')
@@ -574,7 +573,7 @@ export function LiveScreen(): React.JSX.Element {
 
   const handleManualAdd = useCallback(
     async (kind: ItemKind, text: string) => {
-      const meetingId = activeMeeting ?? 'active-session'
+      if (activeMeeting === null) return
       const newId = crypto.randomUUID()
       const item =
         kind === 'decision'
@@ -591,7 +590,11 @@ export function LiveScreen(): React.JSX.Element {
               status: 'open' as const,
             }
       try {
-        const result = await window.api.itemCreateConfirmed({ kind, meetingId, item })
+        const result = await window.api.itemCreateConfirmed({
+          kind,
+          meetingId: activeMeeting,
+          item,
+        })
         addConfirmedItem(kind, result)
         setAddingKind(null)
       } catch (err) {
