@@ -354,6 +354,24 @@ describe('FakeASRProvider', () => {
       provider.pushAudioFrame(new Uint8Array([0, 1, 2, 3]))
     }).not.toThrow()
   })
+
+  it('transcribeBatch returns scripted spans and records the pcm it was given', async () => {
+    const provider = new FakeASRProvider()
+    provider.scriptBatchSpans([{ id: 's-1', text: 'Hallo wereld', startMs: 0, endMs: 1000 }])
+
+    const pcm = new Uint8Array([1, 2, 3, 4])
+    const spans = await provider.transcribeBatch(pcm)
+
+    expect(spans).toHaveLength(1)
+    expect(spans[0]?.text).toBe('Hallo wereld')
+    expect(provider.batchCalls()).toHaveLength(1)
+    expect(provider.batchCalls()[0]).toBe(pcm)
+  })
+
+  it('transcribeBatch returns an empty array by default', async () => {
+    const provider = new FakeASRProvider()
+    expect(await provider.transcribeBatch(new Uint8Array(0))).toEqual([])
+  })
 })
 
 // ============================================================================

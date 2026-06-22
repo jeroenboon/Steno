@@ -20,6 +20,9 @@ export class FakeASRProvider implements ASRProvider {
   private _queue: TranscriptSpan[] = []
   // Resolvers waiting for the next span to arrive
   private _waiters: SpanResolver[] = []
+  // Batch transcription (item 0026)
+  private _batchSpans: TranscriptSpan[] = []
+  private _batchCalls: Uint8Array[] = []
 
   start(): void {
     this._stopped = false
@@ -56,6 +59,21 @@ export class FakeASRProvider implements ASRProvider {
   /** How many scripted spans are waiting to be consumed. */
   pendingCount(): number {
     return this._queue.length
+  }
+
+  /** Script the spans returned by transcribeBatch(). */
+  scriptBatchSpans(spans: TranscriptSpan[]): void {
+    this._batchSpans = spans
+  }
+
+  /** Returns the PCM buffers passed to transcribeBatch(), in order. */
+  batchCalls(): readonly Uint8Array[] {
+    return this._batchCalls
+  }
+
+  transcribeBatch(pcm: Uint8Array): Promise<TranscriptSpan[]> {
+    this._batchCalls.push(pcm)
+    return Promise.resolve(this._batchSpans)
   }
 
   spans(): AsyncIterable<TranscriptSpan> {

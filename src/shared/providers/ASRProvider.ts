@@ -36,4 +36,19 @@ export interface ASRProvider {
    * Completes when stop() is called and any buffered spans have been emitted.
    */
   spans(): AsyncIterable<TranscriptSpan>
+
+  /**
+   * Transcribe a complete 16 kHz mono 16-bit LE PCM buffer in one shot and
+   * resolve with all final spans, in time order.
+   *
+   * This is the file-import path (item 0026): the whole audio is available up
+   * front, so there is no need for the streaming start()/pushAudioFrame()/spans()
+   * dance. Cloud providers implement this against their prerecorded/batch API
+   * (no realtime socket); local providers run their chunked inference over the
+   * whole buffer.
+   *
+   * Optional — streaming-only providers may omit it; callers must guard with
+   * `provider.transcribeBatch !== undefined`.
+   */
+  transcribeBatch?(pcm: Uint8Array): Promise<TranscriptSpan[]>
 }
