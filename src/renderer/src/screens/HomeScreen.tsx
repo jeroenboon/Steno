@@ -69,90 +69,95 @@ export function HomeScreen(): React.JSX.Element {
 
   return (
     <section className="screen screen--home" aria-label="Overzicht">
-      <time
-        className="home__date-header"
-        dateTime={new Date().toISOString().slice(0, 10)}
-        data-testid="home-date-header"
-      >
-        {new Date().toLocaleDateString('nl-NL', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })}
-      </time>
-
-      <div className="home__actions">
-        {activeLiveMeeting !== null && (
-          <div className="home__active-callout" data-testid="home-active-callout">
-            <span className="home__active-dot" aria-hidden="true" />
-            <span className="home__interrupted-label">
-              {t('home.active.callout')} · {activeLiveMeeting.title}
-            </span>
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => {
-                setRoute('live')
-              }}
-            >
-              {t('home.active.back')}
-            </button>
-          </div>
-        )}
-        {interruptedMeetings.length > 0 && activeLiveMeeting === null && (
-          <div className="home__interrupted-callout" data-testid="home-interrupted-callout">
-            <span className="home__interrupted-label">
-              {t('home.interrupted.callout')} · {interruptedMeetings[0]?.title ?? ''}
-            </span>
-            <button
-              type="button"
-              className="btn btn--secondary"
-              disabled
-              aria-disabled
-              title="Binnenkort beschikbaar"
-            >
-              {t('home.interrupted.resume')}
-            </button>
-          </div>
-        )}
-        <button
-          type="button"
-          className="btn btn--primary"
-          data-testid="home-new-meeting"
-          onClick={handleNewMeeting}
+      <header className="screen__header">
+        <h1 className="screen__title">{t('nav.home')}</h1>
+        <time
+          className="screen__subtitle home__date-header"
+          dateTime={new Date().toISOString().slice(0, 10)}
+          data-testid="home-date-header"
         >
-          {t('home.new.button')}
-        </button>
-      </div>
+          {new Date().toLocaleDateString('nl-NL', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })}
+        </time>
+      </header>
 
-      <div className="home__history">
-        <h2 className="home__history-heading">{t('home.meetings.heading')}</h2>
+      <div className="home__body">
+        <div className="home__actions">
+          {activeLiveMeeting !== null && (
+            <div className="home__active-callout" data-testid="home-active-callout">
+              <span className="home__active-dot" aria-hidden="true" />
+              <span className="home__interrupted-label">
+                {t('home.active.callout')} · {activeLiveMeeting.title}
+              </span>
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={() => {
+                  setRoute('live')
+                }}
+              >
+                {t('home.active.back')}
+              </button>
+            </div>
+          )}
+          {interruptedMeetings.length > 0 && activeLiveMeeting === null && (
+            <div className="home__interrupted-callout" data-testid="home-interrupted-callout">
+              <span className="home__interrupted-label">
+                {t('home.interrupted.callout')} · {interruptedMeetings[0]?.title ?? ''}
+              </span>
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled
+                aria-disabled
+                title="Binnenkort beschikbaar"
+              >
+                {t('home.interrupted.resume')}
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            className="btn btn--primary"
+            data-testid="home-new-meeting"
+            onClick={handleNewMeeting}
+          >
+            {t('home.new.button')}
+          </button>
+        </div>
 
-        {!loading && endedMeetings.length === 0 && (
-          <p className="home__empty" data-testid="home-empty-state">
-            {t('home.meetings.empty')}
-          </p>
-        )}
+        <div className="home__history">
+          <h2 className="home__history-heading">{t('home.meetings.heading')}</h2>
 
-        {endedMeetings.length > 0 && (
-          <ul className="home__meeting-list" role="list">
-            {endedMeetings.map((meeting) => (
-              <li key={meeting.id} className="home__meeting-item" data-testid="home-meeting-item">
-                <button
-                  type="button"
-                  className="home__meeting-btn"
-                  onClick={() => {
-                    void handleReopen(meeting)
-                  }}
-                >
-                  <span className="home__meeting-title">{meeting.title}</span>
-                  <span className="home__meeting-meta">{formatDate(meeting.createdAt)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+          {!loading && endedMeetings.length === 0 && (
+            <p className="home__empty" data-testid="home-empty-state">
+              {t('home.meetings.empty')}
+            </p>
+          )}
+
+          {endedMeetings.length > 0 && (
+            <ul className="home__meeting-list" role="list">
+              {endedMeetings.map((meeting) => (
+                <li key={meeting.id} className="home__meeting-item" data-testid="home-meeting-item">
+                  <button
+                    type="button"
+                    className="home__meeting-btn"
+                    onClick={() => {
+                      void handleReopen(meeting)
+                    }}
+                  >
+                    <span className="home__meeting-title">{meeting.title}</span>
+                    <span className="home__meeting-meta">{formatDate(meeting.createdAt)}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </section>
   )

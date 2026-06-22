@@ -205,8 +205,11 @@ body,
   font-style: italic;
   color: var(--color-proposed);
   letter-spacing: 0.02em;
-  margin-bottom: var(--space-6);
   user-select: none;
+}
+
+.home__body {
+  max-width: 640px;
 }
 
 .home__actions {
