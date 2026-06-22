@@ -69,6 +69,42 @@ describe('LocalAsrProvider', () => {
     }).not.toThrow()
   })
 
+  it('transcribeBatch transcribes a whole PCM buffer in time-ordered chunks', async () => {
+    const provider = new LocalAsrProvider({
+      modelDir: '/fake/model',
+      chunkDurationMs: 1000, // 1000 ms @ 16 kHz = 16000 samples per chunk
+      sessionFactory: new FakeSherpaSessionFactory(['hallo', 'wereld']),
+    })
+
+    // Two full 1000 ms chunks = 32000 samples.
+    const spans = await provider.transcribeBatch(new Uint8Array(32000 * 2))
+
+    expect(spans.map((s) => s.text)).toEqual(['hallo', 'wereld'])
+    expect(spans[0]).toMatchObject({ startMs: 0, endMs: 1000 })
+    expect(spans[1]).toMatchObject({ startMs: 1000, endMs: 2000 })
+  })
+
+  it('transcribeBatch skips empty chunk results but keeps timing', async () => {
+    const provider = new LocalAsrProvider({
+      modelDir: '/fake/model',
+      chunkDurationMs: 1000,
+      sessionFactory: new FakeSherpaSessionFactory(['hallo', '', 'wereld']),
+    })
+
+    const spans = await provider.transcribeBatch(new Uint8Array(48000 * 2)) // 3 chunks
+
+    expect(spans.map((s) => s.text)).toEqual(['hallo', 'wereld'])
+    expect(spans[1]).toMatchObject({ startMs: 2000, endMs: 3000 })
+  })
+
+  it('transcribeBatch returns an empty array for an empty buffer', async () => {
+    const provider = new LocalAsrProvider({
+      modelDir: '/fake/model',
+      sessionFactory: new FakeSherpaSessionFactory([]),
+    })
+    expect(await provider.transcribeBatch(new Uint8Array(0))).toEqual([])
+  })
+
   it('emits a span for each full chunk pushed after start()', async () => {
     const script = ['hallo', 'wereld', 'test']
     const provider = new LocalAsrProvider({

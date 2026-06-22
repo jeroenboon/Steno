@@ -152,6 +152,43 @@ export class LocalAsrProvider implements ASRProvider {
     }
   }
 
+  /**
+   * Transcribe a whole PCM buffer in one shot (item 0026 — file import).
+   *
+   * Runs the same chunked inference as the streaming path, but over the complete
+   * buffer with no realtime constraint: a fresh session, chunk-by-chunk, then
+   * free. The trailing partial chunk (shorter than chunkDurationMs) is still
+   * transcribed so the tail is not lost. Empty chunk results are skipped but the
+   * time position still advances.
+   */
+  async transcribeBatch(pcm: Uint8Array): Promise<TranscriptSpan[]> {
+    if (pcm.length === 0) return []
+
+    const session = await this._sessionFactory.createSession(this._modelDir)
+    try {
+      const spans: TranscriptSpan[] = []
+      const bytesPerChunk = Math.floor((this._chunkDurationMs * SAMPLE_RATE) / 1000) * 2
+
+      let positionMs = 0
+      for (let offset = 0; offset < pcm.length; offset += bytesPerChunk) {
+        const chunkBytes = pcm.subarray(offset, Math.min(offset + bytesPerChunk, pcm.length))
+        const float = int16ToFloat32(chunkBytes)
+        const startMs = positionMs
+        const endMs = startMs + Math.round((float.length / SAMPLE_RATE) * 1000)
+        positionMs = endMs
+
+        const text = (await session.transcribe(float, SAMPLE_RATE)).trim()
+        if (text.length === 0) continue
+
+        const parsed = TranscriptSpanSchema.safeParse({ id: randomUUID(), text, startMs, endMs })
+        if (parsed.success) spans.push(parsed.data)
+      }
+      return spans
+    } finally {
+      session.free()
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Internal: pending work tracking
   // -------------------------------------------------------------------------
