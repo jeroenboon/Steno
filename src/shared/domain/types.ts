@@ -146,6 +146,12 @@ export type Decision = z.infer<typeof DecisionSchema>
 
 export const ActionSchema = z.object({
   id: ActionIdSchema,
+  /**
+   * Human-readable description of the action, e.g. "API-keys regelen".
+   * Optional for back-compat (older rows / pre-description manual adds); the
+   * extraction provider always supplies one for newly proposed actions.
+   */
+  description: z.string().optional(),
   /** The agenda item this action belongs to (or OffAgenda.id). */
   agendaItemId: AgendaItemIdSchema,
   /** Link back to the transcript span it was derived from. */

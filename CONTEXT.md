@@ -15,7 +15,7 @@ _Avoid_: notes, minutes (those are the structured output, not this)
 A first-class structured item meaning the meeting settled a question. Has a rationale and a link back to the transcript span it was derived from. Outlives the transcript; editable, assignable, exportable.
 
 **Action**:
-A first-class structured item meaning someone committed to do something. Has an **owner** and likely a due date, plus a link back to its transcript span. The owner is the person on the hook, which may differ from whoever spoke the sentence.
+A first-class structured item meaning someone committed to do something. Carries a **description** (what is to be done), an **owner**, likely a due date, plus a link back to its transcript span. The owner is the person on the hook, which may differ from whoever spoke the sentence.
 _Avoid_: task, to-do, action item (pick "Action")
 
 **Owner**:

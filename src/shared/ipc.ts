@@ -251,6 +251,7 @@ export const ItemsChangedPayloadSchema = z.object({
   actions: z.array(
     z.object({
       id: z.string().min(1),
+      description: z.string().optional(),
       agendaItemId: z.string().min(1),
       sourceSpanId: z.string().min(1),
       owner: z.string().min(1).optional(),
@@ -362,6 +363,7 @@ const DecisionUpdatesSchema = z.object({
 })
 
 const ActionUpdatesSchema = z.object({
+  description: z.string().min(1).optional(),
   owner: z.string().min(1).optional(),
   dueDate: z.string().datetime().optional(),
   status: z.enum(['open', 'done']).optional(),
@@ -405,6 +407,7 @@ const NewDecisionItemSchema = z.object({
 
 const NewActionItemSchema = z.object({
   id: z.string().min(1),
+  description: z.string().optional(),
   agendaItemId: z.string().min(1),
   sourceSpanId: z.string().min(1),
   owner: z.string().min(1).optional(),

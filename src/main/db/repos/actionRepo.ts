@@ -6,6 +6,7 @@ import type { Action } from '@shared/domain'
 interface ActionRow {
   id: string
   meeting_id: string
+  description: string | null
   agenda_item_id: string
   source_span_id: string
   owner: string | null
@@ -17,6 +18,7 @@ interface ActionRow {
 function rowToDomain(row: ActionRow): Action {
   return ActionSchema.parse({
     id: row.id,
+    description: row.description ?? undefined,
     agendaItemId: row.agenda_item_id,
     sourceSpanId: row.source_span_id,
     owner: row.owner ?? undefined,
@@ -30,11 +32,12 @@ export function actionRepo(db: Database.Database) {
   return {
     insert(a: Action, meetingId: string): void {
       db.prepare(
-        `INSERT INTO actions (id, meeting_id, agenda_item_id, source_span_id, owner, due_date, status, state)
-         VALUES (@id, @meetingId, @agendaItemId, @sourceSpanId, @owner, @dueDate, @status, @state)`,
+        `INSERT INTO actions (id, meeting_id, description, agenda_item_id, source_span_id, owner, due_date, status, state)
+         VALUES (@id, @meetingId, @description, @agendaItemId, @sourceSpanId, @owner, @dueDate, @status, @state)`,
       ).run({
         id: a.id,
         meetingId,
+        description: a.description ?? null,
         agendaItemId: a.agendaItemId,
         sourceSpanId: a.sourceSpanId,
         owner: a.owner ?? null,
@@ -47,11 +50,12 @@ export function actionRepo(db: Database.Database) {
     update(a: Action): void {
       db.prepare(
         `UPDATE actions
-         SET agenda_item_id = @agendaItemId, source_span_id = @sourceSpanId,
+         SET description = @description, agenda_item_id = @agendaItemId, source_span_id = @sourceSpanId,
              owner = @owner, due_date = @dueDate, status = @status, state = @state
          WHERE id = @id`,
       ).run({
         id: a.id,
+        description: a.description ?? null,
         agendaItemId: a.agendaItemId,
         sourceSpanId: a.sourceSpanId,
         owner: a.owner ?? null,

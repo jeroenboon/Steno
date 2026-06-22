@@ -308,6 +308,7 @@ export class ExtractionLoopScheduler {
       const resolvedOwner = resolveOwner(a.ownerHint, context.participants)
       const base = {
         id: randomUUID(),
+        description: a.description,
         sourceSpanId: a.sourceSpanId,
         agendaItemId: resolveAgendaItem(a.agendaItemHint, context.agendaItems),
         status: 'open' as const,

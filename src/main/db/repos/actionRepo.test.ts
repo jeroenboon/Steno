@@ -64,6 +64,20 @@ describe('actionRepo', () => {
     expect(found?.dueDate).toBeUndefined()
   })
 
+  it('persists the action description', () => {
+    const repo = actionRepo(db)
+    const action: Action = {
+      id: 'act-desc',
+      description: 'API-keys regelen voor de release',
+      agendaItemId: 'ai-1',
+      sourceSpanId: 'span-mtg-1',
+      status: 'open',
+      state: 'proposed',
+    }
+    repo.insert(action, 'mtg-1')
+    expect(repo.findById('act-desc')?.description).toBe('API-keys regelen voor de release')
+  })
+
   it('persists optional fields owner and dueDate', () => {
     const repo = actionRepo(db)
     const action: Action = {
