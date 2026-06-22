@@ -26,11 +26,14 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
+import type { TranscriptSpan } from '@shared/domain/types'
 import {
   ExtractionResponseSchema,
+  InferredContextSchema,
   type ExtractionProvider,
   type ExtractionRequest,
   type ExtractionResponse,
+  type InferredContext,
 } from '@shared/providers'
 
 // ---------------------------------------------------------------------------
@@ -41,6 +44,40 @@ const DEFAULT_ROLLING_MODEL = 'claude-haiku-4-5'
 const DEFAULT_FINAL_PASS_MODEL = 'claude-sonnet-4-6'
 
 const TOOL_NAME = 'extract_meeting_notes'
+
+const INFER_TOOL_NAME = 'infer_meeting_context'
+
+/**
+ * JSON schema for the infer_meeting_context tool input. Mirrors
+ * InferredContextSchema so the model produces a compatible shape (item 0026).
+ */
+const INFER_CONTEXT_TOOL_INPUT_SCHEMA = {
+  type: 'object' as const,
+  properties: {
+    agendaItems: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          topic: { type: 'string' },
+        },
+        required: ['title', 'topic'],
+      },
+    },
+    participants: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  required: ['agendaItems', 'participants'],
+}
 
 /**
  * The JSON schema for the extract_meeting_notes tool input.
@@ -205,8 +242,74 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
   }
 
   // ---------------------------------------------------------------------------
+  // Infer context (item 0026)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Infer Agenda Items and Participants from a whole transcript, for an
+   * Imported Meeting where the user did not supply them. Uses the final-pass
+   * model (sonnet) — this is a holistic whole-transcript task, not latency
+   * sensitive. Forced tool use + Zod validation, one-retry-then-empty so a bad
+   * response degrades to an empty context rather than throwing into the import.
+   *
+   * Never logs transcript content or the API key (principle #12).
+   */
+  async inferContext(spans: TranscriptSpan[]): Promise<InferredContext> {
+    if (spans.length === 0) return { agendaItems: [], participants: [] }
+
+    const first = await this._callAndValidateInfer(spans)
+    if (first !== null) return first
+
+    console.error('[AnthropicExtractionProvider] Context inference validation failed, retrying')
+    const retry = await this._callAndValidateInfer(spans)
+    if (retry !== null) return retry
+
+    console.error('[AnthropicExtractionProvider] Context inference retry failed, returning empty')
+    return { agendaItems: [], participants: [] }
+  }
+
+  // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * Call the API for context inference and validate with Zod. Returns a valid
+   * InferredContext or null on validation failure. Never logs content.
+   */
+  private async _callAndValidateInfer(spans: TranscriptSpan[]): Promise<InferredContext | null> {
+    const spanLines = spans
+      .map((s) => `[${s.id}] ${s.speakerLabel ? `${s.speakerLabel}: ` : ''}${s.text}`)
+      .join('\n')
+
+    const response = await this._client.messages.create({
+      model: this._finalPassModel,
+      max_tokens: 2048,
+      system:
+        'Je leidt de agenda en de deelnemers af uit een vergadertranscript. ' +
+        'Geef per agendapunt een korte title en topic. Geef alleen namen van deelnemers ' +
+        'die echt in het transcript voorkomen; verzin niemand. Bij twijfel laat je de lijst leeg. ' +
+        'Gebruik de infer_meeting_context tool om het resultaat terug te geven.',
+      messages: [{ role: 'user', content: `Transcript:\n${spanLines}` }],
+      tools: [
+        {
+          name: INFER_TOOL_NAME,
+          description: 'Infer the agenda items and participants from the meeting transcript.',
+          input_schema: INFER_CONTEXT_TOOL_INPUT_SCHEMA,
+        },
+      ],
+      tool_choice: { type: 'tool', name: INFER_TOOL_NAME },
+    })
+
+    const toolBlock = response.content.find((block) => block.type === 'tool_use')
+    if (toolBlock?.type !== 'tool_use') {
+      console.error('[AnthropicExtractionProvider] No tool_use block in inference response')
+      return null
+    }
+
+    const parsed = InferredContextSchema.safeParse(toolBlock.input)
+    if (!parsed.success) return null
+    return parsed.data
+  }
 
   /**
    * Call the Anthropic API and validate the tool-use response with Zod.

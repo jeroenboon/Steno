@@ -261,4 +261,82 @@ describe('AnthropicExtractionProvider', () => {
       }),
     )
   })
+
+  // -------------------------------------------------------------------------
+  // inferContext (item 0026)
+  // -------------------------------------------------------------------------
+
+  describe('inferContext', () => {
+    const spans = [
+      {
+        id: 'span-1',
+        text: 'Jeroen opent de vergadering over de begroting.',
+        startMs: 0,
+        endMs: 4000,
+      },
+    ]
+
+    function makeInferToolUseResponse(content: Record<string, unknown>) {
+      return {
+        type: 'message',
+        content: [{ type: 'tool_use', id: 'tc-1', name: 'infer_meeting_context', input: content }],
+        stop_reason: 'tool_use',
+      }
+    }
+
+    const validInferred = {
+      agendaItems: [{ title: 'Begroting', topic: 'Bespreken van de Q3-begroting' }],
+      participants: [{ name: 'Jeroen' }],
+    }
+
+    it('returns inferred agenda items and participants from the transcript', async () => {
+      mockCreate.mockResolvedValueOnce(makeInferToolUseResponse(validInferred))
+
+      const provider = makeProvider()
+      const result = await provider.inferContext(spans)
+
+      expect(result.agendaItems).toHaveLength(1)
+      expect(result.agendaItems[0]?.title).toBe('Begroting')
+      expect(result.participants[0]?.name).toBe('Jeroen')
+    })
+
+    it('uses the final-pass model (sonnet) for inference', async () => {
+      mockCreate.mockResolvedValueOnce(makeInferToolUseResponse(validInferred))
+
+      const provider = makeProvider()
+      await provider.inferContext(spans)
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'claude-sonnet-4-6' }),
+      )
+    })
+
+    it('retries once on invalid JSON, then degrades to an empty context', async () => {
+      const bad = makeInferToolUseResponse({ agendaItems: 'not-an-array' })
+      mockCreate.mockResolvedValueOnce(bad).mockResolvedValueOnce(bad)
+
+      const provider = makeProvider()
+      const result = await provider.inferContext(spans)
+
+      expect(mockCreate).toHaveBeenCalledTimes(2)
+      expect(result).toEqual({ agendaItems: [], participants: [] })
+    })
+
+    it('does not log transcript content or the key when inference fails', async () => {
+      const logged: string[] = []
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+        logged.push(args.map(String).join(' '))
+      })
+      mockCreate.mockResolvedValue(makeInferToolUseResponse({ agendaItems: 'bad' }))
+
+      const provider = makeProvider()
+      await provider.inferContext(spans)
+
+      const allLogs = logged.join('\n')
+      expect(allLogs).not.toContain('begroting')
+      expect(allLogs).not.toContain('test-key')
+
+      errorSpy.mockRestore()
+    })
+  })
 })
