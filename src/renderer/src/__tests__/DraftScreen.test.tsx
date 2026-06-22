@@ -46,7 +46,7 @@ describe('DraftScreen', () => {
     expect(screen.getByRole('textbox', { name: /vergaderingtitel/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /agenda/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /deelnemer/i })).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: /taal/i })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: /taal/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /starten/i })).toBeInTheDocument()
   })
 
@@ -124,11 +124,12 @@ describe('DraftScreen', () => {
     expect(screen.queryByText('Bob')).not.toBeInTheDocument()
   })
 
-  it('language selector defaults to Dutch (nl)', () => {
+  it('language toggle defaults to Dutch (nl)', () => {
     render(<DraftScreen />)
 
-    const langSelect = screen.getByRole('combobox', { name: /taal/i })
-    expect((langSelect as HTMLSelectElement).value).toBe('nl')
+    expect(screen.getByRole('radiogroup', { name: /taal/i })).toBeInTheDocument()
+    const nl = screen.getByTestId('draft-language-nl')
+    expect(nl.checked).toBe(true)
   })
 
   it('invokes meeting:start and navigates to live when start button is clicked with valid title', async () => {

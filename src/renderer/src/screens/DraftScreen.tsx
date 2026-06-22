@@ -15,6 +15,7 @@
 
 import React, { useState } from 'react'
 
+import { SegmentedControl } from '../components/SegmentedControl'
 import { t } from '../i18n'
 import { useAppStore } from '../store/appStore'
 
@@ -227,18 +228,30 @@ export function DraftScreen(): React.JSX.Element {
                 </div>
               ))}
             </div>
-            <input
-              type="text"
-              className="form-input"
-              placeholder={t('draft.agenda.add.placeholder')}
-              value={agendaInput}
-              onChange={(e) => {
-                setAgendaInput(e.currentTarget.value)
-              }}
-              onKeyDown={handleAgendaKeyDown}
-              disabled={isCreating}
-              aria-label={t('draft.agenda.add.placeholder')}
-            />
+            <div className="form-row">
+              <input
+                type="text"
+                className="form-input"
+                placeholder={t('draft.agenda.add.placeholder')}
+                value={agendaInput}
+                onChange={(e) => {
+                  setAgendaInput(e.currentTarget.value)
+                }}
+                onKeyDown={handleAgendaKeyDown}
+                disabled={isCreating}
+                aria-label={t('draft.agenda.add.placeholder')}
+              />
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={isCreating || agendaInput.trim().length === 0}
+                onClick={() => {
+                  void handleAddAgendaItem()
+                }}
+              >
+                {t('draft.add')}
+              </button>
+            </div>
           </div>
 
           {/* Participants */}
@@ -262,37 +275,46 @@ export function DraftScreen(): React.JSX.Element {
                 </div>
               ))}
             </div>
-            <input
-              type="text"
-              className="form-input"
-              placeholder={t('draft.participants.add.placeholder')}
-              value={participantInput}
-              onChange={(e) => {
-                setParticipantInput(e.currentTarget.value)
-              }}
-              onKeyDown={handleParticipantKeyDown}
-              disabled={isCreating}
-              aria-label={t('draft.participants.add.placeholder')}
-            />
+            <div className="form-row">
+              <input
+                type="text"
+                className="form-input"
+                placeholder={t('draft.participants.add.placeholder')}
+                value={participantInput}
+                onChange={(e) => {
+                  setParticipantInput(e.currentTarget.value)
+                }}
+                onKeyDown={handleParticipantKeyDown}
+                disabled={isCreating}
+                aria-label={t('draft.participants.add.placeholder')}
+              />
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={isCreating || participantInput.trim().length === 0}
+                onClick={() => {
+                  void handleAddParticipant()
+                }}
+              >
+                {t('draft.add')}
+              </button>
+            </div>
           </div>
 
           {/* Language Selector */}
           <div className="form-group">
-            <label htmlFor="primary-language" className="form-label">
-              {t('draft.language.label')}
-            </label>
-            <select
-              id="primary-language"
-              className="form-select"
+            <span className="form-label">{t('draft.language.label')}</span>
+            <SegmentedControl
+              name="draft-language"
+              testId="draft-language"
+              ariaLabel={t('draft.language.label')}
               value={primaryLanguage}
-              onChange={(e) => {
-                setPrimaryLanguage(e.currentTarget.value)
-              }}
-              disabled={isCreating}
-            >
-              <option value="nl">{t('draft.language.nl')}</option>
-              <option value="en">{t('draft.language.en')}</option>
-            </select>
+              options={[
+                { value: 'nl', label: t('draft.language.nl') },
+                { value: 'en', label: t('draft.language.en') },
+              ]}
+              onChange={setPrimaryLanguage}
+            />
           </div>
 
           {/* Start Button */}

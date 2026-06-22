@@ -46,6 +46,7 @@ const nl = {
   'draft.participants.heading': 'Deelnemers',
   'draft.participants.add.placeholder': 'Deelnemersnaam toevoegen',
   'draft.participants.remove': 'Verwijderen',
+  'draft.add': 'Toevoegen',
   'draft.language.label': 'Taal',
   'draft.language.nl': 'Nederlands',
   'draft.language.en': 'English',
