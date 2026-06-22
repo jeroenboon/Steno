@@ -328,6 +328,96 @@ describe('IPC registry — meeting:list and meeting:load (item 0023)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// import:start and import:finish (item 0026)
+// ---------------------------------------------------------------------------
+
+describe('IPC registry — import:start and import:finish (item 0026)', () => {
+  const mockSettingsStore = {
+    current: {
+      asrProvider: 'deepgram' as const,
+      extractionProvider: 'anthropic' as const,
+      primaryLanguage: 'nl',
+    },
+    save: async () => {
+      // no-op
+    },
+    load: async () => {
+      // no-op
+    },
+  }
+
+  const validStart = {
+    title: 'Geïmporteerde opname',
+    primaryLanguage: 'nl',
+    agendaItems: [],
+    participants: [],
+    inferContext: true,
+  }
+
+  describe('import:start', () => {
+    it('creates an imported meeting via onImportStart and returns its id', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        onImportStart: () => 'imp-xyz',
+      })
+
+      const response = await registry.dispatch('import:start', validStart)
+
+      expect(response).toEqual({ meetingId: 'imp-xyz' })
+    })
+
+    it('rejects an invalid start payload', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        onImportStart: () => 'imp-xyz',
+      })
+
+      await expect(
+        registry.dispatch('import:start', { ...validStart, title: '' }),
+      ).rejects.toThrow()
+    })
+
+    it('throws when onImportStart dep is absent', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+      })
+
+      await expect(registry.dispatch('import:start', validStart)).rejects.toThrow(
+        'import:start is not available',
+      )
+    })
+  })
+
+  describe('import:finish', () => {
+    it('finishes via onImportFinish and returns the meeting id', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        onImportFinish: (meetingId: string) => Promise.resolve({ meetingId }),
+      })
+
+      const response = await registry.dispatch('import:finish', { meetingId: 'imp-1' })
+
+      expect(response).toEqual({ meetingId: 'imp-1' })
+    })
+
+    it('throws when onImportFinish dep is absent', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+      })
+
+      await expect(registry.dispatch('import:finish', { meetingId: 'imp-1' })).rejects.toThrow(
+        'import:finish is not available',
+      )
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
 // model:status and model:download (item 0024)
 // ---------------------------------------------------------------------------
 

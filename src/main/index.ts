@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'path'
 
@@ -28,6 +29,7 @@ import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
 import { createIpcRegistry } from './ipc-registry'
 import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
+import { ImportSessionController } from './session/ImportSessionController'
 import { LiveSessionController } from './session/LiveSessionController'
 import { tryBuildExtractionProvider } from './settings/providerFactory'
 import { ElectronSecretStorage } from './settings/SecretStorage'
@@ -187,6 +189,8 @@ const IPC_CHANNELS: IpcChannel[] = [
   'meeting:load',
   'model:status',
   'model:download',
+  'import:start',
+  'import:finish',
 ]
 
 async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
@@ -283,10 +287,37 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     clock: new RealClock(),
   })
 
+  // ---------------------------------------------------------------------------
+  // Import session controller (item 0026)
+  //
+  // Owns one offline audio-file import: transcribe decoded PCM through the ASR
+  // provider, persist spans, optionally infer the agenda + participants, run the
+  // same final pass as a live meeting, and mark the meeting Ended. Progress is
+  // pushed to the renderer via webContents on the import:progress channel.
+  // ---------------------------------------------------------------------------
+  const importSession = new ImportSessionController({
+    settingsStore,
+    secretStorage,
+    meetingRepo: mRepo,
+    agendaItemRepo: aiRepo,
+    participantRepo: pRepo,
+    transcriptSpanRepo: spanRepo,
+    decisionRepo: dRepo,
+    actionRepo: aRepo,
+    discussionSummaryRepo: dsRepo,
+    sender: mainWindow.webContents,
+    clock: new RealClock(),
+  })
+
   // One-way channel: renderer sends PCM frames; no invoke/response.
   // Forwards to whichever bridge is currently active.
   ipcMain.on('audio:frame', (_event, frame: Uint8Array) => {
     liveSession.pushAudioFrame(frame)
+  })
+
+  // One-way channel: renderer streams decoded file PCM during an import.
+  ipcMain.on('import:frame', (_event, frame: Uint8Array) => {
+    importSession.pushFrame(frame)
   })
 
   const registry = createIpcRegistry({
@@ -338,6 +369,12 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     pushModelProgress: (evt) => {
       mainWindow.webContents.send('model:progress', evt)
     },
+    onImportStart: (req) => {
+      const meetingId = randomUUID()
+      importSession.start({ meetingId, ...req })
+      return meetingId
+    },
+    onImportFinish: (meetingId) => importSession.finish(meetingId),
   })
 
   for (const channel of IPC_CHANNELS) {

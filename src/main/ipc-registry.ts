@@ -66,6 +66,9 @@ import {
   ModelStatusResponseSchema,
   ModelDownloadRequestSchema,
   ModelDownloadResponseSchema,
+  ImportStartRequestSchema,
+  ImportStartResponseSchema,
+  ImportFinishRequestSchema,
 } from '@shared/ipc'
 import type {
   IpcChannel,
@@ -97,6 +100,9 @@ import type {
   ModelStatusResponse,
   ModelDownloadResponse,
   ModelProgressEvent,
+  ImportStartRequest,
+  ImportStartResponse,
+  ImportFinishResponse,
 } from '@shared/ipc'
 import type { Clock } from '@shared/providers'
 
@@ -206,6 +212,18 @@ export interface IpcRegistryDependencies {
    * Injected in production from main/index.ts via webContents.send.
    */
   pushModelProgress?: (evt: ModelProgressEvent) => void
+  /**
+   * Start an audio-file import (item 0026). Generates the meeting id, starts the
+   * ImportSessionController, and returns the new meeting id. When absent,
+   * import:start throws "not available".
+   */
+  onImportStart?: (req: ImportStartRequest) => string
+  /**
+   * Finish the active import (item 0026): stop transcription, infer (if asked),
+   * run the final pass, mark the meeting Ended. Resolves with the meeting id.
+   * When absent, import:finish throws "not available".
+   */
+  onImportFinish?: (meetingId: string) => Promise<ImportFinishResponse>
 }
 
 // ---------------------------------------------------------------------------
@@ -552,6 +570,27 @@ function makeHandleModelDownload(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleImportStart(deps: IpcRegistryDependencies) {
+  return function handleImportStart(raw: unknown): ImportStartResponse {
+    const req = ImportStartRequestSchema.parse(raw)
+    if (deps.onImportStart === undefined) {
+      throw new Error('import:start is not available')
+    }
+    const meetingId = deps.onImportStart(req)
+    return ImportStartResponseSchema.parse({ meetingId })
+  }
+}
+
+function makeHandleImportFinish(deps: IpcRegistryDependencies) {
+  return async function handleImportFinish(raw: unknown): Promise<ImportFinishResponse> {
+    const req = ImportFinishRequestSchema.parse(raw)
+    if (deps.onImportFinish === undefined) {
+      throw new Error('import:finish is not available')
+    }
+    return deps.onImportFinish(req.meetingId)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -586,6 +625,8 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'meeting:load': makeHandleMeetingLoad(deps),
     'model:status': makeHandleModelStatus(deps),
     'model:download': makeHandleModelDownload(deps),
+    'import:start': makeHandleImportStart(deps),
+    'import:finish': makeHandleImportFinish(deps),
   }
 
   return {
