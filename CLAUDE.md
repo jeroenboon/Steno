@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Windows Electron + TypeScript + React desktop app that transcribes live meetings (local Whisper via sherpa-onnx, or a bring-your-own cloud ASR) and, during the meeting, extracts structured **Decisions** and **Actions** that a note-taker monitors and corrects in real time.
 
-Read **[CONTEXT.md](CONTEXT.md)** before touching domain code — it is the authoritative glossary (Meeting, Decision, Action, Owner, Proposed/Confirmed, interim/final span, Egress State, etc.) and the terms in code match it exactly. Read the relevant **[docs/adr/](docs/adr/)** before changing the area an ADR covers; ADRs are numbered to match backlog items. **[BACKLOG.md](BACKLOG.md)** is the sequential build plan (items 0001–0025) and the engineering rules of engagement.
+Read **[CONTEXT.md](CONTEXT.md)** before touching domain code — it is the authoritative glossary (Meeting, Decision, Action, Owner, Proposed/Confirmed, interim/final span, Egress State, etc.) and the terms in code match it exactly. Read the relevant **[docs/adr/](docs/adr/)** before changing the area an ADR covers (ADRs are numbered 0001–0025 to match the original build items). The non-negotiable **rules of engagement** are the [Engineering principles](#engineering-principles-rules-of-engagement) below.
 
 ## Commands
 
@@ -43,9 +43,9 @@ npx vitest run src/main/services/extractionLoopScheduler.test.ts
 npx vitest run -t "cadence fires at the boundary"
 ```
 
-### Definition of Done gate (non-negotiable, from BACKLOG.md)
+### Definition of Done gate (non-negotiable)
 
-An item is done only when all pass: **build succeeds, all tests pass (including `npm run test:native`), zero lint errors, Prettier has run.** Run `format` (or `format:check`) **last**: a prior run that adds files (e.g. a new ADR) after formatting will fail `format:check`. Each backlog item = one coherent change = one commit (Conventional Commits, via the `/git-commit` skill).
+An item is done only when all pass: **build succeeds, all tests pass (including `npm run test:native`), zero lint errors, Prettier has run.** Run `format` (or `format:check`) **last**: a prior run that adds files (e.g. a new ADR) after formatting will fail `format:check`. Each change = one coherent commit (Conventional Commits, via the `/git-commit` skill).
 
 ## Architecture
 
@@ -102,6 +102,26 @@ Owner/agenda assignment (`src/shared/assignment/`) maps provider hints to the Pa
 ### Privacy / egress (ADR 0003)
 
 What leaves the device depends on the chosen providers; the invariant is _no surprise egress and no logging of content/secrets_. `computeEgressState()` derives a serialisable `{ audio, notes }` value (e.g. `{ audio: 'cloud:Deepgram', notes: 'cloud:Anthropic' }`, never any key). The always-visible `EgressIndicator` renders it, and `buildDisclosureCopy()` produces point-of-choice disclosure shown when a user selects a cloud provider in Settings. This disclosure is a standing UI obligation, not a one-off.
+
+## Engineering principles (rules of engagement)
+
+The standard for every change, not suggestions. Most are expanded in the Architecture sections above and in the ADRs; this is the canonical checklist.
+
+1. **TDD always.** Red → green → refactor (`/tdd`). No production code without a failing test first; pure scaffolding/config excepted (add a smoke test).
+2. **Strictly atomic changes.** One coherent change = one commit (`/git-commit`, Conventional Commits). Don't smuggle unrelated edits in.
+3. **Definition of Done gate (all four).** Build succeeds, all tests pass (incl. `npm run test:native`), zero lint errors, Prettier has run. Not done until green — see the DoD section above.
+4. **Reflect after each change.** Update CONTEXT.md if a term shifted; add an ADR if a decision was hard-to-reverse + surprising + a real trade-off. Same commit.
+5. **Ports & Adapters.** The domain core imports zero vendor SDKs; providers live behind interfaces (ADR 0007).
+6. **Strict TypeScript.** `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `exactOptionalPropertyTypes`, no `any` (lint-enforced).
+7. **Validate at every boundary with Zod.** LLM JSON, IPC payloads, settings on disk, provider responses. Never `JSON.parse` untrusted text straight into a typed object.
+8. **Electron security baseline is non-negotiable.** `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`, typed preload bridge, strict CSP (ADR 0005).
+9. **Process discipline.** Renderer is UI only; all I/O, the DB, secrets, and every provider call live in main (ADR 0005).
+10. **Deterministic tests.** Inject the clock (no real timers); use fake providers (no network); adapter tests mock HTTP.
+11. **Privacy: consent + transparency are the invariants.** No surprise egress, no logging of content/secrets; data goes only to the provider the user configured; the egress situation is always visible; the most-private viable option is the default where there's a choice (ADR 0003).
+12. **Data safety.** Autosave to SQLite every extraction turn (a crash loses at most the last turn); forward-only versioned migrations (ADR 0006).
+13. **CI mirrors the DoD gate.** build + lint + format:check + test on every push.
+14. **Dependency hygiene.** Commit the lockfile, pin versions, keep deps minimal.
+15. **i18n + keyboard-first.** UI strings externalized, Dutch default; every confirm/dismiss/edit has a keyboard path.
 
 ## Conventions
 

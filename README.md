@@ -4,7 +4,7 @@ A Windows desktop app (Electron + TypeScript + React) that transcribes live meet
 
 ## Status
 
-Work in progress. See [BACKLOG.md](BACKLOG.md) for the build plan and [CONTEXT.md](CONTEXT.md) for the domain vocabulary.
+See [CONTEXT.md](CONTEXT.md) for the domain vocabulary and [CLAUDE.md](CLAUDE.md) for architecture and the engineering rules of engagement.
 
 ## Dev setup
 
