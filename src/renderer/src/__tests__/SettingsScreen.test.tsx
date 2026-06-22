@@ -93,30 +93,41 @@ describe('SettingsScreen — ASR provider selection', () => {
     setup()
   })
 
-  it('renders the ASR provider selector', async () => {
+  it('renders the ASR mode toggle', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      expect(screen.getByTestId('asr-provider-select')).toBeDefined()
+      expect(screen.getByTestId('asr-mode')).toBeDefined()
     })
   })
 
-  it('shows Deepgram as default ASR provider', async () => {
+  it('shows Deepgram (cloud) as the default ASR mode', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      const select = screen.getByTestId('asr-provider-select')
-      expect((select as HTMLSelectElement).value).toBe('deepgram')
+      const cloud = screen.getByTestId('asr-mode-deepgram')
+      expect(cloud.checked).toBe(true)
     })
   })
 
-  it('shows local-parakeet as a selectable option (not disabled)', async () => {
+  it('offers a local (on-device) option that is not disabled', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      const options = screen.getAllByRole('option')
-      const parakeet = options.find((o) => (o as HTMLOptionElement).value === 'local-parakeet') as
-        | HTMLOptionElement
-        | undefined
-      expect(parakeet).toBeDefined()
-      expect(parakeet?.disabled).toBe(false)
+      const local = screen.getByTestId('asr-mode-local-parakeet')
+      expect(local).toBeDefined()
+      expect(local.disabled).toBe(false)
+    })
+  })
+
+  it('persists the ASR provider via settings:set when the local mode is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-mode-local-parakeet'))
+
+    act(() => {
+      fireEvent.click(screen.getByTestId('asr-mode-local-parakeet'))
+    })
+
+    await waitFor(() => {
+      const jsonCalls = mockApi.settingsSet.mock.calls.map((c) => JSON.stringify(c[0]))
+      expect(jsonCalls.some((j) => j.includes('"asrProvider":"local-parakeet"'))).toBe(true)
     })
   })
 })
@@ -308,34 +319,62 @@ describe('SettingsScreen — language selector', () => {
     setup()
   })
 
-  it('renders the language selector', async () => {
+  it('renders the language toggle', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      expect(screen.getByTestId('primary-language-select')).toBeDefined()
+      expect(screen.getByTestId('language-mode')).toBeDefined()
     })
   })
 
   it('shows the current primary language from settings', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      const select = screen.getByTestId('primary-language-select')
-      expect((select as HTMLSelectElement).value).toBe('nl')
+      const nl = screen.getByTestId('language-mode-nl')
+      expect(nl.checked).toBe(true)
     })
   })
 
   it('calls settings:set with updated language when changed', async () => {
     render(<SettingsScreen />)
-    await waitFor(() => screen.getByTestId('primary-language-select'))
+    await waitFor(() => screen.getByTestId('language-mode-en'))
 
-    const select = screen.getByTestId('primary-language-select')
     act(() => {
-      fireEvent.change(select, { target: { value: 'en' } })
+      fireEvent.click(screen.getByTestId('language-mode-en'))
     })
 
     await waitFor(() => {
       const jsonCalls = mockApi.settingsSet.mock.calls.map((c) => JSON.stringify(c[0]))
       const hasEnglishCall = jsonCalls.some((json) => json.includes('"primaryLanguage":"en"'))
       expect(hasEnglishCall).toBe(true)
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 8. Saved-key status (positive confirmation a key exists)
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — saved key status', () => {
+  it('shows a saved-key status (and no input) when the Deepgram key is present', async () => {
+    setup({ secretHas: vi.fn().mockResolvedValue({ has: true }) })
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('deepgram-key-status')).toBeDefined()
+      expect(screen.queryByTestId('deepgram-key-input')).toBeNull()
+    })
+  })
+
+  it('reveals the input again when "Vervangen" is clicked', async () => {
+    setup({ secretHas: vi.fn().mockResolvedValue({ has: true }) })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('replace-deepgram-key'))
+
+    act(() => {
+      fireEvent.click(screen.getByTestId('replace-deepgram-key'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('deepgram-key-input')).toBeDefined()
     })
   })
 })

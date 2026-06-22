@@ -2,11 +2,16 @@
  * Settings screen (item 0016).
  *
  * Allows the user to:
- *   - Choose the ASR provider (Deepgram preset; local-parakeet shown but disabled)
- *   - Choose the extraction provider (Anthropic preset or custom OpenAI-compatible)
+ *   - Switch ASR between Lokaal (Whisper, on-device) and Cloud (Deepgram)
+ *   - Switch extraction between Anthropic and a custom OpenAI-compatible endpoint
  *   - Enter API keys — each key calls secret:set exactly once; the value is
  *     never stored in the settings object or sent to settings:set
  *   - Set the primary meeting language
+ *
+ * UX: provider choices are segmented toggles (not dropdowns) so switching
+ * between local and cloud is one click. A saved key shows a positive status
+ * with a "Vervangen" affordance — the value itself never round-trips back
+ * (secrets are write-only, ADR 0014), so we can only show that one exists.
  *
  * Per ADR 0003: disclosure copy (buildDisclosureCopy) is shown at the point
  * of choice whenever a cloud provider is selected.
@@ -19,6 +24,7 @@ import React, { useEffect, useState } from 'react'
 
 import { buildDisclosureCopy, computeEgressState } from '../../../shared/settings/egressState'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
+import { SegmentedControl } from '../components/SegmentedControl'
 import { t } from '../i18n'
 
 // ---------------------------------------------------------------------------
@@ -68,6 +74,96 @@ function validateCustomFields(fields: CustomFields): CustomValidationErrors {
 }
 
 // ---------------------------------------------------------------------------
+// KeyField — a single API-key entry with a saved/replace status
+// ---------------------------------------------------------------------------
+
+interface KeyFieldProps {
+  idBase: string
+  label: string
+  placeholder: string
+  present: boolean
+  editing: boolean
+  value: string
+  saveState: KeySaveState
+  testIdInput: string
+  testIdSave: string
+  testIdMissing: string
+  missingText: string
+  onChange: (v: string) => void
+  onSave: () => void
+  onReplace: () => void
+  onCancel: () => void
+}
+
+function KeyField(props: KeyFieldProps): React.JSX.Element {
+  const showInput = !props.present || props.editing
+
+  return (
+    <div className="form-group">
+      <label htmlFor={props.testIdInput} className="form-label">
+        {props.label}
+      </label>
+
+      {!props.present && (
+        <p data-testid={props.testIdMissing} className="settings-key-missing" role="alert">
+          {props.missingText}
+        </p>
+      )}
+
+      {props.present && !props.editing ? (
+        <div className="settings-key-status" data-testid={`${props.idBase}-key-status`}>
+          <span className="settings-key-status__badge">{t('settings.key.saved.status')}</span>
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm"
+            data-testid={`replace-${props.idBase}-key`}
+            onClick={props.onReplace}
+          >
+            {t('settings.key.replace')}
+          </button>
+        </div>
+      ) : null}
+
+      {showInput && (
+        <div className="form-row">
+          <input
+            id={props.testIdInput}
+            data-testid={props.testIdInput}
+            type="password"
+            className="form-input"
+            placeholder={props.placeholder}
+            value={props.value}
+            autoComplete="off"
+            onChange={(e) => {
+              props.onChange(e.currentTarget.value)
+            }}
+          />
+          <button
+            type="button"
+            data-testid={props.testIdSave}
+            className="btn btn--secondary"
+            disabled={props.saveState === 'saving' || props.value.trim().length === 0}
+            onClick={props.onSave}
+          >
+            {props.saveState === 'saved' ? t('settings.asr.key.saved') : t('settings.asr.key.save')}
+          </button>
+          {props.present && (
+            <button
+              type="button"
+              className="btn btn--secondary"
+              data-testid={`cancel-${props.idBase}-key`}
+              onClick={props.onCancel}
+            >
+              {t('settings.key.cancel')}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -89,9 +185,11 @@ export function SettingsScreen(): React.JSX.Element {
   // ---- key entry (password fields — cleared after save, never stored) ----
   const [deepgramKeyEntry, setDeepgramKeyEntry] = useState('')
   const [deepgramKeySave, setDeepgramKeySave] = useState<KeySaveState>('idle')
+  const [deepgramKeyEditing, setDeepgramKeyEditing] = useState(false)
 
   const [anthropicKeyEntry, setAnthropicKeyEntry] = useState('')
   const [anthropicKeySave, setAnthropicKeySave] = useState<KeySaveState>('idle')
+  const [anthropicKeyEditing, setAnthropicKeyEditing] = useState(false)
 
   const [customKeyEntry, setCustomKeyEntry] = useState('')
   const [customKeySave, setCustomKeySave] = useState<KeySaveState>('idle')
@@ -227,6 +325,7 @@ export function SettingsScreen(): React.JSX.Element {
       setDeepgramKeyPresent(true)
       setDeepgramKeyEntry('') // clear from UI immediately after save
       setDeepgramKeySave('saved')
+      setDeepgramKeyEditing(false)
     } catch {
       setDeepgramKeySave('error')
     }
@@ -240,6 +339,7 @@ export function SettingsScreen(): React.JSX.Element {
       setAnthropicKeyPresent(true)
       setAnthropicKeyEntry('') // clear from UI immediately after save
       setAnthropicKeySave('saved')
+      setAnthropicKeyEditing(false)
     } catch {
       setAnthropicKeySave('error')
     }
@@ -282,6 +382,7 @@ export function SettingsScreen(): React.JSX.Element {
   }
 
   const isCustomOpenAI = settings.extractionProvider === 'custom-openai'
+  const isLocalAsr = settings.asrProvider === 'local-parakeet'
 
   // ---- render ----
 
@@ -299,23 +400,27 @@ export function SettingsScreen(): React.JSX.Element {
         <div className="settings-section">
           <h2 className="settings-section__heading">{t('settings.asr.heading')}</h2>
 
-          <div className="form-group">
-            <label htmlFor="asr-provider-select" className="form-label">
-              Provider
-            </label>
-            <select
-              id="asr-provider-select"
-              data-testid="asr-provider-select"
-              className="form-select"
-              value={settings.asrProvider}
-              onChange={(e) => {
-                handleAsrChange(e.currentTarget.value as 'deepgram' | 'local-parakeet')
-              }}
-            >
-              <option value="deepgram">{t('settings.asr.deepgram.label')}</option>
-              <option value="local-parakeet">{t('settings.asr.parakeet.label')}</option>
-            </select>
-          </div>
+          <SegmentedControl
+            name="asr-mode"
+            testId="asr-mode"
+            ariaLabel={t('settings.asr.heading')}
+            value={settings.asrProvider}
+            options={[
+              {
+                value: 'local-parakeet',
+                label: t('settings.asr.mode.local'),
+                sublabel: t('settings.asr.mode.local.sub'),
+              },
+              {
+                value: 'deepgram',
+                label: t('settings.asr.mode.cloud'),
+                sublabel: t('settings.asr.mode.cloud.sub'),
+              },
+            ]}
+            onChange={(v) => {
+              handleAsrChange(v as 'deepgram' | 'local-parakeet')
+            }}
+          />
 
           {/* Disclosure copy for ASR */}
           <p data-testid="asr-disclosure" className="settings-disclosure">
@@ -325,10 +430,15 @@ export function SettingsScreen(): React.JSX.Element {
             {disclosure.audioDisclosure}
           </p>
 
-          {/* Local model download */}
-          {settings.asrProvider === 'local-parakeet' && !modelDownloaded && (
-            <div className="settings-model-download" data-testid="model-download-section">
-              <p className="settings-model-info">{t('settings.asr.parakeet.notDownloaded')}</p>
+          {/* Local model card */}
+          {isLocalAsr && !modelDownloaded && (
+            <div className="settings-model-card" data-testid="model-download-section">
+              <div className="settings-model-card__info">
+                <span className="settings-model-card__name">{t('settings.asr.model.name')}</span>
+                <span className="settings-model-card__meta">
+                  {t('settings.asr.model.size')} · {t('settings.asr.model.notDownloaded')}
+                </span>
+              </div>
               {modelProgress === null ? (
                 <button
                   type="button"
@@ -338,14 +448,14 @@ export function SettingsScreen(): React.JSX.Element {
                     void handleDownloadModel()
                   }}
                 >
-                  {t('settings.asr.parakeet.download')} (~2 GB)
+                  {t('settings.asr.model.download')}
                 </button>
               ) : (
                 <div className="settings-model-progress" data-testid="model-progress">
                   <progress
                     value={modelProgress.received}
                     max={modelProgress.total}
-                    aria-label={t('settings.asr.parakeet.downloading')}
+                    aria-label={t('settings.asr.model.downloading')}
                   />
                   <span>
                     {modelProgress.total > 0
@@ -362,53 +472,51 @@ export function SettingsScreen(): React.JSX.Element {
             </div>
           )}
 
-          {/* Local model installed indicator */}
-          {settings.asrProvider === 'local-parakeet' && modelDownloaded && (
-            <div data-testid="model-installed-section">
-              <p className="settings-model-info">{t('settings.asr.parakeet.installed')}</p>
+          {/* Local model installed */}
+          {isLocalAsr && modelDownloaded && (
+            <div
+              className="settings-model-card settings-model-card--installed"
+              data-testid="model-installed-section"
+            >
+              <div className="settings-model-card__info">
+                <span className="settings-model-card__name">{t('settings.asr.model.name')}</span>
+                <span className="settings-model-card__meta">{t('settings.asr.model.size')}</span>
+              </div>
+              <span className="settings-model-card__badge">
+                {t('settings.asr.model.installed')}
+              </span>
             </div>
           )}
 
-          {/* Deepgram key entry */}
-          {settings.asrProvider === 'deepgram' && (
-            <div className="form-group">
-              <label htmlFor="deepgram-key-input" className="form-label">
-                {t('settings.asr.key.label')}
-              </label>
-              {!deepgramKeyPresent && (
-                <p data-testid="deepgram-key-missing" className="settings-key-missing" role="alert">
-                  {t('settings.asr.key.missing')}
-                </p>
-              )}
-              <div className="form-row">
-                <input
-                  id="deepgram-key-input"
-                  data-testid="deepgram-key-input"
-                  type="password"
-                  className="form-input"
-                  placeholder={t('settings.asr.key.placeholder')}
-                  value={deepgramKeyEntry}
-                  autoComplete="off"
-                  onChange={(e) => {
-                    setDeepgramKeyEntry(e.currentTarget.value)
-                    if (deepgramKeySave === 'saved') setDeepgramKeySave('idle')
-                  }}
-                />
-                <button
-                  type="button"
-                  data-testid="save-deepgram-key"
-                  className="btn btn--secondary"
-                  disabled={deepgramKeySave === 'saving' || deepgramKeyEntry.trim().length === 0}
-                  onClick={() => {
-                    void handleSaveDeepgramKey()
-                  }}
-                >
-                  {deepgramKeySave === 'saved'
-                    ? t('settings.asr.key.saved')
-                    : t('settings.asr.key.save')}
-                </button>
-              </div>
-            </div>
+          {/* Deepgram key entry (cloud ASR) */}
+          {!isLocalAsr && (
+            <KeyField
+              idBase="deepgram"
+              label={t('settings.asr.key.label')}
+              placeholder={t('settings.asr.key.placeholder')}
+              present={deepgramKeyPresent}
+              editing={deepgramKeyEditing}
+              value={deepgramKeyEntry}
+              saveState={deepgramKeySave}
+              testIdInput="deepgram-key-input"
+              testIdSave="save-deepgram-key"
+              testIdMissing="deepgram-key-missing"
+              missingText={t('settings.asr.key.missing')}
+              onChange={(v) => {
+                setDeepgramKeyEntry(v)
+                if (deepgramKeySave === 'saved') setDeepgramKeySave('idle')
+              }}
+              onSave={() => {
+                void handleSaveDeepgramKey()
+              }}
+              onReplace={() => {
+                setDeepgramKeyEditing(true)
+              }}
+              onCancel={() => {
+                setDeepgramKeyEditing(false)
+                setDeepgramKeyEntry('')
+              }}
+            />
           )}
         </div>
 
@@ -418,23 +526,27 @@ export function SettingsScreen(): React.JSX.Element {
         <div className="settings-section">
           <h2 className="settings-section__heading">{t('settings.extraction.heading')}</h2>
 
-          <div className="form-group">
-            <label htmlFor="extraction-provider-select" className="form-label">
-              Provider
-            </label>
-            <select
-              id="extraction-provider-select"
-              data-testid="extraction-provider-select"
-              className="form-select"
-              value={settings.extractionProvider}
-              onChange={(e) => {
-                handleExtractionChange(e.currentTarget.value as 'anthropic' | 'custom-openai')
-              }}
-            >
-              <option value="anthropic">{t('settings.extraction.anthropic.label')}</option>
-              <option value="custom-openai">{t('settings.extraction.custom.label')}</option>
-            </select>
-          </div>
+          <SegmentedControl
+            name="extraction-mode"
+            testId="extraction-mode"
+            ariaLabel={t('settings.extraction.heading')}
+            value={settings.extractionProvider}
+            options={[
+              {
+                value: 'anthropic',
+                label: t('settings.extraction.mode.anthropic'),
+                sublabel: t('settings.extraction.mode.anthropic.sub'),
+              },
+              {
+                value: 'custom-openai',
+                label: t('settings.extraction.mode.custom'),
+                sublabel: t('settings.extraction.mode.custom.sub'),
+              },
+            ]}
+            onChange={(v) => {
+              handleExtractionChange(v as 'anthropic' | 'custom-openai')
+            }}
+          />
 
           {/* Disclosure copy for extraction */}
           <p data-testid="extraction-disclosure" className="settings-disclosure">
@@ -446,48 +558,33 @@ export function SettingsScreen(): React.JSX.Element {
 
           {/* Anthropic key entry */}
           {!isCustomOpenAI && (
-            <div className="form-group">
-              <label htmlFor="anthropic-key-input" className="form-label">
-                {t('settings.extraction.anthropic.key.label')}
-              </label>
-              {!anthropicKeyPresent && (
-                <p
-                  data-testid="anthropic-key-missing"
-                  className="settings-key-missing"
-                  role="alert"
-                >
-                  {t('settings.extraction.anthropic.key.missing')}
-                </p>
-              )}
-              <div className="form-row">
-                <input
-                  id="anthropic-key-input"
-                  data-testid="anthropic-key-input"
-                  type="password"
-                  className="form-input"
-                  placeholder={t('settings.extraction.anthropic.key.placeholder')}
-                  value={anthropicKeyEntry}
-                  autoComplete="off"
-                  onChange={(e) => {
-                    setAnthropicKeyEntry(e.currentTarget.value)
-                    if (anthropicKeySave === 'saved') setAnthropicKeySave('idle')
-                  }}
-                />
-                <button
-                  type="button"
-                  data-testid="save-anthropic-key"
-                  className="btn btn--secondary"
-                  disabled={anthropicKeySave === 'saving' || anthropicKeyEntry.trim().length === 0}
-                  onClick={() => {
-                    void handleSaveAnthropicKey()
-                  }}
-                >
-                  {anthropicKeySave === 'saved'
-                    ? t('settings.extraction.anthropic.key.saved')
-                    : t('settings.extraction.anthropic.key.save')}
-                </button>
-              </div>
-            </div>
+            <KeyField
+              idBase="anthropic"
+              label={t('settings.extraction.anthropic.key.label')}
+              placeholder={t('settings.extraction.anthropic.key.placeholder')}
+              present={anthropicKeyPresent}
+              editing={anthropicKeyEditing}
+              value={anthropicKeyEntry}
+              saveState={anthropicKeySave}
+              testIdInput="anthropic-key-input"
+              testIdSave="save-anthropic-key"
+              testIdMissing="anthropic-key-missing"
+              missingText={t('settings.extraction.anthropic.key.missing')}
+              onChange={(v) => {
+                setAnthropicKeyEntry(v)
+                if (anthropicKeySave === 'saved') setAnthropicKeySave('idle')
+              }}
+              onSave={() => {
+                void handleSaveAnthropicKey()
+              }}
+              onReplace={() => {
+                setAnthropicKeyEditing(true)
+              }}
+              onCancel={() => {
+                setAnthropicKeyEditing(false)
+                setAnthropicKeyEntry('')
+              }}
+            />
           )}
 
           {/* Custom OpenAI fields */}
@@ -584,7 +681,7 @@ export function SettingsScreen(): React.JSX.Element {
                     }}
                   >
                     {customKeySave === 'saved'
-                      ? t('settings.custom.key.save')
+                      ? t('settings.custom.key.saved')
                       : t('settings.custom.key.save')}
                   </button>
                 </div>
@@ -608,23 +705,19 @@ export function SettingsScreen(): React.JSX.Element {
         <div className="settings-section">
           <h2 className="settings-section__heading">{t('settings.language.heading')}</h2>
 
-          <div className="form-group">
-            <label htmlFor="primary-language-select" className="form-label">
-              {t('draft.language.label')}
-            </label>
-            <select
-              id="primary-language-select"
-              data-testid="primary-language-select"
-              className="form-select"
-              value={settings.primaryLanguage}
-              onChange={(e) => {
-                handleLanguageChange(e.currentTarget.value)
-              }}
-            >
-              <option value="nl">{t('draft.language.nl')}</option>
-              <option value="en">{t('draft.language.en')}</option>
-            </select>
-          </div>
+          <SegmentedControl
+            name="language-mode"
+            testId="language-mode"
+            ariaLabel={t('draft.language.label')}
+            value={settings.primaryLanguage}
+            options={[
+              { value: 'nl', label: t('draft.language.nl') },
+              { value: 'en', label: t('draft.language.en') },
+            ]}
+            onChange={(v) => {
+              handleLanguageChange(v)
+            }}
+          />
         </div>
       </section>
     </main>

@@ -85,12 +85,18 @@ const nl = {
   'screen.settings.subtitle': 'Kies providers, voer API-sleutels in en stel de taal in.',
 
   'settings.asr.heading': 'Spraakherkenning (ASR)',
-  'settings.asr.deepgram.label': 'Deepgram (cloud)',
-  'settings.asr.parakeet.label': 'Lokaal Parakeet (on-device)',
-  'settings.asr.parakeet.notDownloaded': 'Lokaal model nog niet gedownload.',
-  'settings.asr.parakeet.download': 'Download model',
-  'settings.asr.parakeet.downloading': 'Model downloaden...',
-  'settings.asr.parakeet.installed': 'Lokaal model geïnstalleerd.',
+  // ASR mode toggle (Lokaal / Cloud)
+  'settings.asr.mode.local': 'Lokaal',
+  'settings.asr.mode.local.sub': 'Whisper, on-device',
+  'settings.asr.mode.cloud': 'Cloud',
+  'settings.asr.mode.cloud.sub': 'Deepgram',
+  // Local model card
+  'settings.asr.model.name': 'Whisper small',
+  'settings.asr.model.size': '~357 MB',
+  'settings.asr.model.installed': 'Geïnstalleerd',
+  'settings.asr.model.notDownloaded': 'Nog niet gedownload',
+  'settings.asr.model.download': 'Downloaden',
+  'settings.asr.model.downloading': 'Downloaden…',
   'settings.asr.key.label': 'Deepgram API-sleutel',
   'settings.asr.key.placeholder': 'dg-...',
   'settings.asr.key.save': 'Opslaan',
@@ -98,14 +104,22 @@ const nl = {
   'settings.asr.key.missing': 'Geen sleutel ingesteld. Vul je Deepgram API-sleutel in.',
 
   'settings.extraction.heading': 'Extractieprovider (LLM)',
-  'settings.extraction.anthropic.label': 'Anthropic (cloud)',
-  'settings.extraction.custom.label': 'Aangepast OpenAI-compatibel eindpunt',
+  // Extraction provider toggle (Anthropic / Aangepast)
+  'settings.extraction.mode.anthropic': 'Anthropic',
+  'settings.extraction.mode.anthropic.sub': 'Cloud',
+  'settings.extraction.mode.custom': 'Aangepast',
+  'settings.extraction.mode.custom.sub': 'OpenAI-compatibel',
   'settings.extraction.anthropic.key.label': 'Anthropic API-sleutel',
   'settings.extraction.anthropic.key.placeholder': 'sk-ant-...',
   'settings.extraction.anthropic.key.save': 'Opslaan',
   'settings.extraction.anthropic.key.saved': 'Opgeslagen',
   'settings.extraction.anthropic.key.missing':
     'Geen sleutel ingesteld. Vul je Anthropic API-sleutel in.',
+
+  // Shared key-status affordances
+  'settings.key.saved.status': 'API-sleutel opgeslagen',
+  'settings.key.replace': 'Vervangen',
+  'settings.key.cancel': 'Annuleren',
 
   'settings.custom.baseUrl.label': 'Basis-URL',
   'settings.custom.baseUrl.placeholder': 'https://api.openai.com/v1',
@@ -116,6 +130,7 @@ const nl = {
   'settings.custom.key.label': 'API-sleutel',
   'settings.custom.key.placeholder': 'sk-...',
   'settings.custom.key.save': 'Opslaan',
+  'settings.custom.key.saved': 'Opgeslagen',
   'settings.custom.save': 'Instellingen opslaan',
 
   'settings.language.heading': 'Vergadertaal',
