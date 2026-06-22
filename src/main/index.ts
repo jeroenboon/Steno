@@ -188,6 +188,7 @@ const IPC_CHANNELS: IpcChannel[] = [
   'transcript:copy',
   'meeting:list',
   'meeting:load',
+  'meeting:delete',
   'model:status',
   'model:download',
   'import:start',
@@ -372,6 +373,9 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
         participants: pRepo.listByMeeting(meetingId),
         summaries: dsRepo.listByMeeting(meetingId),
       }
+    },
+    meetingDelete: (meetingId) => {
+      mRepo.delete(meetingId)
     },
     modelDownloader: new ModelDownloader(join(userData, 'models', 'whisper-small-sherpa')),
     pushModelProgress: (evt) => {

@@ -63,6 +63,8 @@ import {
   MeetingListResponseSchema,
   MeetingLoadRequestSchema,
   MeetingLoadResponseSchema,
+  MeetingDeleteRequestSchema,
+  MeetingDeleteResponseSchema,
   ModelStatusRequestSchema,
   ModelStatusResponseSchema,
   ModelDownloadRequestSchema,
@@ -98,6 +100,7 @@ import type {
   TranscriptCopyResponse,
   MeetingListResponse,
   MeetingLoadResponse,
+  MeetingDeleteResponse,
   ModelStatusResponse,
   ModelDownloadResponse,
   ModelProgressEvent,
@@ -208,6 +211,11 @@ export interface IpcRegistryDependencies {
    * When absent, always returns null.
    */
   meetingLoad?: (meetingId: string) => MeetingLoadResponse | null
+  /**
+   * Delete a meeting and all its data (item 0026).
+   * When absent, meeting:delete is a no-op (still returns ok).
+   */
+  meetingDelete?: (meetingId: string) => void
   /**
    * ModelDownloader for the local ASR model (item 0024).
    * When absent, model:status always returns downloaded: false and
@@ -531,6 +539,14 @@ function makeHandleMeetingLoad(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleMeetingDelete(deps: IpcRegistryDependencies) {
+  return function handleMeetingDelete(raw: unknown): MeetingDeleteResponse {
+    const req = MeetingDeleteRequestSchema.parse(raw)
+    deps.meetingDelete?.(req.meetingId)
+    return MeetingDeleteResponseSchema.parse({ ok: true })
+  }
+}
+
 function makeHandleModelStatus(deps: IpcRegistryDependencies) {
   return function handleModelStatus(raw: unknown): ModelStatusResponse {
     const req = ModelStatusRequestSchema.parse(raw)
@@ -624,6 +640,7 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'transcript:copy': makeHandleTranscriptCopy(deps),
     'meeting:list': makeHandleMeetingList(deps),
     'meeting:load': makeHandleMeetingLoad(deps),
+    'meeting:delete': makeHandleMeetingDelete(deps),
     'model:status': makeHandleModelStatus(deps),
     'model:download': makeHandleModelDownload(deps),
     'import:start': makeHandleImportStart(deps),

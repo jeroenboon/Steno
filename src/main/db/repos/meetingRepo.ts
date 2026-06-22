@@ -92,7 +92,17 @@ export function meetingRepo(db: Database.Database) {
     },
 
     delete(id: string): void {
-      db.prepare('DELETE FROM meetings WHERE id = ?').run(id)
+      // Decisions and actions reference transcript_spans with ON DELETE RESTRICT,
+      // so deleting the meeting (which cascade-deletes the spans) would trip that
+      // restriction. Remove those item rows first, inside a transaction, then the
+      // meeting delete cascades the remaining children (spans, agenda items,
+      // participants, discussion summaries).
+      const tx = db.transaction((meetingId: string) => {
+        db.prepare('DELETE FROM decisions WHERE meeting_id = ?').run(meetingId)
+        db.prepare('DELETE FROM actions WHERE meeting_id = ?').run(meetingId)
+        db.prepare('DELETE FROM meetings WHERE id = ?').run(meetingId)
+      })
+      tx(id)
     },
   }
 }

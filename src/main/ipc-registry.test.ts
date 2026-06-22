@@ -325,6 +325,43 @@ describe('IPC registry — meeting:list and meeting:load (item 0023)', () => {
       await expect(registry.dispatch('meeting:load', { meetingId: '' })).rejects.toThrow()
     })
   })
+
+  describe('meeting:delete', () => {
+    it('deletes via the meetingDelete dep and returns ok', async () => {
+      const deleted: string[] = []
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        meetingDelete: (id) => deleted.push(id),
+      })
+
+      const response = await registry.dispatch('meeting:delete', { meetingId: 'mtg-1' })
+
+      expect(response).toEqual({ ok: true })
+      expect(deleted).toEqual(['mtg-1'])
+    })
+
+    it('returns ok even when the meetingDelete dep is absent', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+      })
+
+      const response = await registry.dispatch('meeting:delete', { meetingId: 'mtg-1' })
+
+      expect(response).toEqual({ ok: true })
+    })
+
+    it('rejects an empty meeting id', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        meetingDelete: () => undefined,
+      })
+
+      await expect(registry.dispatch('meeting:delete', { meetingId: '' })).rejects.toThrow()
+    })
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -93,4 +93,57 @@ describe('meetingRepo', () => {
     ).run('bad-row', '', 'draft', '2026-06-14T10:00:00.000Z', 'nl')
     expect(() => repo.findById('bad-row')).toThrow()
   })
+
+  it('deletes a meeting and all its child rows (agenda, participants, spans, items, summaries)', () => {
+    const repo = meetingRepo(db)
+    repo.insert({ ...sample, id: 'mtg-del' })
+
+    // Seed every child table, including a decision + action that reference a span
+    // via ON DELETE RESTRICT (the case a naive meeting delete would trip over).
+    db.prepare(`INSERT INTO agenda_items (id, meeting_id, title, topic) VALUES (?, ?, ?, ?)`).run(
+      'ai-1',
+      'mtg-del',
+      'Planning',
+      'Q3',
+    )
+    db.prepare(`INSERT INTO participants (id, meeting_id, name) VALUES (?, ?, ?)`).run(
+      'p-1',
+      'mtg-del',
+      'Jeroen',
+    )
+    db.prepare(
+      `INSERT INTO transcript_spans (id, meeting_id, text, start_ms, end_ms) VALUES (?, ?, ?, ?, ?)`,
+    ).run('span-1', 'mtg-del', 'Hallo', 0, 1000)
+    db.prepare(
+      `INSERT INTO decisions (id, meeting_id, rationale, agenda_item_id, source_span_id, state)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run('d-1', 'mtg-del', 'Besloten', 'ai-1', 'span-1', 'confirmed')
+    db.prepare(
+      `INSERT INTO actions (id, meeting_id, agenda_item_id, source_span_id, status, state)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run('a-1', 'mtg-del', 'ai-1', 'span-1', 'open', 'confirmed')
+    db.prepare(
+      `INSERT INTO discussion_summaries (id, meeting_id, agenda_item_id, text) VALUES (?, ?, ?, ?)`,
+    ).run('ds-1', 'mtg-del', 'ai-1', 'Besproken')
+
+    repo.delete('mtg-del')
+
+    expect(repo.findById('mtg-del')).toBeNull()
+    const count = (table: string): number =>
+      (
+        db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE meeting_id = ?`).get('mtg-del') as {
+          n: number
+        }
+      ).n
+    for (const table of [
+      'agenda_items',
+      'participants',
+      'transcript_spans',
+      'decisions',
+      'actions',
+      'discussion_summaries',
+    ]) {
+      expect(count(table)).toBe(0)
+    }
+  })
 })

@@ -535,6 +535,22 @@ export type MeetingLoadRequest = z.infer<typeof MeetingLoadRequestSchema>
 export type MeetingLoadResponse = z.infer<typeof MeetingLoadResponseSchema>
 
 // ---------------------------------------------------------------------------
+// meeting:delete — permanently delete a meeting and all its data (item 0026)
+//
+// Main deletes the meeting and cascade-deletes its agenda items, participants,
+// transcript spans, decisions, actions, and discussion summaries.
+// ---------------------------------------------------------------------------
+
+export const MeetingDeleteRequestSchema = z.object({
+  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
+})
+
+export const MeetingDeleteResponseSchema = z.object({ ok: z.literal(true) })
+
+export type MeetingDeleteRequest = z.infer<typeof MeetingDeleteRequestSchema>
+export type MeetingDeleteResponse = z.infer<typeof MeetingDeleteResponseSchema>
+
+// ---------------------------------------------------------------------------
 // model:status — check whether the local ASR model is already downloaded
 // (item 0024)
 // ---------------------------------------------------------------------------
@@ -667,6 +683,7 @@ export type IpcChannel =
   | 'transcript:copy'
   | 'meeting:list'
   | 'meeting:load'
+  | 'meeting:delete'
   | 'model:status'
   | 'model:download'
   | 'import:start'
@@ -829,6 +846,11 @@ export interface RendererApi {
    * and discussion summaries so the Review screen can render a reopened meeting.
    */
   meetingLoad: (req: MeetingLoadRequest) => Promise<MeetingLoadResponse>
+  /**
+   * Permanently delete a meeting and all its data (item 0026).
+   * Used by the Home screen to remove meetings from the overview.
+   */
+  meetingDelete: (req: MeetingDeleteRequest) => Promise<MeetingDeleteResponse>
   /**
    * Check whether the local ASR model is already downloaded (item 0024).
    * Returns { downloaded: true, sizeBytes } if present; { downloaded: false, sizeBytes: 0 } otherwise.

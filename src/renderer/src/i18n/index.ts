@@ -80,6 +80,10 @@ const nl = {
   'home.active.callout': 'Vergadering loopt',
   'home.active.back': 'Terug',
   'home.import.button': 'Importeer opname',
+  'home.delete.action': 'Verwijderen',
+  'home.delete.confirm': 'Verwijderen?',
+  'home.delete.yes': 'Ja',
+  'home.delete.no': 'Nee',
 
   // Import screen (item 0026)
   'nav.import': 'Importeren',

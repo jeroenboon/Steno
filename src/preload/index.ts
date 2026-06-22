@@ -64,6 +64,8 @@ import type {
   MeetingListResponse,
   MeetingLoadRequest,
   MeetingLoadResponse,
+  MeetingDeleteRequest,
+  MeetingDeleteResponse,
   ModelStatusRequest,
   ModelStatusResponse,
   ModelDownloadRequest,
@@ -230,6 +232,8 @@ const api: RendererApi = {
     ipcRenderer.invoke('meeting:list', req) as Promise<MeetingListResponse>,
   meetingLoad: (req: MeetingLoadRequest) =>
     ipcRenderer.invoke('meeting:load', req) as Promise<MeetingLoadResponse>,
+  meetingDelete: (req: MeetingDeleteRequest) =>
+    ipcRenderer.invoke('meeting:delete', req) as Promise<MeetingDeleteResponse>,
 
   // ---------------------------------------------------------------------------
   // Local model management (item 0024)

@@ -20,6 +20,7 @@ import { useAppStore } from '../store/appStore'
 const mockApi = {
   meetingList: vi.fn(),
   meetingLoad: vi.fn(),
+  meetingDelete: vi.fn().mockResolvedValue({ ok: true }),
 }
 
 Object.assign(window, {
@@ -132,13 +133,67 @@ describe('HomeScreen', () => {
 
     render(<HomeScreen />)
 
-    const btn = await screen.findByRole('button', { name: /Q3 Planning/i })
+    // Anchored so it matches the reopen button, not the "Verwijderen …" button.
+    const btn = await screen.findByRole('button', { name: /^Q3 Planning/ })
     await user.click(btn)
 
     expect(mockApi.meetingLoad).toHaveBeenCalledWith({ meetingId: 'mtg-1' })
     await waitFor(() => {
       expect(useAppStore.getState().route).toBe('review')
     })
+  })
+
+  it('deletes an ended meeting after inline confirmation', async () => {
+    const user = userEvent.setup()
+    mockApi.meetingList.mockResolvedValue({
+      meetings: [
+        {
+          id: 'mtg-1',
+          title: 'Q3 Planning',
+          state: 'ended',
+          paused: false,
+          createdAt: '2026-06-01T10:00:00.000Z',
+          primaryLanguage: 'nl',
+        },
+      ],
+    })
+    render(<HomeScreen />)
+
+    await user.click(await screen.findByTestId('home-delete'))
+    // Inline confirm appears; the meeting is still listed.
+    expect(screen.getByTestId('home-delete-confirm')).toBeInTheDocument()
+    expect(mockApi.meetingDelete).not.toHaveBeenCalled()
+
+    await user.click(screen.getByTestId('home-delete-yes'))
+
+    expect(mockApi.meetingDelete).toHaveBeenCalledWith({ meetingId: 'mtg-1' })
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-meeting-item')).not.toBeInTheDocument()
+    })
+  })
+
+  it('cancelling the delete confirmation keeps the meeting', async () => {
+    const user = userEvent.setup()
+    mockApi.meetingList.mockResolvedValue({
+      meetings: [
+        {
+          id: 'mtg-1',
+          title: 'Q3 Planning',
+          state: 'ended',
+          paused: false,
+          createdAt: '2026-06-01T10:00:00.000Z',
+          primaryLanguage: 'nl',
+        },
+      ],
+    })
+    render(<HomeScreen />)
+
+    await user.click(await screen.findByTestId('home-delete'))
+    await user.click(screen.getByTestId('home-delete-no'))
+
+    expect(mockApi.meetingDelete).not.toHaveBeenCalled()
+    expect(screen.getByTestId('home-meeting-item')).toBeInTheDocument()
+    expect(screen.queryByTestId('home-delete-confirm')).not.toBeInTheDocument()
   })
 
   it('interrupted meeting is shown in a callout, not in the history list', async () => {
