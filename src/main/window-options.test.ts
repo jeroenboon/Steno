@@ -27,4 +27,14 @@ describe('createWindowOptions', () => {
     const opts = createWindowOptions(preloadPath)
     expect(opts.webPreferences.preload).toBe(preloadPath)
   })
+
+  it('sets the window icon when an icon path is provided', () => {
+    const opts = createWindowOptions('/some/preload.js', '/path/to/icon.png')
+    expect(opts.icon).toBe('/path/to/icon.png')
+  })
+
+  it('omits the icon when no icon path is provided', () => {
+    const opts = createWindowOptions('/some/preload.js')
+    expect('icon' in opts).toBe(false)
+  })
 })

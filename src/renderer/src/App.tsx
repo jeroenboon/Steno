@@ -16,6 +16,7 @@ import React, { useEffect, useState } from 'react'
 import type { EgressState } from '@shared/ipc'
 
 import { EgressIndicator } from './components/EgressIndicator'
+import { Wordmark } from './components/Wordmark'
 import { t } from './i18n'
 import { DraftScreen } from './screens/DraftScreen'
 import { HomeScreen } from './screens/HomeScreen'
@@ -123,7 +124,7 @@ export function App(): React.JSX.Element {
     <div className="app-shell">
       {/* Persistent chrome: app name + nav + egress indicator */}
       <header className="app-chrome">
-        <span className="app-chrome__name">{t('app.name')}</span>
+        <Wordmark />
 
         <nav className="app-nav" aria-label="Schermen">
           {NAV_TABS.map(({ route: tabRoute, label }) => {

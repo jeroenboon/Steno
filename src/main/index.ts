@@ -18,6 +18,10 @@ import { toTranscriptText } from '@shared/export/meetingExporter'
 import type { IpcChannel } from '@shared/ipc'
 import { RealClock } from '@shared/providers'
 
+// The Steno app icon (window + taskbar). `?asset` lets electron-vite copy the
+// file into the build output and hand back a path that resolves in dev and prod.
+import appIconPath from '../../resources/icon.png?asset'
+
 import { buildContentSecurityPolicy } from './csp'
 import { runMigrations } from './db/migrate'
 import { actionRepo } from './db/repos/actionRepo'
@@ -402,7 +406,7 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
 
 function createWindow(): BrowserWindow {
   const preloadPath = join(__dirname, '../preload/index.js')
-  const opts = createWindowOptions(preloadPath)
+  const opts = createWindowOptions(preloadPath, appIconPath)
   return new BrowserWindow(opts)
 }
 

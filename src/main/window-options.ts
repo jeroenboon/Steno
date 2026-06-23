@@ -14,6 +14,7 @@
 export interface WindowOptions {
   width: number
   height: number
+  icon?: string
   webPreferences: {
     contextIsolation: true
     nodeIntegration: false
@@ -27,11 +28,16 @@ export interface WindowOptions {
  *
  * @param preloadPath Absolute path to the compiled preload script
  *                    (e.g. join(__dirname, '../preload/index.js')).
+ * @param iconPath    Optional path to the window/taskbar icon (the Steno app
+ *                    icon, resolved by electron-vite's `?asset` import). Omitted
+ *                    from the result when not supplied so the platform default
+ *                    is used (and to satisfy exactOptionalPropertyTypes).
  */
-export function createWindowOptions(preloadPath: string): WindowOptions {
+export function createWindowOptions(preloadPath: string, iconPath?: string): WindowOptions {
   return {
     width: 1280,
     height: 800,
+    ...(iconPath !== undefined ? { icon: iconPath } : {}),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

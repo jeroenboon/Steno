@@ -259,7 +259,7 @@ const nl = {
   'review.transcript.copied': 'Transcript gekopieerd!',
 
   // Generic
-  'app.name': 'LiveTranscriber',
+  'app.name': 'Steno',
 } as const
 
 // ---------------------------------------------------------------------------
