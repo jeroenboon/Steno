@@ -74,6 +74,34 @@ export const OpenAICompatibleConfigSchema = z.object({
 export type OpenAICompatibleConfig = z.infer<typeof OpenAICompatibleConfigSchema>
 
 /**
+ * Config for Azure OpenAI extraction endpoints.
+ * Requires Azure-specific fields: endpoint, deployment, apiVersion, model, keyRef, displayName.
+ *
+ * `endpoint` is the Azure resource endpoint (e.g. https://my-resource.openai.azure.com/)
+ * `deployment` is the deployment name (e.g. my-gpt-4o-deployment)
+ * `apiVersion` is the Azure API version (e.g. 2024-12-01-preview)
+ * `model` is the model identifier
+ * `keyRef` is the key for SecretStorage lookup — never the raw key value
+ * `displayName` is shown in the UI and disclosure copy
+ */
+export const AzureOpenAIConfigSchema = z.object({
+  /** Azure OpenAI resource endpoint, e.g. https://my-resource.openai.azure.com/ */
+  endpoint: z.string().url(),
+  /** Azure OpenAI deployment name, e.g. my-gpt-4o-deployment */
+  deployment: z.string().min(1),
+  /** Azure API version, e.g. 2024-12-01-preview */
+  apiVersion: z.string().min(1),
+  /** Model identifier for reference */
+  model: z.string().min(1),
+  /** Key for SecretStorage lookup — never the raw key value */
+  keyRef: z.string().min(1),
+  /** Human-readable name shown in the UI and disclosure copy */
+  displayName: z.string().min(1),
+})
+
+export type AzureOpenAIConfig = z.infer<typeof AzureOpenAIConfigSchema>
+
+/**
  * Legacy schema for old custom-openai configs (for migration purposes).
  * Matches the old schema shape so we can detect and migrate it.
  */
@@ -112,9 +140,19 @@ const OpenAICompatibleSettingsSchema = BaseSettingsSchema.extend({
   openaiCompatible: OpenAICompatibleConfigSchema,
 })
 
+/**
+ * Settings when using Azure OpenAI extraction.
+ * azureOpenAI block is required and validated.
+ */
+const AzureOpenAISettingsSchema = BaseSettingsSchema.extend({
+  extractionProvider: z.literal('azure-openai'),
+  azureOpenAI: AzureOpenAIConfigSchema,
+})
+
 export const AppSettingsSchema = z.discriminatedUnion('extractionProvider', [
   AnthropicSettingsSchema,
   OpenAICompatibleSettingsSchema,
+  AzureOpenAISettingsSchema,
 ])
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>

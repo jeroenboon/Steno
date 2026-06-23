@@ -214,5 +214,12 @@ function buildExtractionProvider(
       }
       return new CustomOpenAIExtractionProvider({ apiKey, baseUrl, model, displayName })
     }
+
+    case 'azure-openai': {
+      throw new Error(
+        'Azure OpenAI extraction provider is not yet implemented. ' +
+          'Please use Anthropic or OpenAI-compatible providers for now.',
+      )
+    }
   }
 }

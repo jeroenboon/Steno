@@ -187,6 +187,89 @@ describe('AppSettingsSchema', () => {
     const result = AppSettingsSchema.safeParse(input)
     expect(result.success).toBe(false)
   })
+
+  it('parses a valid azure-openai extraction config', () => {
+    const input: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'en',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'my-gpt-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure OpenAI',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects azure-openai extraction without azureOpenAI config', () => {
+    const input = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'nl',
+      // no azureOpenAI block
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects azure-openai config with invalid endpoint URL', () => {
+    const input = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'nl',
+      azureOpenAI: {
+        endpoint: 'not-a-url',
+        deployment: 'my-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects azure-openai config with empty deployment', () => {
+    const input = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'nl',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: '',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects azure-openai config with empty keyRef', () => {
+    const input = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'nl',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'my-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: '',
+        displayName: 'Azure',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -214,8 +297,7 @@ describe('Settings migration', () => {
     // Verify the migration worked
     const result = AppSettingsSchema.safeParse(migrated)
     expect(result.success).toBe(true)
-    if (result.success) {
-      expect(result.data.extractionProvider).toBe('openai-compatible')
+    if (result.success && result.data.extractionProvider === 'openai-compatible') {
       expect(result.data.openaiCompatible.preset).toBe('custom')
       expect(result.data.openaiCompatible.baseUrl).toBe('https://api.example.com/v1')
       expect(result.data.openaiCompatible.model).toBe('gpt-4o')
@@ -266,7 +348,9 @@ describe('Settings migration', () => {
 
     const loaded = await store.load()
     expect(loaded.extractionProvider).toBe('openai-compatible')
-    expect(loaded.openaiCompatible.preset).toBe('custom')
+    if (loaded.extractionProvider === 'openai-compatible') {
+      expect(loaded.openaiCompatible.preset).toBe('custom')
+    }
   })
 })
 
@@ -573,6 +657,28 @@ describe('buildProviders', () => {
     }
 
     expect(() => buildProviders(settings, storage)).toThrow(/my-llm-key/i)
+  })
+
+  it('throws "not yet implemented" when azure-openai extraction is selected', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('deepgram', 'dg-key-123')
+    storage.setSecret('azure-key', 'azure-api-key')
+
+    const settings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'en',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'my-gpt-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure OpenAI',
+      },
+    }
+
+    expect(() => buildProviders(settings, storage)).toThrow(/not yet implemented/i)
   })
 
   it('throws when local-parakeet model is not downloaded', () => {
