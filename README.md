@@ -1,4 +1,4 @@
-# LiveTranscriber
+# Steno
 
 A Windows desktop app (Electron + TypeScript + React) that transcribes live meetings and extracts structured Decisions and Actions in real time.
 
