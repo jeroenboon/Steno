@@ -8,7 +8,9 @@
       "PowerShell(npm test *)",
       "PowerShell(npm run lint *)",
       "PowerShell(npm run typecheck *)",
-      "PowerShell(npm run format:check *)"
+      "PowerShell(npm run format:check *)",
+      "Bash(npx vitest:*)",
+      "Bash(npm run typecheck; if ($?) { npm run lint })"
     ]
   }
 }
