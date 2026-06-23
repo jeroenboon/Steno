@@ -72,6 +72,12 @@ function computeAudioEgress(settings: AppSettings): AudioEgress {
       return 'local'
     case 'deepgram':
       return 'cloud:Deepgram'
+    case 'openai-audio':
+      return 'cloud:OpenAI'
+    case 'mistral-voxtral':
+      return 'cloud:Mistral'
+    case 'azure-speech':
+      return 'cloud:Azure'
   }
 }
 

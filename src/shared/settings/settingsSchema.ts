@@ -163,6 +163,7 @@ export type AzureOpenAIConfig = z.infer<typeof AzureOpenAIConfigSchema>
  * Matches the old schema shape so we can detect and migrate it.
  */
 export const CustomOpenAIConfigSchema = OpenAICompatibleConfigSchema.omit({ preset: true })
+export type CustomOpenAIConfig = z.infer<typeof CustomOpenAIConfigSchema>
 
 // ---------------------------------------------------------------------------
 // Combined Settings Schemas
