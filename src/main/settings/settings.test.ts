@@ -808,6 +808,25 @@ describe('computeEgressState', () => {
     expect(state.notes).toBe('cloud:custom:AzureGPT')
   })
 
+  it('Deepgram ASR + azure-openai extraction → audio cloud:Deepgram, notes cloud:Azure OpenAI', () => {
+    const settings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'en',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'my-gpt-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure OpenAI',
+      },
+    }
+    const state = computeEgressState(settings)
+    expect(state.audio).toBe('cloud:Deepgram')
+    expect(state.notes).toBe('cloud:Azure OpenAI')
+  })
+
   it('egressState does not contain any key-like secrets', () => {
     const settings: AppSettings = {
       asrProvider: 'deepgram',
@@ -848,6 +867,12 @@ describe('buildDisclosureCopy', () => {
     const state: EgressState = { audio: 'local', notes: 'cloud:custom:My Company LLM' }
     const copy = buildDisclosureCopy(state)
     expect(copy.notesDisclosure).toContain('My Company LLM')
+  })
+
+  it('azure-openai: names Azure OpenAI as notes recipient', () => {
+    const state: EgressState = { audio: 'cloud:Deepgram', notes: 'cloud:Azure OpenAI' }
+    const copy = buildDisclosureCopy(state)
+    expect(copy.notesDisclosure).toContain('Azure OpenAI')
   })
 
   it('returns a badgeText suitable for the EgressIndicator', () => {
