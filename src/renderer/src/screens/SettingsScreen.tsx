@@ -22,6 +22,7 @@
 
 import React, { useEffect, useState } from 'react'
 
+import { extractionPresets } from '../../../shared/providers'
 import { buildDisclosureCopy, computeEgressState } from '../../../shared/settings/egressState'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
 import { ProviderRoleCard, type ProviderGroup } from '../components/ProviderRoleCard'
@@ -291,14 +292,36 @@ export function SettingsScreen(): React.JSX.Element {
     void persistSettings({ ...settings, asrProvider: provider })
   }
 
-  function handleExtractionChange(provider: 'anthropic' | 'openai-compatible'): void {
+  function handleExtractionChange(
+    provider: 'anthropic' | 'openai' | 'mistral' | 'openai-compatible',
+  ): void {
     if (provider === 'anthropic') {
       void persistSettings({
         ...settings,
         extractionProvider: 'anthropic',
         openaiCompatible: undefined,
       } as AppSettings)
+    } else if (provider === 'openai' || provider === 'mistral') {
+      // Prefill from preset catalog
+      const preset = extractionPresets[provider]
+      const newCustomFields: CustomFields = {
+        baseUrl: preset.defaultBaseUrl,
+        model: preset.defaultModel,
+        displayName: preset.displayName,
+        keyRef: provider, // keyRef is the vendor ID: 'openai', 'mistral'
+      }
+      setCustomFields(newCustomFields)
+      // Update local state to show the form
+      setSettings({
+        ...settings,
+        extractionProvider: 'openai-compatible',
+        openaiCompatible: {
+          preset: provider,
+          ...newCustomFields,
+        },
+      } as AppSettings)
     } else {
+      // 'openai-compatible' (custom)
       const { baseUrl, model, displayName, keyRef } = customFields
       if (!isValidUrl(baseUrl) || model.trim().length === 0 || displayName.trim().length === 0) {
         // Show form so user can fill in fields; update local state but don't persist yet
@@ -368,11 +391,15 @@ export function SettingsScreen(): React.JSX.Element {
     if (Object.keys(errors).length > 0) return
 
     const { baseUrl, model, displayName, keyRef } = customFields
+    // Determine preset based on keyRef or settings
+    const preset: 'openai' | 'mistral' | 'custom' =
+      keyRef === 'openai' ? 'openai' : keyRef === 'mistral' ? 'mistral' : 'custom'
+
     void persistSettings({
       ...settings,
       extractionProvider: 'openai-compatible',
       openaiCompatible: {
-        preset: 'custom',
+        preset,
         baseUrl,
         model: model.trim(),
         keyRef,
@@ -394,6 +421,13 @@ export function SettingsScreen(): React.JSX.Element {
 
   const isCustomOpenAI = settings.extractionProvider === 'openai-compatible'
   const isLocalAsr = settings.asrProvider === 'local-parakeet'
+
+  // Derive the extraction provider select value: if openai-compatible, use the preset; otherwise use the provider.
+  // Direct narrowing (not via the `isCustomOpenAI` boolean) so TypeScript propagates the discriminant.
+  const extractionProviderSelectValue =
+    settings.extractionProvider === 'openai-compatible'
+      ? settings.openaiCompatible.preset
+      : settings.extractionProvider
 
   // ---- render ----
 
@@ -563,6 +597,16 @@ export function SettingsScreen(): React.JSX.Element {
                     sublabel: t('settings.extraction.mode.anthropic.sub'),
                   },
                   {
+                    value: 'openai',
+                    label: t('settings.extraction.mode.openai'),
+                    sublabel: t('settings.extraction.mode.openai.sub'),
+                  },
+                  {
+                    value: 'mistral',
+                    label: t('settings.extraction.mode.mistral'),
+                    sublabel: t('settings.extraction.mode.mistral.sub'),
+                  },
+                  {
                     value: 'openai-compatible',
                     label: t('settings.extraction.mode.custom'),
                     sublabel: t('settings.extraction.mode.custom.sub'),
@@ -571,9 +615,9 @@ export function SettingsScreen(): React.JSX.Element {
               },
             ] as ProviderGroup[]
           }
-          selectedValue={settings.extractionProvider}
+          selectedValue={extractionProviderSelectValue}
           onChange={(v) => {
-            handleExtractionChange(v as 'anthropic' | 'openai-compatible')
+            handleExtractionChange(v as 'anthropic' | 'openai' | 'mistral' | 'openai-compatible')
           }}
           configPanel={
             !isCustomOpenAI ? (

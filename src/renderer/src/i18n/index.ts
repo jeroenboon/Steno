@@ -143,6 +143,10 @@ const nl = {
   // Extraction provider labels
   'settings.extraction.mode.anthropic': 'Anthropic',
   'settings.extraction.mode.anthropic.sub': 'Cloud',
+  'settings.extraction.mode.openai': 'OpenAI',
+  'settings.extraction.mode.openai.sub': 'Cloud',
+  'settings.extraction.mode.mistral': 'Mistral',
+  'settings.extraction.mode.mistral.sub': 'Cloud',
   'settings.extraction.mode.custom': 'Aangepast',
   'settings.extraction.mode.custom.sub': 'OpenAI-compatibel',
   'settings.extraction.anthropic.key.label': 'Anthropic API-sleutel',

@@ -547,3 +547,183 @@ describe('SettingsScreen — local model download (item 0024)', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// Phase 1.2: Preset-driven field prefill (OpenAI / Mistral)
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — extraction provider presets (Phase 1.2)', () => {
+  beforeEach(() => {
+    setup()
+  })
+
+  it('offers OpenAI as a selection option in the extraction provider select', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      const select = screen.getByTestId('extraction-provider-select')
+      const openaiOption = Array.from((select as HTMLSelectElement).options).find(
+        (o) => o.value === 'openai',
+      )
+      expect(openaiOption).toBeDefined()
+    })
+  })
+
+  it('offers Mistral as a selection option in the extraction provider select', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      const select = screen.getByTestId('extraction-provider-select')
+      const mistralOption = Array.from((select as HTMLSelectElement).options).find(
+        (o) => o.value === 'mistral',
+      )
+      expect(mistralOption).toBeDefined()
+    })
+  })
+
+  it('prefills baseUrl and model when OpenAI is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'openai' } })
+    })
+
+    await waitFor(() => {
+      const baseUrlInput = screen.getByTestId('custom-openai-base-url')
+      const modelInput = screen.getByTestId('custom-openai-model')
+      expect((baseUrlInput as HTMLInputElement).value).toBe('https://api.openai.com/v1')
+      expect((modelInput as HTMLInputElement).value).toBe('gpt-4o-mini')
+    })
+  })
+
+  it('prefills baseUrl and model when Mistral is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'mistral' } })
+    })
+
+    await waitFor(() => {
+      const baseUrlInput = screen.getByTestId('custom-openai-base-url')
+      const modelInput = screen.getByTestId('custom-openai-model')
+      expect((baseUrlInput as HTMLInputElement).value).toBe('https://api.mistral.ai/v1')
+      expect((modelInput as HTMLInputElement).value).toBe('mistral-medium-3.5')
+    })
+  })
+
+  it('sets keyRef to "openai" when OpenAI preset is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'openai' } })
+    })
+
+    const saveBtn = screen.getByTestId('save-custom-openai')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return json.includes('"keyRef":"openai"')
+        }),
+      ).toBe(true)
+    })
+  })
+
+  it('sets keyRef to "mistral" when Mistral preset is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'mistral' } })
+    })
+
+    const saveBtn = screen.getByTestId('save-custom-openai')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return json.includes('"keyRef":"mistral"')
+        }),
+      ).toBe(true)
+    })
+  })
+
+  it('persists settings with preset tag when OpenAI is selected and saved', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'openai' } })
+    })
+
+    const saveBtn = screen.getByTestId('save-custom-openai')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return (
+            json.includes('"preset":"openai"') &&
+            json.includes('"extractionProvider":"openai-compatible"')
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+
+  it('persists settings with preset tag when Mistral is selected and saved', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'mistral' } })
+    })
+
+    const saveBtn = screen.getByTestId('save-custom-openai')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return (
+            json.includes('"preset":"mistral"') &&
+            json.includes('"extractionProvider":"openai-compatible"')
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+})
