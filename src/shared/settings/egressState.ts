@@ -70,8 +70,8 @@ function computeNotesEgress(settings: AppSettings): NotesEgress {
   switch (settings.extractionProvider) {
     case 'anthropic':
       return 'cloud:Anthropic'
-    case 'custom-openai': {
-      const name = settings.customOpenAI.displayName
+    case 'openai-compatible': {
+      const name = settings.openaiCompatible.displayName
       return `cloud:custom:${name}`
     }
   }

@@ -106,8 +106,8 @@ export function App(): React.JSX.Element {
         const requiredKeys: string[] = []
         if (settings.asrProvider === 'deepgram') requiredKeys.push('deepgram')
         if (settings.extractionProvider === 'anthropic') requiredKeys.push('anthropic')
-        if (settings.extractionProvider === 'custom-openai') {
-          requiredKeys.push(settings.customOpenAI.keyRef)
+        if (settings.extractionProvider === 'openai-compatible') {
+          requiredKeys.push(settings.openaiCompatible.keyRef)
         }
         const results = await Promise.all(requiredKeys.map((key) => window.api.secretHas({ key })))
         setKeysConfigured(results.every((r) => r.has))

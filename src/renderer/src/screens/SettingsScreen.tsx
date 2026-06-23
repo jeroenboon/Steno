@@ -199,7 +199,7 @@ export function SettingsScreen(): React.JSX.Element {
     baseUrl: '',
     model: '',
     displayName: '',
-    keyRef: 'custom-openai',
+    keyRef: 'openai-custom',
   })
   const [customErrors, setCustomErrors] = useState<CustomValidationErrors>({})
 
@@ -217,12 +217,12 @@ export function SettingsScreen(): React.JSX.Element {
       }
       setSettings(s)
 
-      if (s.extractionProvider === 'custom-openai') {
+      if (s.extractionProvider === 'openai-compatible') {
         setCustomFields({
-          baseUrl: s.customOpenAI.baseUrl,
-          model: s.customOpenAI.model,
-          displayName: s.customOpenAI.displayName,
-          keyRef: s.customOpenAI.keyRef,
+          baseUrl: s.openaiCompatible.baseUrl,
+          model: s.openaiCompatible.model,
+          displayName: s.openaiCompatible.displayName,
+          keyRef: s.openaiCompatible.keyRef,
         })
       }
 
@@ -291,7 +291,7 @@ export function SettingsScreen(): React.JSX.Element {
     void persistSettings({ ...settings, asrProvider: provider })
   }
 
-  function handleExtractionChange(provider: 'anthropic' | 'custom-openai'): void {
+  function handleExtractionChange(provider: 'anthropic' | 'openai-compatible'): void {
     if (provider === 'anthropic') {
       void persistSettings({
         ...settings,
@@ -302,12 +302,12 @@ export function SettingsScreen(): React.JSX.Element {
       const { baseUrl, model, displayName, keyRef } = customFields
       if (!isValidUrl(baseUrl) || model.trim().length === 0 || displayName.trim().length === 0) {
         // Switch to custom but don't persist until fields are valid
-        setSettings({ ...settings, extractionProvider: 'custom-openai' } as AppSettings)
+        setSettings({ ...settings, extractionProvider: 'openai-compatible' } as AppSettings)
         return
       }
       void persistSettings({
         ...settings,
-        extractionProvider: 'custom-openai',
+        extractionProvider: 'openai-compatible',
         customOpenAI: { baseUrl, model, keyRef, displayName },
       })
     }
@@ -365,8 +365,14 @@ export function SettingsScreen(): React.JSX.Element {
     const { baseUrl, model, displayName, keyRef } = customFields
     void persistSettings({
       ...settings,
-      extractionProvider: 'custom-openai',
-      customOpenAI: { baseUrl, model: model.trim(), keyRef, displayName: displayName.trim() },
+      extractionProvider: 'openai-compatible',
+      openaiCompatible: {
+        preset: 'custom',
+        baseUrl,
+        model: model.trim(),
+        keyRef,
+        displayName: displayName.trim(),
+      },
     })
   }
 
@@ -381,7 +387,7 @@ export function SettingsScreen(): React.JSX.Element {
     }
   }
 
-  const isCustomOpenAI = settings.extractionProvider === 'custom-openai'
+  const isCustomOpenAI = settings.extractionProvider === 'openai-compatible'
   const isLocalAsr = settings.asrProvider === 'local-parakeet'
 
   // ---- render ----

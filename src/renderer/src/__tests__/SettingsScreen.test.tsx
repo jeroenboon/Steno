@@ -243,9 +243,10 @@ describe('SettingsScreen — disclosure copy', () => {
 describe('SettingsScreen — custom OpenAI extraction', () => {
   const customSettings: AppSettings = {
     asrProvider: 'deepgram',
-    extractionProvider: 'custom-openai',
+    extractionProvider: 'openai-compatible',
     primaryLanguage: 'nl',
-    customOpenAI: {
+    openaiCompatible: {
+      preset: 'custom',
       baseUrl: 'https://api.example.com/v1',
       model: 'gpt-4o',
       keyRef: 'my-openai-key',
@@ -259,7 +260,7 @@ describe('SettingsScreen — custom OpenAI extraction', () => {
     })
   })
 
-  it('shows custom OpenAI fields when custom-openai extraction is selected', async () => {
+  it('shows custom OpenAI fields when openai-compatible extraction is selected', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
       expect(screen.getByTestId('custom-openai-base-url')).toBeDefined()
@@ -304,7 +305,7 @@ describe('SettingsScreen — custom OpenAI extraction', () => {
     const callsWithEmptyModel = mockApi.settingsSet.mock.calls.filter((call) => {
       const json = JSON.stringify(call[0])
       // Only block detection: an empty "model":"" string would appear literally
-      return json.includes('"model":""') && json.includes('custom-openai')
+      return json.includes('"model":""') && json.includes('openai-compatible')
     })
     expect(callsWithEmptyModel).toHaveLength(0)
   })

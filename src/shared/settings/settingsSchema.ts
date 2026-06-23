@@ -1,22 +1,24 @@
 /**
- * AppSettings — Zod schema for persisted settings (item 0012).
+ * AppSettings — Zod schema for persisted settings (item 0012, extended for phase 0.1).
  *
  * What lives here:
  *   - Selected ASR provider and extraction provider
  *   - Model IDs for Anthropic (rolling + final pass)
  *   - Language options per provider
  *   - Primary meeting language (default Dutch, per CONTEXT.md)
- *   - Custom OpenAI-compatible endpoint config (base URL, model, keyRef, display name)
+ *   - OpenAI-compatible endpoint config (base URL, model, preset, keyRef, display name)
  *
  * What does NOT live here:
  *   - API keys (those are in Electron safeStorage, accessed via SecretStorage)
  *   - Meeting data (that is in SQLite via the repos)
  *
- * ## Custom OpenAI-compatible endpoint
+ * ## OpenAI-compatible extraction endpoints
  *
- * `customOpenAI.keyRef` is an opaque identifier used to look up the actual key
- * in SecretStorage. The key value itself never appears in this schema or in the
- * JSON file on disk.
+ * Supports OpenAI, Mistral, and custom endpoints through a protocol-discriminated
+ * union. The `preset` field identifies the vendor (default 'custom' for user-provided
+ * endpoints). `keyRef` is an opaque identifier used to look up the actual key in
+ * SecretStorage. The key value itself never appears in this schema or in the JSON
+ * file on disk.
  *
  * ## local-parakeet
  *
@@ -49,13 +51,16 @@ const DeepgramConfigSchema = z
   .optional()
 
 /**
- * Config for a custom OpenAI-compatible extraction endpoint.
+ * Config for OpenAI-compatible extraction endpoints (OpenAI, Mistral, or custom).
+ * The `preset` distinguishes the vendor/preset (default 'custom' for user-provided).
  *
  * `keyRef` is an opaque name used to retrieve the actual API key from
  * SecretStorage. It must not be empty so callers can always look up the key.
  * `displayName` is shown in the egress indicator and disclosure copy.
  */
-export const CustomOpenAIConfigSchema = z.object({
+export const OpenAICompatibleConfigSchema = z.object({
+  /** Preset identifier: 'openai' | 'mistral' | 'custom' (default 'custom') */
+  preset: z.enum(['openai', 'mistral', 'custom']).default('custom'),
   /** Base URL of the OpenAI-compatible API, e.g. https://api.openai.com/v1 */
   baseUrl: z.string().url(),
   /** Model identifier, e.g. gpt-4o */
@@ -66,7 +71,13 @@ export const CustomOpenAIConfigSchema = z.object({
   displayName: z.string().min(1),
 })
 
-export type CustomOpenAIConfig = z.infer<typeof CustomOpenAIConfigSchema>
+export type OpenAICompatibleConfig = z.infer<typeof OpenAICompatibleConfigSchema>
+
+/**
+ * Legacy schema for old custom-openai configs (for migration purposes).
+ * Matches the old schema shape so we can detect and migrate it.
+ */
+export const CustomOpenAIConfigSchema = OpenAICompatibleConfigSchema.omit({ preset: true })
 
 // ---------------------------------------------------------------------------
 // Top-level schema — discriminated on extractionProvider
@@ -85,25 +96,25 @@ const BaseSettingsSchema = z.object({
 
 /**
  * Settings when using the Anthropic preset extractor.
- * No customOpenAI block is required (or meaningful).
+ * No openaiCompatible block is required (or meaningful).
  */
 const AnthropicSettingsSchema = BaseSettingsSchema.extend({
   extractionProvider: z.literal('anthropic'),
-  customOpenAI: z.undefined().optional(),
+  openaiCompatible: z.undefined().optional(),
 })
 
 /**
- * Settings when using a custom OpenAI-compatible extractor.
- * customOpenAI block is required and validated.
+ * Settings when using an OpenAI-compatible extractor (OpenAI, Mistral, or custom).
+ * openaiCompatible block is required and validated.
  */
-const CustomOpenAISettingsSchema = BaseSettingsSchema.extend({
-  extractionProvider: z.literal('custom-openai'),
-  customOpenAI: CustomOpenAIConfigSchema,
+const OpenAICompatibleSettingsSchema = BaseSettingsSchema.extend({
+  extractionProvider: z.literal('openai-compatible'),
+  openaiCompatible: OpenAICompatibleConfigSchema,
 })
 
 export const AppSettingsSchema = z.discriminatedUnion('extractionProvider', [
   AnthropicSettingsSchema,
-  CustomOpenAISettingsSchema,
+  OpenAICompatibleSettingsSchema,
 ])
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>

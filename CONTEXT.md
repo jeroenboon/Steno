@@ -41,7 +41,7 @@ _Distinct from_ **Running Summary** (which is the live, queryable, whole-meeting
 The swappable component that turns microphone audio into a Transcript. Either local Whisper via `sherpa-onnx` (preferred default — audio stays on device) or a cloud ASR (Deepgram). User-selectable in settings. The local provider processes audio in fixed chunks (batch-per-chunk); spans have no `isFinal` field and are treated as final per ADR 0011.
 
 **Extraction Provider**:
-The swappable component (a cloud LLM in V1) that reads the Transcript and produces Decisions and Actions. Independent from the ASR Provider. Local LLM is a future option, not built in V1.
+The swappable component that reads the Transcript and produces Decisions and Actions. Independent from the ASR Provider. V1 supports cloud LLM providers (Anthropic, OpenAI-compatible endpoints, Azure OpenAI); local LLM is a future option. Providers are selected by protocol (Anthropic's API, OpenAI-compatible `chat/completions`, Azure OpenAI's deployment URL shape), not by vendor name, so adding new vendors (OpenAI, Mistral, etc.) to an existing protocol is a settings enum value, not a new adapter. See ADR 0012 and ADR 0027.
 
 **Recording Source**:
 Where a Meeting's Transcript came from: `live` (captured from microphone/loopback in real time) or `import` (transcribed from an uploaded audio file). A field on the Meeting, defaulting to `live` so pre-import meetings are unaffected. It only drives labelling; the downstream notes are identical either way. See ADR 0026.

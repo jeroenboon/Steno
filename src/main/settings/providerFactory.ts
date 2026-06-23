@@ -203,12 +203,12 @@ function buildExtractionProvider(
       return new AnthropicExtractionProvider(anthropicOpts)
     }
 
-    case 'custom-openai': {
-      const { baseUrl, model, keyRef, displayName } = settings.customOpenAI
+    case 'openai-compatible': {
+      const { baseUrl, model, keyRef, displayName } = settings.openaiCompatible
       const apiKey = storage.getSecret(keyRef)
       if (apiKey === null) {
         throw new Error(
-          `Custom OpenAI API key is not set for keyRef "${keyRef}". ` +
+          `OpenAI-compatible API key is not set for keyRef "${keyRef}". ` +
             `Store the key via SecretStorage with the key name "${keyRef}" before building providers.`,
         )
       }

@@ -69,12 +69,13 @@ describe('AppSettingsSchema', () => {
     }
   })
 
-  it('parses a custom OpenAI-compatible extraction config', () => {
+  it('parses an OpenAI-compatible extraction config with custom preset', () => {
     const input: AppSettings = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'en',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://my.openai-proxy.example.com/v1',
         model: 'gpt-4o',
         keyRef: 'custom-openai-key',
@@ -125,23 +126,24 @@ describe('AppSettingsSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects custom-openai extraction without customOpenAI config', () => {
+  it('rejects openai-compatible extraction without openaiCompatible config', () => {
     const input = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      // no customOpenAI block
+      // no openaiCompatible block
     }
     const result = AppSettingsSchema.safeParse(input)
     expect(result.success).toBe(false)
   })
 
-  it('rejects custom-openai config with invalid base URL', () => {
+  it('rejects openai-compatible config with invalid base URL', () => {
     const input = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'not-a-url',
         model: 'gpt-4o',
         keyRef: 'my-key',
@@ -152,12 +154,13 @@ describe('AppSettingsSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects custom-openai config with empty model', () => {
+  it('rejects openai-compatible config with empty model', () => {
     const input = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: '',
         keyRef: 'my-key',
@@ -168,12 +171,13 @@ describe('AppSettingsSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects custom-openai config with empty keyRef', () => {
+  it('rejects openai-compatible config with empty keyRef', () => {
     const input = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: 'gpt-4o',
         keyRef: '',
@@ -182,6 +186,87 @@ describe('AppSettingsSchema', () => {
     }
     const result = AppSettingsSchema.safeParse(input)
     expect(result.success).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 1.5 Settings migration — custom-openai → openai-compatible
+// ---------------------------------------------------------------------------
+
+describe('Settings migration', () => {
+  it('migrates old custom-openai config to openai-compatible with preset:custom', async () => {
+    const oldSettings: Record<string, unknown> = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'custom-openai',
+      primaryLanguage: 'en',
+      customOpenAI: {
+        baseUrl: 'https://api.example.com/v1',
+        model: 'gpt-4o',
+        keyRef: 'my-key',
+        displayName: 'My LLM',
+      },
+    }
+
+    // Simulate SettingsStore.load() applying migrations
+    const { applyMigrations } = await import('./migrationUtils')
+    const migrated = applyMigrations(oldSettings)
+
+    // Verify the migration worked
+    const result = AppSettingsSchema.safeParse(migrated)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.extractionProvider).toBe('openai-compatible')
+      expect(result.data.openaiCompatible.preset).toBe('custom')
+      expect(result.data.openaiCompatible.baseUrl).toBe('https://api.example.com/v1')
+      expect(result.data.openaiCompatible.model).toBe('gpt-4o')
+      expect(result.data.openaiCompatible.keyRef).toBe('my-key')
+      expect(result.data.openaiCompatible.displayName).toBe('My LLM')
+    }
+  })
+
+  it('migration is idempotent on already-migrated config', async () => {
+    const migratedSettings: Record<string, unknown> = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'openai-compatible',
+      primaryLanguage: 'en',
+      openaiCompatible: {
+        preset: 'custom',
+        baseUrl: 'https://api.example.com/v1',
+        model: 'gpt-4o',
+        keyRef: 'my-key',
+        displayName: 'My LLM',
+      },
+    }
+
+    const { applyMigrations } = await import('./migrationUtils')
+    const migrated = applyMigrations(migratedSettings)
+
+    // Should be identical (no changes)
+    expect(migrated.extractionProvider).toBe('openai-compatible')
+  })
+
+  it('SettingsStore.load applies migrations before validation', async () => {
+    const oldConfigJson = JSON.stringify({
+      asrProvider: 'deepgram',
+      extractionProvider: 'custom-openai',
+      primaryLanguage: 'en',
+      customOpenAI: {
+        baseUrl: 'https://api.example.com/v1',
+        model: 'gpt-4o',
+        keyRef: 'my-key',
+        displayName: 'My LLM',
+      },
+    })
+
+    const store = new SettingsStore({
+      userDataPath: '/fake',
+      readFile: () => Promise.resolve(oldConfigJson),
+      writeFile: () => Promise.resolve(),
+    })
+
+    const loaded = await store.load()
+    expect(loaded.extractionProvider).toBe('openai-compatible')
+    expect(loaded.openaiCompatible.preset).toBe('custom')
   })
 })
 
@@ -372,16 +457,17 @@ describe('buildProviders', () => {
     expect(typeof providers.extraction.extract).toBe('function')
   })
 
-  it('returns a custom OpenAI-compatible extraction provider for custom-openai config', () => {
+  it('returns a custom OpenAI-compatible extraction provider for openai-compatible config', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('deepgram', 'dg-key-123')
     storage.setSecret('my-llm-key', 'custom-key-789')
 
     const settings: AppSettings = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'en',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: 'gpt-4o',
         keyRef: 'my-llm-key',
@@ -468,16 +554,17 @@ describe('buildProviders', () => {
     expect(() => buildProviders(settings, storage)).toThrow(/anthropic.*key/i)
   })
 
-  it('throws a clear error when custom-openai key is missing from storage', () => {
+  it('throws a clear error when openai-compatible key is missing from storage', () => {
     const storage = new MemorySecretStorage()
-    storage.setSecret('deepgram', 'dg-key')
+    storage.setSecret('deepgram', 'dg-key-123')
     // No 'my-llm-key' stored
 
     const settings: AppSettings = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'en',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: 'gpt-4o',
         keyRef: 'my-llm-key',
@@ -579,12 +666,13 @@ describe('computeEgressState', () => {
     expect(state.notes).toBe('cloud:Anthropic')
   })
 
-  it('Deepgram ASR + custom OpenAI → audio cloud:Deepgram, notes cloud:custom:<name>', () => {
+  it('Deepgram ASR + openai-compatible → audio cloud:Deepgram, notes cloud:custom:<name>', () => {
     const settings: AppSettings = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: 'gpt-4o',
         keyRef: 'my-llm-key',
@@ -596,12 +684,13 @@ describe('computeEgressState', () => {
     expect(state.notes).toBe('cloud:custom:My LLM')
   })
 
-  it('local ASR + custom OpenAI → audio local, notes cloud:custom:<name>', () => {
+  it('local ASR + openai-compatible → audio local, notes cloud:custom:<name>', () => {
     const settings: AppSettings = {
       asrProvider: 'local-parakeet',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: 'gpt-4o',
         keyRef: 'my-llm-key',
