@@ -73,7 +73,7 @@ const DEEPGRAM_WSS_BASE = 'wss://api.deepgram.com/v1/listen'
 function buildDeepgramUrl(language: string): string {
   const params = new URLSearchParams({
     language,
-    model: 'nova-2',
+    model: 'nova-3',
     encoding: 'linear16',
     sample_rate: '16000',
     channels: '1',
@@ -92,7 +92,7 @@ const DEEPGRAM_REST_BASE = 'https://api.deepgram.com/v1/listen'
 function buildDeepgramRestUrl(language: string): string {
   const params = new URLSearchParams({
     language,
-    model: 'nova-2',
+    model: 'nova-3',
     encoding: 'linear16',
     sample_rate: '16000',
     channels: '1',

@@ -122,11 +122,15 @@ function makeDeepgramResult(opts: {
 const instantSleep = () => Promise.resolve()
 
 let currentSocket: FakeWebSocket
+let lastWsUrl = ''
 
 function makeProvider(overrides?: { maxBackoffMs?: number }) {
   currentSocket = new FakeWebSocket()
 
-  const factory = () => currentSocket as unknown as WebSocketLike
+  const factory = (url: string) => {
+    lastWsUrl = url
+    return currentSocket as unknown as WebSocketLike
+  }
 
   return new DeepgramAsrProvider({
     apiKey: 'test-key',
@@ -167,6 +171,14 @@ describe('DeepgramAsrProvider', () => {
   // -------------------------------------------------------------------------
   // Tracer bullet: single final span
   // -------------------------------------------------------------------------
+
+  it('connects to the streaming endpoint with the nova-3 model', () => {
+    const provider = makeProvider()
+    provider.start()
+    currentSocket.simulateOpen()
+
+    expect(lastWsUrl).toContain('model=nova-3')
+  })
 
   it('emits a span when the socket delivers a final Deepgram result', async () => {
     const provider = makeProvider()
@@ -517,6 +529,7 @@ describe('DeepgramAsrProvider.transcribeBatch', () => {
 
     const call = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(call[0]).toContain('api.deepgram.com/v1/listen')
+    expect(call[0]).toContain('model=nova-3')
     expect(call[0]).toContain('encoding=linear16')
     expect(call[0]).toContain('sample_rate=16000')
     const headers = call[1].headers as Record<string, string>
