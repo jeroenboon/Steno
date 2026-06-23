@@ -173,6 +173,27 @@ function buildAsrProvider(settings: AppSettings, storage: SecretStorage): ASRPro
       const language = settings.deepgram?.language ?? settings.primaryLanguage
       return new DeepgramAsrProvider({ apiKey, language })
     }
+
+    case 'openai-audio': {
+      throw new Error(
+        'OpenAI audio ASR provider is not yet implemented. ' +
+          'Please use Deepgram or local Whisper for now.',
+      )
+    }
+
+    case 'mistral-voxtral': {
+      throw new Error(
+        'Mistral Voxtral ASR provider is not yet implemented. ' +
+          'Please use Deepgram or local Whisper for now.',
+      )
+    }
+
+    case 'azure-speech': {
+      throw new Error(
+        'Azure Speech Services ASR provider is not yet implemented. ' +
+          'Please use Deepgram or local Whisper for now.',
+      )
+    }
   }
 }
 

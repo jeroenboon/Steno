@@ -96,6 +96,80 @@ describe('AppSettingsSchema', () => {
     expect(result.success).toBe(true)
   })
 
+  it('parses a valid openai-audio ASR config', () => {
+    const input: AppSettings = {
+      asrProvider: 'openai-audio',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      openaiAudio: {
+        model: 'gpt-4o-mini-transcribe',
+        keyRef: 'openai-key',
+        displayName: 'OpenAI Audio',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(true)
+  })
+
+  it('parses a valid mistral-voxtral ASR config', () => {
+    const input: AppSettings = {
+      asrProvider: 'mistral-voxtral',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      mistralVoxtral: {
+        model: 'Voxtral Mini Transcribe V2',
+        keyRef: 'mistral-key',
+        displayName: 'Mistral Voxtral',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(true)
+  })
+
+  it('parses a valid azure-speech ASR config', () => {
+    const input: AppSettings = {
+      asrProvider: 'azure-speech',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      azureSpeech: {
+        endpoint: 'https://my-resource.cognitiveservices.azure.com/',
+        deployment: 'my-speech-deployment',
+        apiVersion: '2024-02-15-preview',
+        model: 'whisper',
+        keyRef: 'azure-speech-key',
+        displayName: 'Azure Speech',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects openai-audio without openaiAudio config', () => {
+    const input = {
+      asrProvider: 'openai-audio',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'nl',
+      // no openaiAudio config
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects openai-audio config with empty model', () => {
+    const input = {
+      asrProvider: 'openai-audio',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'nl',
+      openaiAudio: {
+        model: '',
+        keyRef: 'openai-key',
+        displayName: 'OpenAI Audio',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
+  })
+
   it('rejects unknown ASR provider', () => {
     const input = {
       asrProvider: 'whisper-cloud',
@@ -695,7 +769,67 @@ describe('buildProviders', () => {
     expect(() => buildProviders(settings, storage)).toThrow(/gedownload/i)
   })
 
-  it('tryBuildAsrProvider returns ok:false when local-parakeet model is not downloaded', () => {
+  it('throws "not yet implemented" when openai-audio ASR is selected', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('anthropic', 'ant-key')
+    storage.setSecret('openai-key', 'sk-openai')
+
+    const settings: AppSettings = {
+      asrProvider: 'openai-audio',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      openaiAudio: {
+        model: 'gpt-4o-mini-transcribe',
+        keyRef: 'openai-key',
+        displayName: 'OpenAI Audio',
+      },
+    }
+
+    expect(() => buildProviders(settings, storage)).toThrow(/not yet implemented/i)
+  })
+
+  it('throws "not yet implemented" when mistral-voxtral ASR is selected', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('anthropic', 'ant-key')
+    storage.setSecret('mistral-key', 'sk-mistral')
+
+    const settings: AppSettings = {
+      asrProvider: 'mistral-voxtral',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      mistralVoxtral: {
+        model: 'Voxtral Mini Transcribe V2',
+        keyRef: 'mistral-key',
+        displayName: 'Mistral Voxtral',
+      },
+    }
+
+    expect(() => buildProviders(settings, storage)).toThrow(/not yet implemented/i)
+  })
+
+  it('throws "not yet implemented" when azure-speech ASR is selected', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('anthropic', 'ant-key')
+    storage.setSecret('azure-speech-key', 'azure-key')
+
+    const settings: AppSettings = {
+      asrProvider: 'azure-speech',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      azureSpeech: {
+        endpoint: 'https://my-resource.cognitiveservices.azure.com/',
+        deployment: 'my-speech-deployment',
+        apiVersion: '2024-02-15-preview',
+        model: 'whisper',
+        keyRef: 'azure-speech-key',
+        displayName: 'Azure Speech',
+      },
+    }
+
+    expect(() => buildProviders(settings, storage)).toThrow(/not yet implemented/i)
+  })
+
+  it('throws when local-parakeet model is not downloaded', () => {
     const storage = new MemorySecretStorage()
     const settings: AppSettings = {
       asrProvider: 'local-parakeet',
