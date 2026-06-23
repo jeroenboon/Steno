@@ -848,4 +848,37 @@ describe('SettingsScreen — custom key saved state (Phase 1.2 bugfix)', () => {
     // Screen should not be blank — the component should still be mounted
     expect(screen.getByTestId('screen-settings')).toBeDefined()
   })
+
+  it('does not crash when typing a dot in the model field', async () => {
+    const openaiSettings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'openai-compatible',
+      primaryLanguage: 'nl',
+      openaiCompatible: {
+        preset: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        keyRef: 'openai',
+        displayName: 'OpenAI',
+      },
+    }
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(openaiSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: true }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('custom-openai-model'))
+
+    const modelInput = screen.getByTestId('custom-openai-model') as HTMLInputElement
+
+    // Type "gpt-5." — the dot must not crash
+    fireEvent.change(modelInput, { target: { value: 'gpt-5.' } })
+    expect(modelInput.value).toBe('gpt-5.')
+    expect(screen.getByTestId('screen-settings')).toBeDefined()
+
+    // Continue typing to "gpt-5.4-mini"
+    fireEvent.change(modelInput, { target: { value: 'gpt-5.4-mini' } })
+    expect(modelInput.value).toBe('gpt-5.4-mini')
+    expect(screen.getByTestId('screen-settings')).toBeDefined()
+  })
 })

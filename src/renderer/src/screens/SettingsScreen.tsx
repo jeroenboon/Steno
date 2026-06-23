@@ -443,9 +443,10 @@ export function SettingsScreen(): React.JSX.Element {
 
   // Derive the extraction provider select value: if openai-compatible, use the preset; otherwise use the provider.
   // Direct narrowing (not via the `isCustomOpenAI` boolean) so TypeScript propagates the discriminant.
+  // Guard: openaiCompatible may be transiently undefined during state transitions.
   const extractionProviderSelectValue =
     settings.extractionProvider === 'openai-compatible'
-      ? settings.openaiCompatible.preset
+      ? (settings.openaiCompatible?.preset ?? 'openai-compatible')
       : settings.extractionProvider
 
   // ---- render ----
@@ -683,8 +684,13 @@ export function SettingsScreen(): React.JSX.Element {
                     placeholder={t('settings.custom.baseUrl.placeholder')}
                     value={customFields.baseUrl}
                     onChange={(e) => {
-                      setCustomFields((f) => ({ ...f, baseUrl: e.currentTarget.value }))
-                      setCustomErrors((err) => ({ ...err, baseUrl: undefined }))
+                      const v = e.currentTarget.value
+                      setCustomFields((f) => ({ ...f, baseUrl: v }))
+                      setCustomErrors((err) => {
+                        const next = { ...err }
+                        delete next.baseUrl
+                        return next
+                      })
                     }}
                   />
                   {customErrors.baseUrl !== undefined && (
@@ -704,8 +710,13 @@ export function SettingsScreen(): React.JSX.Element {
                     placeholder={t('settings.custom.model.placeholder')}
                     value={customFields.model}
                     onChange={(e) => {
-                      setCustomFields((f) => ({ ...f, model: e.currentTarget.value }))
-                      setCustomErrors((err) => ({ ...err, model: undefined }))
+                      const v = e.currentTarget.value
+                      setCustomFields((f) => ({ ...f, model: v }))
+                      setCustomErrors((err) => {
+                        const next = { ...err }
+                        delete next.model
+                        return next
+                      })
                     }}
                   />
                   {customErrors.model !== undefined && (
@@ -725,8 +736,13 @@ export function SettingsScreen(): React.JSX.Element {
                     placeholder={t('settings.custom.displayName.placeholder')}
                     value={customFields.displayName}
                     onChange={(e) => {
-                      setCustomFields((f) => ({ ...f, displayName: e.currentTarget.value }))
-                      setCustomErrors((err) => ({ ...err, displayName: undefined }))
+                      const v = e.currentTarget.value
+                      setCustomFields((f) => ({ ...f, displayName: v }))
+                      setCustomErrors((err) => {
+                        const next = { ...err }
+                        delete next.displayName
+                        return next
+                      })
                     }}
                   />
                   {customErrors.displayName !== undefined && (
