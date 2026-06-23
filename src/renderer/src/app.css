@@ -575,10 +575,42 @@ body::before {
 }
 
 .live-layout {
+  position: relative; /* containing block for the marginalia leader overlay */
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: var(--space-8);
   align-items: start;
+}
+
+/* --- Marginalia leaders ---
+ * The curved dotted lines joining each margin card to its source transcript
+ * span. An absolutely-positioned SVG overlay that spans the whole live-layout;
+ * pointer-events off so it never intercepts clicks. Pencil by default, Myrtle
+ * once the item is confirmed (the leader inks in with the note).
+ */
+.margin-leaders {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.margin-leaders__path {
+  fill: none;
+  stroke: var(--color-proposed);
+  stroke-width: 1.25;
+  stroke-dasharray: 1 5;
+  stroke-linecap: round;
+  opacity: 0.55;
+  transition:
+    stroke var(--duration-normal) var(--ease-out),
+    opacity var(--duration-normal) var(--ease-out);
+}
+
+.margin-leaders__path--confirmed {
+  stroke: var(--color-confirmed);
+  opacity: 0.5;
 }
 
 .live-layout__transcript {
@@ -611,6 +643,11 @@ body::before {
   }
   .live-layout__margin {
     order: 1;
+  }
+  /* Stacked layout: the cards no longer sit beside their spans, so the leaders
+   * would have nothing meaningful to point at. Hide them. */
+  .margin-leaders {
+    display: none;
   }
 }
 

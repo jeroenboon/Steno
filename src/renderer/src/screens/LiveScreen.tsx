@@ -31,6 +31,7 @@ import React, { useCallback, useState } from 'react'
 
 import { OffAgenda } from '@shared/domain/types'
 
+import { MarginLeaders } from '../components/MarginLeaders'
 import { NudgePanel } from '../components/NudgePanel'
 import { RunningSummaryPanel } from '../components/RunningSummaryPanel'
 import { t } from '../i18n'
@@ -67,6 +68,7 @@ interface ItemCardProps {
   kind: ItemKind
   text: string
   state: 'proposed' | 'confirmed'
+  sourceSpanId: string
   sourceSpanText: string | undefined
   ownerName: string | undefined
   onConfirm: (kind: ItemKind, id: string) => void
@@ -79,6 +81,7 @@ function ItemCard({
   kind,
   text,
   state,
+  sourceSpanId,
   sourceSpanText,
   ownerName,
   onConfirm,
@@ -118,6 +121,9 @@ function ItemCard({
       className={`live-item live-item--${kind} ${isProposed ? 'live-item--proposed' : 'live-item--confirmed'}`}
       data-testid={`item-${id}`}
       data-state={state}
+      data-leader-card={id}
+      data-source-span-id={sourceSpanId}
+      data-confirmed={isProposed ? 'false' : 'true'}
       tabIndex={0}
       role="listitem"
       aria-label={`${kind === 'decision' ? 'Beslissing' : 'Actie'}: ${text}`}
@@ -397,6 +403,7 @@ function AgendaGroup({
                 kind="decision"
                 text={d.rationale}
                 state={d.state}
+                sourceSpanId={d.sourceSpanId}
                 sourceSpanText={transcriptSpanMap.get(d.sourceSpanId)}
                 ownerName={undefined}
                 onConfirm={onConfirm}
@@ -428,6 +435,7 @@ function AgendaGroup({
                     : t('live.items.action.untitled')
                 }
                 state={a.state}
+                sourceSpanId={a.sourceSpanId}
                 sourceSpanText={transcriptSpanMap.get(a.sourceSpanId)}
                 ownerName={
                   a.owner !== undefined ? (participantMap.get(a.owner) ?? a.owner) : undefined
@@ -487,6 +495,12 @@ export function LiveScreen(): React.JSX.Element {
 
   // --- Session orchestration (audio capture + IPC subscriptions) ---
   const { audioLevel } = useLiveSession(activeMeeting)
+
+  // --- Marginalia leaders ---
+  // The live-layout is the positioned container the leader overlay measures
+  // within; the recompute key changes whenever spans or items change so the
+  // curves are redrawn (resize is handled inside MarginLeaders).
+  const liveLayoutRef = React.useRef<HTMLDivElement>(null)
 
   // --- Local UI state ---
   // Transcript is the live canvas: open by default, collapsible via the toggle.
@@ -626,6 +640,16 @@ export function LiveScreen(): React.JSX.Element {
     return groups
   }, [agendaItems])
 
+  // Redraw the leaders whenever the transcript or the item set changes.
+  const leaderRecomputeKey = [
+    transcriptSpans.length,
+    proposedDecisions.length,
+    proposedActions.length,
+    confirmedDecisions.length,
+    confirmedActions.length,
+    transcriptOpen ? 1 : 0,
+  ].join(':')
+
   // --- Render ---
   const isRecording = micPermission === 'granted'
 
@@ -761,7 +785,9 @@ export function LiveScreen(): React.JSX.Element {
         </section>
       </div>
 
-      <div className="live-layout">
+      <div className="live-layout" ref={liveLayoutRef}>
+        <MarginLeaders containerRef={liveLayoutRef} recomputeKey={leaderRecomputeKey} />
+
         <aside className="live-layout__margin">
           {/* ------------------------------------------------------------------ */}
           {/* Nudge panel (item 0019) */}
@@ -913,6 +939,7 @@ export function LiveScreen(): React.JSX.Element {
                         <li
                           key={span.id}
                           data-testid={`transcript-span-${span.id}`}
+                          data-span-id={span.id}
                           data-low-confidence={isLowConfidence ? 'true' : undefined}
                           className={[
                             'transcript__span',

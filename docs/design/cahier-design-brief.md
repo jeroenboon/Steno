@@ -206,8 +206,13 @@ not rebuilding: the 4px spacing grid, radii, and motion stay.
 - Decide the night variant's exact inversion (charcoal notebook), later.
 - Destructive-action friction: decided. **Hold-to-confirm** (press and hold 1.5s,
   Myrtle fill, cancels on early release), with a keyboard path (hold Enter/Space).
-- Marginalia leaders need a measuring pass (JS) to draw the curved SVG path
-  between a transcript paragraph and its margin card; spec'd, not yet built.
+  Built as `HoldToConfirm`, wired into deleting a meeting.
+- Marginalia leaders: **built.** A pure geometry core (`leaderGeometry.ts`) maps
+  span/card rects to curved SVG paths; a thin overlay (`MarginLeaders.tsx`)
+  measures the live layout and paints them, pencil by default and Myrtle once an
+  item is confirmed. Hidden below 980px where the margin stacks. Still open:
+  positioning cards to vertically align with their source span (with collision
+  avoidance), so leaders stay short; today the cards keep their agenda grouping.
 
 A standalone, high-fidelity reference of this spec lives at
 `docs/design/cahier-prototype.html` (open in a browser).
