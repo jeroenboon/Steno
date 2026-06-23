@@ -9,10 +9,10 @@
  * - Clicking an ended meeting loads it and navigates to review
  */
 
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import React from 'react'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { afterEach, describe, it, expect, beforeEach, vi } from 'vitest'
 
 import { HomeScreen } from '../screens/HomeScreen'
 import { useAppStore } from '../store/appStore'
@@ -31,6 +31,10 @@ describe('HomeScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useAppStore.setState({ route: 'home' })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders the new meeting button', () => {
@@ -143,8 +147,7 @@ describe('HomeScreen', () => {
     })
   })
 
-  it('deletes an ended meeting after inline confirmation', async () => {
-    const user = userEvent.setup()
+  it('deletes an ended meeting after a full hold-to-confirm', async () => {
     mockApi.meetingList.mockResolvedValue({
       meetings: [
         {
@@ -159,12 +162,15 @@ describe('HomeScreen', () => {
     })
     render(<HomeScreen />)
 
-    await user.click(await screen.findByTestId('home-delete'))
-    // Inline confirm appears; the meeting is still listed.
-    expect(screen.getByTestId('home-delete-confirm')).toBeInTheDocument()
-    expect(mockApi.meetingDelete).not.toHaveBeenCalled()
+    const del = await screen.findByTestId('home-delete')
 
-    await user.click(screen.getByTestId('home-delete-yes'))
+    // Hold for the full 1.5s: the delete fires (no confirm dialog, no red).
+    vi.useFakeTimers()
+    fireEvent.pointerDown(del)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500)
+    })
+    vi.useRealTimers()
 
     expect(mockApi.meetingDelete).toHaveBeenCalledWith({ meetingId: 'mtg-1' })
     await waitFor(() => {
@@ -172,8 +178,7 @@ describe('HomeScreen', () => {
     })
   })
 
-  it('cancelling the delete confirmation keeps the meeting', async () => {
-    const user = userEvent.setup()
+  it('releasing the hold early keeps the meeting', async () => {
     mockApi.meetingList.mockResolvedValue({
       meetings: [
         {
@@ -188,12 +193,17 @@ describe('HomeScreen', () => {
     })
     render(<HomeScreen />)
 
-    await user.click(await screen.findByTestId('home-delete'))
-    await user.click(screen.getByTestId('home-delete-no'))
+    const del = await screen.findByTestId('home-delete')
+
+    vi.useFakeTimers()
+    fireEvent.pointerDown(del)
+    vi.advanceTimersByTime(800)
+    fireEvent.pointerUp(del)
+    vi.advanceTimersByTime(2000)
+    vi.useRealTimers()
 
     expect(mockApi.meetingDelete).not.toHaveBeenCalled()
     expect(screen.getByTestId('home-meeting-item')).toBeInTheDocument()
-    expect(screen.queryByTestId('home-delete-confirm')).not.toBeInTheDocument()
   })
 
   it('interrupted meeting is shown in a callout, not in the history list', async () => {

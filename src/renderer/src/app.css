@@ -314,40 +314,19 @@ body::before {
   border-bottom: 1px solid var(--color-border-dim);
 }
 
+/* The delete control is a HoldToConfirm; here we only handle the hover-reveal so
+ * it stays out of the way until the user means it. The chip look + Myrtle fill
+ * come from .hold-to-confirm. */
 .home__meeting-delete {
   flex-shrink: 0;
-  padding: var(--space-1) var(--space-2);
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--color-text-dim);
-  font-size: var(--font-size-sm);
-  border-radius: var(--radius-sm);
   opacity: 0;
-  transition:
-    opacity var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 .home__meeting-item:hover .home__meeting-delete,
-.home__meeting-delete:focus-visible {
+.home__meeting-delete:focus-visible,
+.home__meeting-delete.hold-to-confirm--holding {
   opacity: 1;
-}
-
-.home__meeting-delete:hover {
-  color: var(--color-danger, #c0392b);
-}
-
-.home__meeting-confirm {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-.home__meeting-confirm-label {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-dim);
 }
 
 .home__meeting-btn {
@@ -1899,4 +1878,62 @@ body::before {
 .review-edit-form__actions {
   display: flex;
   gap: var(--space-2);
+}
+
+/* ---------------------------------------------------------------------------
+ * HoldToConfirm — destructive-action friction (Cahier Final Master Spec).
+ * Press and hold; a Myrtle bar fills the button left to right over --hold-ms.
+ * Red is reserved for live, so destructive actions use friction, not colour.
+ * --------------------------------------------------------------------------- */
+
+.hold-to-confirm {
+  position: relative;
+  overflow: hidden;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface-1);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.hold-to-confirm:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-text-primary);
+}
+
+/* The Myrtle progress fill. Resting at scaleX(0); fills over the hold duration. */
+.hold-to-confirm__fill {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-color: var(--color-action);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.hold-to-confirm--holding .hold-to-confirm__fill {
+  transition: transform var(--hold-ms, 1500ms) linear;
+  transform: scaleX(1);
+}
+
+.hold-to-confirm__label {
+  position: relative;
+  z-index: 1;
+}
+
+.hold-to-confirm--holding .hold-to-confirm__label {
+  color: var(--color-on-action);
+}
+
+.hold-to-confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }

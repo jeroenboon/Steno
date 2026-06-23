@@ -15,6 +15,7 @@ import React, { useEffect, useState } from 'react'
 
 import type { Meeting } from '@shared/domain/types'
 
+import { HoldToConfirm } from '../components/HoldToConfirm'
 import { t } from '../i18n'
 import { useAppStore } from '../store/appStore'
 
@@ -29,8 +30,6 @@ export function HomeScreen(): React.JSX.Element {
 
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [loading, setLoading] = useState(true)
-  /** Id of the meeting whose delete is awaiting inline confirmation, if any. */
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null)
 
   useEffect(() => {
     window.api
@@ -67,8 +66,6 @@ export function HomeScreen(): React.JSX.Element {
       setMeetings((prev) => prev.filter((m) => m.id !== meetingId))
     } catch (err) {
       console.error('[HomeScreen] meetingDelete failed:', err)
-    } finally {
-      setConfirmingDeleteId(null)
     }
   }
 
@@ -176,46 +173,19 @@ export function HomeScreen(): React.JSX.Element {
                     <span className="home__meeting-title">{meeting.title}</span>
                     <span className="home__meeting-meta">{formatDate(meeting.createdAt)}</span>
                   </button>
-                  {confirmingDeleteId === meeting.id ? (
-                    <span className="home__meeting-confirm" data-testid="home-delete-confirm">
-                      <span className="home__meeting-confirm-label">
-                        {t('home.delete.confirm')}
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn--danger"
-                        data-testid="home-delete-yes"
-                        onClick={() => {
-                          void handleDelete(meeting.id)
-                        }}
-                      >
-                        {t('home.delete.yes')}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--secondary"
-                        data-testid="home-delete-no"
-                        onClick={() => {
-                          setConfirmingDeleteId(null)
-                        }}
-                      >
-                        {t('home.delete.no')}
-                      </button>
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="home__meeting-delete"
-                      data-testid="home-delete"
-                      aria-label={`${t('home.delete.action')} ${meeting.title}`}
-                      title={t('home.delete.action')}
-                      onClick={() => {
-                        setConfirmingDeleteId(meeting.id)
-                      }}
-                    >
-                      {t('home.delete.action')}
-                    </button>
-                  )}
+                  {/* Destructive: hold-to-confirm, no red. The Myrtle fill is the
+                      friction; releasing early cancels. Keyboard: hold Enter. */}
+                  <HoldToConfirm
+                    className="home__meeting-delete"
+                    data-testid="home-delete"
+                    label={t('home.delete.action')}
+                    holdLabel={t('home.delete.holding')}
+                    aria-label={`${t('home.delete.action')} ${meeting.title}`}
+                    title={t('home.delete.hint')}
+                    onConfirm={() => {
+                      void handleDelete(meeting.id)
+                    }}
+                  />
                 </li>
               ))}
             </ul>
