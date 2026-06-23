@@ -31,3 +31,4 @@ export type {
   ProposedDecision,
   ProposedDiscussionSummary,
 } from './dtos'
+export { extractionPresets } from './extractionPresets'
