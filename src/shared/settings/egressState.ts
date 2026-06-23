@@ -86,7 +86,7 @@ function computeNotesEgress(settings: AppSettings): NotesEgress {
     case 'anthropic':
       return 'cloud:Anthropic'
     case 'openai-compatible': {
-      const name = settings.openaiCompatible?.displayName ?? 'OpenAI-compatible'
+      const name = settings.openaiCompatible.displayName
       return `cloud:custom:${name}`
     }
     case 'azure-openai': {

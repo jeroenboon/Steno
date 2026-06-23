@@ -173,6 +173,7 @@ const nl = {
   'settings.custom.key.saved': 'Opgeslagen',
   'settings.custom.key.missing': 'Geen sleutel ingesteld. Vul je API-sleutel in.',
   'settings.custom.save': 'Instellingen opslaan',
+  'settings.custom.saved': 'Opgeslagen',
 
   'settings.language.heading': 'Vergadertaal',
 

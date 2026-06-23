@@ -205,6 +205,8 @@ export function SettingsScreen(): React.JSX.Element {
     keyRef: 'openai-custom',
   })
   const [customErrors, setCustomErrors] = useState<CustomValidationErrors>({})
+  const [customOpenAISaveState, setCustomOpenAISaveState] = useState<KeySaveState>('idle')
+  const [customDirty, setCustomDirty] = useState(false)
 
   // ---- load on mount ----
   useEffect(() => {
@@ -328,6 +330,8 @@ export function SettingsScreen(): React.JSX.Element {
         keyRef: provider, // keyRef is the vendor ID: 'openai', 'mistral'
       }
       setCustomFields(newCustomFields)
+      setCustomDirty(true)
+      setCustomOpenAISaveState('idle')
       // Update local state to show the form
       setSettings({
         ...settings,
@@ -343,6 +347,8 @@ export function SettingsScreen(): React.JSX.Element {
       if (!isValidUrl(baseUrl) || model.trim().length === 0 || displayName.trim().length === 0) {
         // Show form so user can fill in fields; update local state but don't persist yet
         // Include placeholder config so initialization won't crash
+        setCustomDirty(true)
+        setCustomOpenAISaveState('idle')
         setSettings({
           ...settings,
           extractionProvider: 'openai-compatible',
@@ -404,7 +410,7 @@ export function SettingsScreen(): React.JSX.Element {
     }
   }
 
-  function handleSaveCustomOpenAI(): void {
+  async function handleSaveCustomOpenAI(): Promise<void> {
     const errors = validateCustomFields(customFields)
     setCustomErrors(errors)
     if (Object.keys(errors).length > 0) return
@@ -414,7 +420,8 @@ export function SettingsScreen(): React.JSX.Element {
     const preset: 'openai' | 'mistral' | 'custom' =
       keyRef === 'openai' ? 'openai' : keyRef === 'mistral' ? 'mistral' : 'custom'
 
-    void persistSettings({
+    setCustomOpenAISaveState('saving')
+    await persistSettings({
       ...settings,
       extractionProvider: 'openai-compatible',
       openaiCompatible: {
@@ -425,6 +432,8 @@ export function SettingsScreen(): React.JSX.Element {
         displayName: displayName.trim(),
       },
     })
+    setCustomOpenAISaveState('saved')
+    setCustomDirty(false)
   }
 
   async function handleDownloadModel(): Promise<void> {
@@ -443,10 +452,9 @@ export function SettingsScreen(): React.JSX.Element {
 
   // Derive the extraction provider select value: if openai-compatible, use the preset; otherwise use the provider.
   // Direct narrowing (not via the `isCustomOpenAI` boolean) so TypeScript propagates the discriminant.
-  // Guard: openaiCompatible may be transiently undefined during state transitions.
   const extractionProviderSelectValue =
     settings.extractionProvider === 'openai-compatible'
-      ? (settings.openaiCompatible?.preset ?? 'openai-compatible')
+      ? settings.openaiCompatible.preset
       : settings.extractionProvider
 
   // ---- render ----
@@ -691,6 +699,8 @@ export function SettingsScreen(): React.JSX.Element {
                         delete next.baseUrl
                         return next
                       })
+                      setCustomDirty(true)
+                      if (customOpenAISaveState === 'saved') setCustomOpenAISaveState('idle')
                     }}
                   />
                   {customErrors.baseUrl !== undefined && (
@@ -717,6 +727,8 @@ export function SettingsScreen(): React.JSX.Element {
                         delete next.model
                         return next
                       })
+                      setCustomDirty(true)
+                      if (customOpenAISaveState === 'saved') setCustomOpenAISaveState('idle')
                     }}
                   />
                   {customErrors.model !== undefined && (
@@ -743,6 +755,8 @@ export function SettingsScreen(): React.JSX.Element {
                         delete next.displayName
                         return next
                       })
+                      setCustomDirty(true)
+                      if (customOpenAISaveState === 'saved') setCustomOpenAISaveState('idle')
                     }}
                   />
                   {customErrors.displayName !== undefined && (
@@ -782,9 +796,14 @@ export function SettingsScreen(): React.JSX.Element {
                   type="button"
                   data-testid="save-custom-openai"
                   className="btn btn--primary"
-                  onClick={handleSaveCustomOpenAI}
+                  disabled={customOpenAISaveState === 'saving' || !customDirty}
+                  onClick={() => {
+                    void handleSaveCustomOpenAI()
+                  }}
                 >
-                  {t('settings.custom.save')}
+                  {customOpenAISaveState === 'saved'
+                    ? t('settings.custom.saved')
+                    : t('settings.custom.save')}
                 </button>
               </div>
             )

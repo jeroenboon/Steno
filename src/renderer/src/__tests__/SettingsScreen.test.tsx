@@ -869,7 +869,7 @@ describe('SettingsScreen — custom key saved state (Phase 1.2 bugfix)', () => {
     render(<SettingsScreen />)
     await waitFor(() => screen.getByTestId('custom-openai-model'))
 
-    const modelInput = screen.getByTestId('custom-openai-model') as HTMLInputElement
+    const modelInput = screen.getByTestId('custom-openai-model')
 
     // Type "gpt-5." — the dot must not crash
     fireEvent.change(modelInput, { target: { value: 'gpt-5.' } })
