@@ -194,6 +194,8 @@ export function SettingsScreen(): React.JSX.Element {
 
   const [customKeyEntry, setCustomKeyEntry] = useState('')
   const [customKeySave, setCustomKeySave] = useState<KeySaveState>('idle')
+  const [customKeyPresent, setCustomKeyPresent] = useState(false)
+  const [customKeyEditing, setCustomKeyEditing] = useState(false)
 
   // ---- custom OpenAI fields ----
   const [customFields, setCustomFields] = useState<CustomFields>({
@@ -229,12 +231,23 @@ export function SettingsScreen(): React.JSX.Element {
 
       // Check key presence (never retrieves the value). Tolerate failure.
       try {
-        const [dg, ant] = await Promise.all([
+        const keyChecks: Promise<{ has: boolean }>[] = [
           window.api.secretHas({ key: 'deepgram' }),
           window.api.secretHas({ key: 'anthropic' }),
-        ])
-        setDeepgramKeyPresent(dg.has)
-        setAnthropicKeyPresent(ant.has)
+        ]
+        // Also check the custom/preset key if an openai-compatible provider is configured
+        const customKeyRef =
+          s.extractionProvider === 'openai-compatible' ? s.openaiCompatible.keyRef : null
+        if (customKeyRef !== null) {
+          keyChecks.push(window.api.secretHas({ key: customKeyRef }))
+        }
+        const results = await Promise.all(keyChecks)
+        const dgResult = results[0]
+        const antResult = results[1]
+        const customResult = results[2]
+        if (dgResult !== undefined) setDeepgramKeyPresent(dgResult.has)
+        if (antResult !== undefined) setAnthropicKeyPresent(antResult.has)
+        if (customResult !== undefined) setCustomKeyPresent(customResult.has)
       } catch (err) {
         console.error('[Settings] secretHas failed:', err)
       }
@@ -285,7 +298,11 @@ export function SettingsScreen(): React.JSX.Element {
 
   async function persistSettings(next: AppSettings): Promise<void> {
     setSettings(next)
-    await window.api.settingsSet(next)
+    try {
+      await window.api.settingsSet(next)
+    } catch (err) {
+      console.error('[Settings] settingsSet failed:', err)
+    }
   }
 
   function handleAsrChange(provider: 'deepgram' | 'local-parakeet'): void {
@@ -378,8 +395,10 @@ export function SettingsScreen(): React.JSX.Element {
     setCustomKeySave('saving')
     try {
       await window.api.secretSet({ key: customFields.keyRef, value: customKeyEntry })
+      setCustomKeyPresent(true)
       setCustomKeyEntry('')
       setCustomKeySave('saved')
+      setCustomKeyEditing(false)
     } catch {
       setCustomKeySave('error')
     }
@@ -715,39 +734,33 @@ export function SettingsScreen(): React.JSX.Element {
                   )}
                 </div>
 
-                <div className="form-group">
-                  <label htmlFor="custom-openai-key" className="form-label">
-                    {t('settings.custom.key.label')}
-                  </label>
-                  <div className="form-row">
-                    <input
-                      id="custom-openai-key"
-                      data-testid="custom-openai-key"
-                      type="password"
-                      className="form-input"
-                      placeholder={t('settings.custom.key.placeholder')}
-                      value={customKeyEntry}
-                      autoComplete="off"
-                      onChange={(e) => {
-                        setCustomKeyEntry(e.currentTarget.value)
-                        if (customKeySave === 'saved') setCustomKeySave('idle')
-                      }}
-                    />
-                    <button
-                      type="button"
-                      data-testid="save-custom-key"
-                      className="btn btn--secondary"
-                      disabled={customKeySave === 'saving' || customKeyEntry.trim().length === 0}
-                      onClick={() => {
-                        void handleSaveCustomKey()
-                      }}
-                    >
-                      {customKeySave === 'saved'
-                        ? t('settings.custom.key.saved')
-                        : t('settings.custom.key.save')}
-                    </button>
-                  </div>
-                </div>
+                <KeyField
+                  idBase="custom-openai"
+                  label={t('settings.custom.key.label')}
+                  placeholder={t('settings.custom.key.placeholder')}
+                  present={customKeyPresent}
+                  editing={customKeyEditing}
+                  value={customKeyEntry}
+                  saveState={customKeySave}
+                  testIdInput="custom-openai-key"
+                  testIdSave="save-custom-key"
+                  testIdMissing="custom-key-missing"
+                  missingText={t('settings.custom.key.missing')}
+                  onChange={(v) => {
+                    setCustomKeyEntry(v)
+                    if (customKeySave === 'saved') setCustomKeySave('idle')
+                  }}
+                  onSave={() => {
+                    void handleSaveCustomKey()
+                  }}
+                  onReplace={() => {
+                    setCustomKeyEditing(true)
+                  }}
+                  onCancel={() => {
+                    setCustomKeyEditing(false)
+                    setCustomKeyEntry('')
+                  }}
+                />
 
                 <button
                   type="button"

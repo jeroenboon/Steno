@@ -171,6 +171,7 @@ const nl = {
   'settings.custom.key.placeholder': 'sk-...',
   'settings.custom.key.save': 'Opslaan',
   'settings.custom.key.saved': 'Opgeslagen',
+  'settings.custom.key.missing': 'Geen sleutel ingesteld. Vul je API-sleutel in.',
   'settings.custom.save': 'Instellingen opslaan',
 
   'settings.language.heading': 'Vergadertaal',

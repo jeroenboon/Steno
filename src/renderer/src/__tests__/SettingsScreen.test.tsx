@@ -727,3 +727,125 @@ describe('SettingsScreen — extraction provider presets (Phase 1.2)', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// Phase 1.2 bugfix: key saved state and error handling
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — custom key saved state (Phase 1.2 bugfix)', () => {
+  beforeEach(() => {
+    setup()
+  })
+
+  it('shows saved key status when preset key is present on mount', async () => {
+    const openaiSettings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'openai-compatible',
+      primaryLanguage: 'nl',
+      openaiCompatible: {
+        preset: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        keyRef: 'openai',
+        displayName: 'OpenAI',
+      },
+    }
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(openaiSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: true }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('custom-openai-key-status')).toBeDefined()
+    })
+  })
+
+  it('shows missing key notice when preset key is absent on mount', async () => {
+    const openaiSettings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'openai-compatible',
+      primaryLanguage: 'nl',
+      openaiCompatible: {
+        preset: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        keyRef: 'openai',
+        displayName: 'OpenAI',
+      },
+    }
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(openaiSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: false }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('custom-key-missing')).toBeDefined()
+    })
+  })
+
+  it('shows saved status after saving a custom key', async () => {
+    const openaiSettings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'openai-compatible',
+      primaryLanguage: 'nl',
+      openaiCompatible: {
+        preset: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        keyRef: 'openai',
+        displayName: 'OpenAI',
+      },
+    }
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(openaiSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: false }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('custom-openai-key'))
+
+    const input = screen.getByTestId('custom-openai-key')
+    fireEvent.change(input, { target: { value: 'sk-test-key-123' } })
+
+    const saveBtn = screen.getByTestId('save-custom-key')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(mockApi.secretSet).toHaveBeenCalledWith({
+        key: 'openai',
+        value: 'sk-test-key-123',
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('custom-openai-key-status')).toBeDefined()
+    })
+  })
+
+  it('does not crash when settingsSet rejects', async () => {
+    setup({
+      settingsSet: vi.fn().mockRejectedValue(new Error('Zod validation failed')),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'openai' } })
+    })
+
+    // The form should still render after the failed persist
+    await waitFor(() => {
+      const saveBtn = screen.getByTestId('save-custom-openai')
+      act(() => {
+        fireEvent.click(saveBtn)
+      })
+    })
+
+    // Screen should not be blank — the component should still be mounted
+    expect(screen.getByTestId('screen-settings')).toBeDefined()
+  })
+})
