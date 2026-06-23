@@ -1,9 +1,12 @@
 /**
- * CustomOpenAIExtractionProvider (item 0012).
+ * OpenAICompatibleExtractionProvider (items 0012, 0026; generalised in Phase 1.3).
  *
- * An ExtractionProvider adapter for OpenAI-compatible endpoints (OpenAI,
- * Azure OpenAI, local proxies, etc.). Uses the OpenAI chat completions API
- * with JSON mode / structured output via `response_format: { type: "json_object" }`.
+ * An ExtractionProvider adapter for OpenAI-compatible chat-completions endpoints.
+ * One wire serves the whole family — OpenAI, Mistral, local proxies, and any
+ * generic custom endpoint — because they share the chat-completions request and
+ * response shapes. The vendor is just a prefilled base URL + model + displayName
+ * (see the preset catalog, extractionPresets.ts); it changes no parsing here.
+ * Uses JSON mode via `response_format: { type: "json_object" }`.
  *
  * ## Design
  *
@@ -17,12 +20,14 @@
  *
  * ## Privacy (principle #12)
  * The API key is injected (never read from disk here). It is passed in the
- * Authorization header and is never logged.
+ * Authorization header and is never logged. Logs are tagged with the
+ * (non-sensitive) `displayName` only, so `[OpenAI]` / `[Mistral]` / `[Custom]`
+ * are distinguishable without exposing transcript content or the key.
  *
  * ## Constructor params
  * - `apiKey`     — Raw API key for the endpoint. Injected by the factory.
  * - `baseUrl`    — Base URL, e.g. https://api.openai.com/v1
- * - `model`      — Model identifier, e.g. gpt-4o
+ * - `model`      — Model identifier, e.g. gpt-4o-mini
  * - `displayName` — Shown in logs (non-sensitive) and egress disclosure.
  * - `fetch`       — Injected for testability. Defaults to global fetch.
  */
@@ -41,7 +46,7 @@ import {
 // Constructor options
 // ---------------------------------------------------------------------------
 
-export interface CustomOpenAIExtractionProviderOptions {
+export interface OpenAICompatibleExtractionProviderOptions {
   apiKey: string
   baseUrl: string
   model: string
@@ -53,18 +58,19 @@ export interface CustomOpenAIExtractionProviderOptions {
 // Adapter
 // ---------------------------------------------------------------------------
 
-export class CustomOpenAIExtractionProvider implements ExtractionProvider {
+export class OpenAICompatibleExtractionProvider implements ExtractionProvider {
   private readonly _apiKey: string
   private readonly _baseUrl: string
   private readonly _model: string
-  private readonly _displayName: string
+  /** Non-sensitive log tag, e.g. `[OpenAI]`, so logs distinguish the vendor. */
+  private readonly _logTag: string
   private readonly _fetch: typeof globalThis.fetch
 
-  constructor(opts: CustomOpenAIExtractionProviderOptions) {
+  constructor(opts: OpenAICompatibleExtractionProviderOptions) {
     this._apiKey = opts.apiKey
     this._baseUrl = opts.baseUrl.replace(/\/$/, '') // strip trailing slash
     this._model = opts.model
-    this._displayName = opts.displayName
+    this._logTag = `[${opts.displayName}]`
     this._fetch = opts.fetch ?? globalThis.fetch
   }
 
@@ -72,15 +78,11 @@ export class CustomOpenAIExtractionProvider implements ExtractionProvider {
     const first = await this._callAndValidate(request)
     if (first !== null) return first
 
-    console.error(
-      `[CustomOpenAIExtractionProvider:${this._displayName}] Validation failed, retrying`,
-    )
+    console.error(`${this._logTag} Validation failed, retrying`)
     const retry = await this._callAndValidate(request)
     if (retry !== null) return retry
 
-    console.error(
-      `[CustomOpenAIExtractionProvider:${this._displayName}] Retry failed, skipping turn`,
-    )
+    console.error(`${this._logTag} Retry failed, skipping turn`)
     return { proposedDecisions: [], proposedActions: [] }
   }
 
@@ -98,15 +100,11 @@ export class CustomOpenAIExtractionProvider implements ExtractionProvider {
     const first = await this._callAndValidateInfer(spans)
     if (first !== null) return first
 
-    console.error(
-      `[CustomOpenAIExtractionProvider:${this._displayName}] Context inference failed, retrying`,
-    )
+    console.error(`${this._logTag} Context inference failed, retrying`)
     const retry = await this._callAndValidateInfer(spans)
     if (retry !== null) return retry
 
-    console.error(
-      `[CustomOpenAIExtractionProvider:${this._displayName}] Context inference retry failed, returning empty`,
-    )
+    console.error(`${this._logTag} Context inference retry failed, returning empty`)
     return { agendaItems: [], participants: [] }
   }
 
@@ -135,9 +133,7 @@ export class CustomOpenAIExtractionProvider implements ExtractionProvider {
     })
 
     if (!response.ok) {
-      console.error(
-        `[CustomOpenAIExtractionProvider:${this._displayName}] HTTP ${String(response.status)} on inference`,
-      )
+      console.error(`${this._logTag} HTTP ${String(response.status)} on inference`)
       return null
     }
 
@@ -183,16 +179,14 @@ export class CustomOpenAIExtractionProvider implements ExtractionProvider {
     })
 
     if (!response.ok) {
-      console.error(
-        `[CustomOpenAIExtractionProvider:${this._displayName}] HTTP ${String(response.status)}`,
-      )
+      console.error(`${this._logTag} HTTP ${String(response.status)}`)
       return null
     }
 
     const json: unknown = await response.json()
     const content = extractContent(json)
     if (content === null) {
-      console.error(`[CustomOpenAIExtractionProvider:${this._displayName}] No content in response`)
+      console.error(`${this._logTag} No content in response`)
       return null
     }
 

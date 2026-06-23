@@ -6,7 +6,7 @@
  *
  * ## Why a factory function?
  * The providers (DeepgramAsrProvider, AnthropicExtractionProvider,
- * CustomOpenAIExtractionProvider) require API keys at construction time. Those
+ * OpenAICompatibleExtractionProvider) require API keys at construction time. Those
  * keys live in SecretStorage. The factory is the single place where settings
  * are wired to secrets to produce provider instances. This keeps all key
  * handling in the main process and out of the domain core.
@@ -34,9 +34,9 @@ import {
   AnthropicExtractionProvider,
   type AnthropicExtractionProviderOptions,
 } from '../providers/AnthropicExtractionProvider'
-import { CustomOpenAIExtractionProvider } from '../providers/CustomOpenAIExtractionProvider'
 import { DeepgramAsrProvider } from '../providers/DeepgramAsrProvider'
 import { LocalAsrProvider } from '../providers/LocalAsrProvider'
+import { OpenAICompatibleExtractionProvider } from '../providers/OpenAICompatibleExtractionProvider'
 import { ModelDownloader } from '../providers/sherpa/ModelDownloader'
 
 import type { SecretStorage } from './SecretStorage'
@@ -233,7 +233,7 @@ function buildExtractionProvider(
             `Store the key via SecretStorage with the key name "${keyRef}" before building providers.`,
         )
       }
-      return new CustomOpenAIExtractionProvider({ apiKey, baseUrl, model, displayName })
+      return new OpenAICompatibleExtractionProvider({ apiKey, baseUrl, model, displayName })
     }
 
     case 'azure-openai': {
