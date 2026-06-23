@@ -296,19 +296,24 @@ export function SettingsScreen(): React.JSX.Element {
       void persistSettings({
         ...settings,
         extractionProvider: 'anthropic',
-        customOpenAI: undefined,
+        openaiCompatible: undefined,
       } as AppSettings)
     } else {
       const { baseUrl, model, displayName, keyRef } = customFields
       if (!isValidUrl(baseUrl) || model.trim().length === 0 || displayName.trim().length === 0) {
-        // Switch to custom but don't persist until fields are valid
-        setSettings({ ...settings, extractionProvider: 'openai-compatible' } as AppSettings)
+        // Show form so user can fill in fields; update local state but don't persist yet
+        // Include placeholder config so initialization won't crash
+        setSettings({
+          ...settings,
+          extractionProvider: 'openai-compatible',
+          openaiCompatible: { preset: 'custom', baseUrl, model, keyRef, displayName },
+        } as AppSettings)
         return
       }
       void persistSettings({
         ...settings,
         extractionProvider: 'openai-compatible',
-        customOpenAI: { baseUrl, model, keyRef, displayName },
+        openaiCompatible: { preset: 'custom', baseUrl, model, keyRef, displayName },
       })
     }
   }
