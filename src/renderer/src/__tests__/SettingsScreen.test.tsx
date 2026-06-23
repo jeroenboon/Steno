@@ -88,42 +88,43 @@ function setup(overrides?: Partial<typeof mockApi>): void {
 // 1. Selecting ASR provider persists via settings:set
 // ---------------------------------------------------------------------------
 
-describe('SettingsScreen — ASR provider selection', () => {
+describe('SettingsScreen — ASR provider selection (Phase 0.4 role-card)', () => {
   beforeEach(() => {
     setup()
   })
 
-  it('renders the ASR mode toggle', async () => {
+  it('renders the ASR provider role card with grouped select', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      expect(screen.getByTestId('asr-mode')).toBeDefined()
+      expect(screen.getByTestId('asr-provider-select')).toBeDefined()
     })
   })
 
-  it('shows Deepgram (cloud) as the default ASR mode', async () => {
+  it('shows Deepgram (cloud) as the default ASR selection', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      const cloud = screen.getByTestId('asr-mode-deepgram')
-      expect(cloud.checked).toBe(true)
+      const select = screen.getByTestId('asr-provider-select')
+      expect((select as HTMLSelectElement).value).toBe('deepgram')
     })
   })
 
-  it('offers a local (on-device) option that is not disabled', async () => {
+  it('offers a local (on-device) option', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      const local = screen.getByTestId('asr-mode-local-parakeet')
-      expect(local).toBeDefined()
-      expect(local.disabled).toBe(false)
+      const select = screen.getByTestId('asr-provider-select')
+      const localOption = Array.from((select as HTMLSelectElement).options).find(
+        (o) => o.value === 'local-parakeet',
+      )
+      expect(localOption).toBeDefined()
     })
   })
 
-  it('persists the ASR provider via settings:set when the local mode is selected', async () => {
+  it('persists the ASR provider via settings:set when local is selected', async () => {
     render(<SettingsScreen />)
-    await waitFor(() => screen.getByTestId('asr-mode-local-parakeet'))
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
 
-    act(() => {
-      fireEvent.click(screen.getByTestId('asr-mode-local-parakeet'))
-    })
+    const select = screen.getByTestId('asr-provider-select')
+    fireEvent.change(select, { target: { value: 'local-parakeet' } })
 
     await waitFor(() => {
       const jsonCalls = mockApi.settingsSet.mock.calls.map((c) => JSON.stringify(c[0]))
@@ -315,33 +316,32 @@ describe('SettingsScreen — custom OpenAI extraction', () => {
 // 5. Language selector persists via settings:set
 // ---------------------------------------------------------------------------
 
-describe('SettingsScreen — language selector', () => {
+describe('SettingsScreen — language selector (Phase 0.4)', () => {
   beforeEach(() => {
     setup()
   })
 
-  it('renders the language toggle', async () => {
+  it('renders the language select dropdown', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      expect(screen.getByTestId('language-mode')).toBeDefined()
+      expect(screen.getByTestId('language-select')).toBeDefined()
     })
   })
 
   it('shows the current primary language from settings', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      const nl = screen.getByTestId('language-mode-nl')
-      expect(nl.checked).toBe(true)
+      const select = screen.getByTestId('language-select')
+      expect((select as HTMLSelectElement).value).toBe('nl')
     })
   })
 
   it('calls settings:set with updated language when changed', async () => {
     render(<SettingsScreen />)
-    await waitFor(() => screen.getByTestId('language-mode-en'))
+    await waitFor(() => screen.getByTestId('language-select'))
 
-    act(() => {
-      fireEvent.click(screen.getByTestId('language-mode-en'))
-    })
+    const select = screen.getByTestId('language-select')
+    fireEvent.change(select, { target: { value: 'en' } })
 
     await waitFor(() => {
       const jsonCalls = mockApi.settingsSet.mock.calls.map((c) => JSON.stringify(c[0]))

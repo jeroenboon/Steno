@@ -1,5 +1,5 @@
 /**
- * Settings screen (item 0016).
+ * Settings screen (item 0016, refactored Phase 0.4).
  *
  * Allows the user to:
  *   - Switch ASR between Lokaal (Whisper, on-device) and Cloud (Deepgram)
@@ -8,10 +8,10 @@
  *     never stored in the settings object or sent to settings:set
  *   - Set the primary meeting language
  *
- * UX: provider choices are segmented toggles (not dropdowns) so switching
- * between local and cloud is one click. A saved key shows a positive status
- * with a "Vervangen" affordance — the value itself never round-trips back
- * (secrets are write-only, ADR 0014), so we can only show that one exists.
+ * UX: Phase 0.4 refactored provider selection from SegmentedControl to role-card
+ * pattern with grouped select. Each provider role (Audio, Notulen) shows only the
+ * selected provider's config panel (progressive disclosure), ready to scale to many
+ * providers without overwhelming the page.
  *
  * Per ADR 0003: disclosure copy (buildDisclosureCopy) is shown at the point
  * of choice whenever a cloud provider is selected.
@@ -24,7 +24,7 @@ import React, { useEffect, useState } from 'react'
 
 import { buildDisclosureCopy, computeEgressState } from '../../../shared/settings/egressState'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
-import { SegmentedControl } from '../components/SegmentedControl'
+import { ProviderRoleCard, type ProviderGroup } from '../components/ProviderRoleCard'
 import { t } from '../i18n'
 
 // ---------------------------------------------------------------------------
@@ -401,309 +401,326 @@ export function SettingsScreen(): React.JSX.Element {
 
       <section className="screen__body settings-body">
         {/* ----------------------------------------------------------------
-            ASR provider
+            ASR provider (Audio role card with grouped select)
         ---------------------------------------------------------------- */}
-        <div className="settings-section">
-          <h2 className="settings-section__heading">{t('settings.asr.heading')}</h2>
-
-          <SegmentedControl
-            name="asr-mode"
-            testId="asr-mode"
-            ariaLabel={t('settings.asr.heading')}
-            value={settings.asrProvider}
-            options={[
+        <ProviderRoleCard
+          roleTitle={t('settings.asr.heading')}
+          groups={
+            [
               {
-                value: 'local-parakeet',
-                label: t('settings.asr.mode.local'),
-                sublabel: t('settings.asr.mode.local.sub'),
+                label: t('settings.asr.group.device'),
+                options: [
+                  {
+                    value: 'local-parakeet',
+                    label: t('settings.asr.mode.local'),
+                    sublabel: t('settings.asr.mode.local.sub'),
+                  },
+                ],
               },
               {
-                value: 'deepgram',
-                label: t('settings.asr.mode.cloud'),
-                sublabel: t('settings.asr.mode.cloud.sub'),
+                label: t('settings.asr.group.cloud'),
+                options: [
+                  {
+                    value: 'deepgram',
+                    label: t('settings.asr.mode.cloud'),
+                    sublabel: t('settings.asr.mode.cloud.sub'),
+                  },
+                ],
               },
-            ]}
-            onChange={(v) => {
-              handleAsrChange(v as 'deepgram' | 'local-parakeet')
-            }}
-          />
+            ] as ProviderGroup[]
+          }
+          selectedValue={settings.asrProvider}
+          onChange={(v) => {
+            handleAsrChange(v as 'deepgram' | 'local-parakeet')
+          }}
+          configPanel={
+            isLocalAsr ? (
+              <>
+                {/* Local model card */}
+                {!modelDownloaded && (
+                  <div className="settings-model-card" data-testid="model-download-section">
+                    <div className="settings-model-card__info">
+                      <span className="settings-model-card__name">
+                        {t('settings.asr.model.name')}
+                      </span>
+                      <span className="settings-model-card__meta">
+                        {t('settings.asr.model.size')} · {t('settings.asr.model.notDownloaded')}
+                      </span>
+                    </div>
+                    {modelProgress === null ? (
+                      <button
+                        type="button"
+                        className="btn btn--primary"
+                        data-testid="download-model-btn"
+                        onClick={() => {
+                          void handleDownloadModel()
+                        }}
+                      >
+                        {t('settings.asr.model.download')}
+                      </button>
+                    ) : (
+                      <div className="settings-model-progress" data-testid="model-progress">
+                        <progress
+                          value={modelProgress.received}
+                          max={modelProgress.total}
+                          aria-label={t('settings.asr.model.downloading')}
+                        />
+                        <span>
+                          {modelProgress.total > 0
+                            ? `${String(Math.round((modelProgress.received / modelProgress.total) * 100))}%`
+                            : '0%'}
+                        </span>
+                      </div>
+                    )}
+                    {modelError !== null && (
+                      <p className="form-error" role="alert">
+                        {modelError}
+                      </p>
+                    )}
+                  </div>
+                )}
 
-          {/* Disclosure copy for ASR */}
-          <p data-testid="asr-disclosure" className="settings-disclosure">
-            <span className="settings-disclosure__label">
-              {t('settings.disclosure.audio.label')}
-            </span>{' '}
-            {disclosure.audioDisclosure}
-          </p>
-
-          {/* Local model card */}
-          {isLocalAsr && !modelDownloaded && (
-            <div className="settings-model-card" data-testid="model-download-section">
-              <div className="settings-model-card__info">
-                <span className="settings-model-card__name">{t('settings.asr.model.name')}</span>
-                <span className="settings-model-card__meta">
-                  {t('settings.asr.model.size')} · {t('settings.asr.model.notDownloaded')}
-                </span>
-              </div>
-              {modelProgress === null ? (
-                <button
-                  type="button"
-                  className="btn btn--primary"
-                  data-testid="download-model-btn"
-                  onClick={() => {
-                    void handleDownloadModel()
-                  }}
-                >
-                  {t('settings.asr.model.download')}
-                </button>
-              ) : (
-                <div className="settings-model-progress" data-testid="model-progress">
-                  <progress
-                    value={modelProgress.received}
-                    max={modelProgress.total}
-                    aria-label={t('settings.asr.model.downloading')}
-                  />
-                  <span>
-                    {modelProgress.total > 0
-                      ? `${String(Math.round((modelProgress.received / modelProgress.total) * 100))}%`
-                      : '0%'}
-                  </span>
-                </div>
-              )}
-              {modelError !== null && (
-                <p className="form-error" role="alert">
-                  {modelError}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Local model installed */}
-          {isLocalAsr && modelDownloaded && (
-            <div
-              className="settings-model-card settings-model-card--installed"
-              data-testid="model-installed-section"
-            >
-              <div className="settings-model-card__info">
-                <span className="settings-model-card__name">{t('settings.asr.model.name')}</span>
-                <span className="settings-model-card__meta">{t('settings.asr.model.size')}</span>
-              </div>
-              <span className="settings-model-card__badge">
-                {t('settings.asr.model.installed')}
-              </span>
-            </div>
-          )}
-
-          {/* Deepgram key entry (cloud ASR) */}
-          {!isLocalAsr && (
-            <KeyField
-              idBase="deepgram"
-              label={t('settings.asr.key.label')}
-              placeholder={t('settings.asr.key.placeholder')}
-              present={deepgramKeyPresent}
-              editing={deepgramKeyEditing}
-              value={deepgramKeyEntry}
-              saveState={deepgramKeySave}
-              testIdInput="deepgram-key-input"
-              testIdSave="save-deepgram-key"
-              testIdMissing="deepgram-key-missing"
-              missingText={t('settings.asr.key.missing')}
-              onChange={(v) => {
-                setDeepgramKeyEntry(v)
-                if (deepgramKeySave === 'saved') setDeepgramKeySave('idle')
-              }}
-              onSave={() => {
-                void handleSaveDeepgramKey()
-              }}
-              onReplace={() => {
-                setDeepgramKeyEditing(true)
-              }}
-              onCancel={() => {
-                setDeepgramKeyEditing(false)
-                setDeepgramKeyEntry('')
-              }}
-            />
-          )}
-        </div>
+                {/* Local model installed */}
+                {modelDownloaded && (
+                  <div
+                    className="settings-model-card settings-model-card--installed"
+                    data-testid="model-installed-section"
+                  >
+                    <div className="settings-model-card__info">
+                      <span className="settings-model-card__name">
+                        {t('settings.asr.model.name')}
+                      </span>
+                      <span className="settings-model-card__meta">
+                        {t('settings.asr.model.size')}
+                      </span>
+                    </div>
+                    <span className="settings-model-card__badge">
+                      {t('settings.asr.model.installed')}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : (
+              /* Deepgram key entry */
+              <KeyField
+                idBase="deepgram"
+                label={t('settings.asr.key.label')}
+                placeholder={t('settings.asr.key.placeholder')}
+                present={deepgramKeyPresent}
+                editing={deepgramKeyEditing}
+                value={deepgramKeyEntry}
+                saveState={deepgramKeySave}
+                testIdInput="deepgram-key-input"
+                testIdSave="save-deepgram-key"
+                testIdMissing="deepgram-key-missing"
+                missingText={t('settings.asr.key.missing')}
+                onChange={(v) => {
+                  setDeepgramKeyEntry(v)
+                  if (deepgramKeySave === 'saved') setDeepgramKeySave('idle')
+                }}
+                onSave={() => {
+                  void handleSaveDeepgramKey()
+                }}
+                onReplace={() => {
+                  setDeepgramKeyEditing(true)
+                }}
+                onCancel={() => {
+                  setDeepgramKeyEditing(false)
+                  setDeepgramKeyEntry('')
+                }}
+              />
+            )
+          }
+          disclosure={
+            <p data-testid="asr-disclosure" className="settings-disclosure">
+              <span className="settings-disclosure__label">
+                {t('settings.disclosure.audio.label')}
+              </span>{' '}
+              {disclosure.audioDisclosure}
+            </p>
+          }
+          testId="asr-provider-select"
+        />
 
         {/* ----------------------------------------------------------------
-            Extraction provider
+            Extraction provider (Notulen role card with grouped select)
         ---------------------------------------------------------------- */}
-        <div className="settings-section">
-          <h2 className="settings-section__heading">{t('settings.extraction.heading')}</h2>
-
-          <SegmentedControl
-            name="extraction-mode"
-            testId="extraction-mode"
-            ariaLabel={t('settings.extraction.heading')}
-            value={settings.extractionProvider}
-            options={[
+        <ProviderRoleCard
+          roleTitle={t('settings.extraction.heading')}
+          groups={
+            [
               {
-                value: 'anthropic',
-                label: t('settings.extraction.mode.anthropic'),
-                sublabel: t('settings.extraction.mode.anthropic.sub'),
+                label: t('settings.extraction.group.cloud'),
+                options: [
+                  {
+                    value: 'anthropic',
+                    label: t('settings.extraction.mode.anthropic'),
+                    sublabel: t('settings.extraction.mode.anthropic.sub'),
+                  },
+                  {
+                    value: 'openai-compatible',
+                    label: t('settings.extraction.mode.custom'),
+                    sublabel: t('settings.extraction.mode.custom.sub'),
+                  },
+                ],
               },
-              {
-                value: 'custom-openai',
-                label: t('settings.extraction.mode.custom'),
-                sublabel: t('settings.extraction.mode.custom.sub'),
-              },
-            ]}
-            onChange={(v) => {
-              handleExtractionChange(v as 'anthropic' | 'custom-openai')
-            }}
-          />
-
-          {/* Disclosure copy for extraction */}
-          <p data-testid="extraction-disclosure" className="settings-disclosure">
-            <span className="settings-disclosure__label">
-              {t('settings.disclosure.notes.label')}
-            </span>{' '}
-            {disclosure.notesDisclosure}
-          </p>
-
-          {/* Anthropic key entry */}
-          {!isCustomOpenAI && (
-            <KeyField
-              idBase="anthropic"
-              label={t('settings.extraction.anthropic.key.label')}
-              placeholder={t('settings.extraction.anthropic.key.placeholder')}
-              present={anthropicKeyPresent}
-              editing={anthropicKeyEditing}
-              value={anthropicKeyEntry}
-              saveState={anthropicKeySave}
-              testIdInput="anthropic-key-input"
-              testIdSave="save-anthropic-key"
-              testIdMissing="anthropic-key-missing"
-              missingText={t('settings.extraction.anthropic.key.missing')}
-              onChange={(v) => {
-                setAnthropicKeyEntry(v)
-                if (anthropicKeySave === 'saved') setAnthropicKeySave('idle')
-              }}
-              onSave={() => {
-                void handleSaveAnthropicKey()
-              }}
-              onReplace={() => {
-                setAnthropicKeyEditing(true)
-              }}
-              onCancel={() => {
-                setAnthropicKeyEditing(false)
-                setAnthropicKeyEntry('')
-              }}
-            />
-          )}
-
-          {/* Custom OpenAI fields */}
-          {isCustomOpenAI && (
-            <div className="settings-custom-openai">
-              <div className="form-group">
-                <label htmlFor="custom-openai-base-url" className="form-label">
-                  {t('settings.custom.baseUrl.label')}
-                </label>
-                <input
-                  id="custom-openai-base-url"
-                  data-testid="custom-openai-base-url"
-                  type="url"
-                  className={`form-input${customErrors.baseUrl !== undefined ? ' form-input--error' : ''}`}
-                  placeholder={t('settings.custom.baseUrl.placeholder')}
-                  value={customFields.baseUrl}
-                  onChange={(e) => {
-                    setCustomFields((f) => ({ ...f, baseUrl: e.currentTarget.value }))
-                    setCustomErrors((err) => ({ ...err, baseUrl: undefined }))
-                  }}
-                />
-                {customErrors.baseUrl !== undefined && (
-                  <p className="form-error">{customErrors.baseUrl}</p>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="custom-openai-model" className="form-label">
-                  {t('settings.custom.model.label')}
-                </label>
-                <input
-                  id="custom-openai-model"
-                  data-testid="custom-openai-model"
-                  type="text"
-                  className={`form-input${customErrors.model !== undefined ? ' form-input--error' : ''}`}
-                  placeholder={t('settings.custom.model.placeholder')}
-                  value={customFields.model}
-                  onChange={(e) => {
-                    setCustomFields((f) => ({ ...f, model: e.currentTarget.value }))
-                    setCustomErrors((err) => ({ ...err, model: undefined }))
-                  }}
-                />
-                {customErrors.model !== undefined && (
-                  <p className="form-error">{customErrors.model}</p>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="custom-openai-display-name" className="form-label">
-                  {t('settings.custom.displayName.label')}
-                </label>
-                <input
-                  id="custom-openai-display-name"
-                  data-testid="custom-openai-display-name"
-                  type="text"
-                  className={`form-input${customErrors.displayName !== undefined ? ' form-input--error' : ''}`}
-                  placeholder={t('settings.custom.displayName.placeholder')}
-                  value={customFields.displayName}
-                  onChange={(e) => {
-                    setCustomFields((f) => ({ ...f, displayName: e.currentTarget.value }))
-                    setCustomErrors((err) => ({ ...err, displayName: undefined }))
-                  }}
-                />
-                {customErrors.displayName !== undefined && (
-                  <p className="form-error">{customErrors.displayName}</p>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="custom-openai-key" className="form-label">
-                  {t('settings.custom.key.label')}
-                </label>
-                <div className="form-row">
+            ] as ProviderGroup[]
+          }
+          selectedValue={settings.extractionProvider}
+          onChange={(v) => {
+            handleExtractionChange(v as 'anthropic' | 'openai-compatible')
+          }}
+          configPanel={
+            !isCustomOpenAI ? (
+              /* Anthropic key entry */
+              <KeyField
+                idBase="anthropic"
+                label={t('settings.extraction.anthropic.key.label')}
+                placeholder={t('settings.extraction.anthropic.key.placeholder')}
+                present={anthropicKeyPresent}
+                editing={anthropicKeyEditing}
+                value={anthropicKeyEntry}
+                saveState={anthropicKeySave}
+                testIdInput="anthropic-key-input"
+                testIdSave="save-anthropic-key"
+                testIdMissing="anthropic-key-missing"
+                missingText={t('settings.extraction.anthropic.key.missing')}
+                onChange={(v) => {
+                  setAnthropicKeyEntry(v)
+                  if (anthropicKeySave === 'saved') setAnthropicKeySave('idle')
+                }}
+                onSave={() => {
+                  void handleSaveAnthropicKey()
+                }}
+                onReplace={() => {
+                  setAnthropicKeyEditing(true)
+                }}
+                onCancel={() => {
+                  setAnthropicKeyEditing(false)
+                  setAnthropicKeyEntry('')
+                }}
+              />
+            ) : (
+              /* Custom OpenAI fields */
+              <div className="settings-custom-openai">
+                <div className="form-group">
+                  <label htmlFor="custom-openai-base-url" className="form-label">
+                    {t('settings.custom.baseUrl.label')}
+                  </label>
                   <input
-                    id="custom-openai-key"
-                    data-testid="custom-openai-key"
-                    type="password"
-                    className="form-input"
-                    placeholder={t('settings.custom.key.placeholder')}
-                    value={customKeyEntry}
-                    autoComplete="off"
+                    id="custom-openai-base-url"
+                    data-testid="custom-openai-base-url"
+                    type="url"
+                    className={`form-input${customErrors.baseUrl !== undefined ? ' form-input--error' : ''}`}
+                    placeholder={t('settings.custom.baseUrl.placeholder')}
+                    value={customFields.baseUrl}
                     onChange={(e) => {
-                      setCustomKeyEntry(e.currentTarget.value)
-                      if (customKeySave === 'saved') setCustomKeySave('idle')
+                      setCustomFields((f) => ({ ...f, baseUrl: e.currentTarget.value }))
+                      setCustomErrors((err) => ({ ...err, baseUrl: undefined }))
                     }}
                   />
-                  <button
-                    type="button"
-                    data-testid="save-custom-key"
-                    className="btn btn--secondary"
-                    disabled={customKeySave === 'saving' || customKeyEntry.trim().length === 0}
-                    onClick={() => {
-                      void handleSaveCustomKey()
-                    }}
-                  >
-                    {customKeySave === 'saved'
-                      ? t('settings.custom.key.saved')
-                      : t('settings.custom.key.save')}
-                  </button>
+                  {customErrors.baseUrl !== undefined && (
+                    <p className="form-error">{customErrors.baseUrl}</p>
+                  )}
                 </div>
-              </div>
 
-              <button
-                type="button"
-                data-testid="save-custom-openai"
-                className="btn btn--primary"
-                onClick={handleSaveCustomOpenAI}
-              >
-                {t('settings.custom.save')}
-              </button>
-            </div>
-          )}
-        </div>
+                <div className="form-group">
+                  <label htmlFor="custom-openai-model" className="form-label">
+                    {t('settings.custom.model.label')}
+                  </label>
+                  <input
+                    id="custom-openai-model"
+                    data-testid="custom-openai-model"
+                    type="text"
+                    className={`form-input${customErrors.model !== undefined ? ' form-input--error' : ''}`}
+                    placeholder={t('settings.custom.model.placeholder')}
+                    value={customFields.model}
+                    onChange={(e) => {
+                      setCustomFields((f) => ({ ...f, model: e.currentTarget.value }))
+                      setCustomErrors((err) => ({ ...err, model: undefined }))
+                    }}
+                  />
+                  {customErrors.model !== undefined && (
+                    <p className="form-error">{customErrors.model}</p>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="custom-openai-display-name" className="form-label">
+                    {t('settings.custom.displayName.label')}
+                  </label>
+                  <input
+                    id="custom-openai-display-name"
+                    data-testid="custom-openai-display-name"
+                    type="text"
+                    className={`form-input${customErrors.displayName !== undefined ? ' form-input--error' : ''}`}
+                    placeholder={t('settings.custom.displayName.placeholder')}
+                    value={customFields.displayName}
+                    onChange={(e) => {
+                      setCustomFields((f) => ({ ...f, displayName: e.currentTarget.value }))
+                      setCustomErrors((err) => ({ ...err, displayName: undefined }))
+                    }}
+                  />
+                  {customErrors.displayName !== undefined && (
+                    <p className="form-error">{customErrors.displayName}</p>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="custom-openai-key" className="form-label">
+                    {t('settings.custom.key.label')}
+                  </label>
+                  <div className="form-row">
+                    <input
+                      id="custom-openai-key"
+                      data-testid="custom-openai-key"
+                      type="password"
+                      className="form-input"
+                      placeholder={t('settings.custom.key.placeholder')}
+                      value={customKeyEntry}
+                      autoComplete="off"
+                      onChange={(e) => {
+                        setCustomKeyEntry(e.currentTarget.value)
+                        if (customKeySave === 'saved') setCustomKeySave('idle')
+                      }}
+                    />
+                    <button
+                      type="button"
+                      data-testid="save-custom-key"
+                      className="btn btn--secondary"
+                      disabled={customKeySave === 'saving' || customKeyEntry.trim().length === 0}
+                      onClick={() => {
+                        void handleSaveCustomKey()
+                      }}
+                    >
+                      {customKeySave === 'saved'
+                        ? t('settings.custom.key.saved')
+                        : t('settings.custom.key.save')}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  data-testid="save-custom-openai"
+                  className="btn btn--primary"
+                  onClick={handleSaveCustomOpenAI}
+                >
+                  {t('settings.custom.save')}
+                </button>
+              </div>
+            )
+          }
+          disclosure={
+            <p data-testid="extraction-disclosure" className="settings-disclosure">
+              <span className="settings-disclosure__label">
+                {t('settings.disclosure.notes.label')}
+              </span>{' '}
+              {disclosure.notesDisclosure}
+            </p>
+          }
+          testId="extraction-provider-select"
+        />
 
         {/* ----------------------------------------------------------------
             Primary language
@@ -711,19 +728,17 @@ export function SettingsScreen(): React.JSX.Element {
         <div className="settings-section">
           <h2 className="settings-section__heading">{t('settings.language.heading')}</h2>
 
-          <SegmentedControl
-            name="language-mode"
-            testId="language-mode"
-            ariaLabel={t('draft.language.label')}
+          <select
+            className="settings-language-select"
             value={settings.primaryLanguage}
-            options={[
-              { value: 'nl', label: t('draft.language.nl') },
-              { value: 'en', label: t('draft.language.en') },
-            ]}
-            onChange={(v) => {
-              handleLanguageChange(v)
+            onChange={(e) => {
+              handleLanguageChange(e.currentTarget.value)
             }}
-          />
+            data-testid="language-select"
+          >
+            <option value="nl">{t('draft.language.nl')}</option>
+            <option value="en">{t('draft.language.en')}</option>
+          </select>
         </div>
       </section>
     </main>

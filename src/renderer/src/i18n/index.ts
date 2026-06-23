@@ -116,10 +116,13 @@ const nl = {
   'screen.settings.subtitle': 'Kies providers, voer API-sleutels in en stel de taal in.',
 
   'settings.asr.heading': 'Spraakherkenning (ASR)',
-  // ASR mode toggle (Lokaal / Cloud)
+  // ASR provider groups (Phase 0.4)
+  'settings.asr.group.device': 'Op dit apparaat',
+  'settings.asr.group.cloud': 'Cloud',
+  // ASR mode labels
   'settings.asr.mode.local': 'Lokaal',
   'settings.asr.mode.local.sub': 'Whisper, on-device',
-  'settings.asr.mode.cloud': 'Cloud',
+  'settings.asr.mode.cloud': 'Deepgram',
   'settings.asr.mode.cloud.sub': 'Deepgram',
   // Local model card
   'settings.asr.model.name': 'Whisper small',
@@ -135,7 +138,9 @@ const nl = {
   'settings.asr.key.missing': 'Geen sleutel ingesteld. Vul je Deepgram API-sleutel in.',
 
   'settings.extraction.heading': 'Extractieprovider (LLM)',
-  // Extraction provider toggle (Anthropic / Aangepast)
+  // Extraction provider groups (Phase 0.4)
+  'settings.extraction.group.cloud': 'Cloud',
+  // Extraction provider labels
   'settings.extraction.mode.anthropic': 'Anthropic',
   'settings.extraction.mode.anthropic.sub': 'Cloud',
   'settings.extraction.mode.custom': 'Aangepast',
