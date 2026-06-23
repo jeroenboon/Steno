@@ -21,6 +21,12 @@ module.exports = {
           glow: 'var(--color-accent-glow)',
           muted: 'var(--color-accent-muted)',
         },
+        action: {
+          DEFAULT: 'var(--color-action)',
+          hover: 'var(--color-action-hover)',
+          wash: 'var(--color-action-wash)',
+          on: 'var(--color-on-action)',
+        },
         live: 'var(--color-live)',
         confirmed: 'var(--color-confirmed)',
         proposed: 'var(--color-proposed)',
@@ -62,6 +68,7 @@ module.exports = {
         md: 'var(--shadow-md)',
         lg: 'var(--shadow-lg)',
         accent: 'var(--shadow-accent)',
+        float: 'var(--shadow-float)',
       },
       transitionTimingFunction: {
         'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',

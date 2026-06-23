@@ -27,13 +27,40 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
-  background-color: var(--color-base);
   color: var(--color-text-primary);
   font-family: var(--font-body);
   font-size: 13px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* The watercolor wash: warm ivory crown settling to a barely-there moss at the
+ * foot. --color-base is the solid fallback. Lives on body so it never scrolls. */
+body {
+  background-color: var(--color-base);
+  background-image:
+    radial-gradient(
+      140% 90% at 50% -20%,
+      var(--wash-crown) 0%,
+      var(--color-base) 46%,
+      transparent 100%
+    ),
+    radial-gradient(120% 70% at 50% 118%, var(--wash-moss) 0%, transparent 62%);
+  background-attachment: fixed;
+}
+
+/* Diffuse paper grain over the wash. Sits behind the app (z-index 0); opaque
+ * surfaces cover it, so text never rides on top of the texture. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--wash-grain-opacity);
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
 /* --- App shell + binding seam ---
@@ -43,10 +70,11 @@ body,
 
 .app-shell {
   position: relative;
+  z-index: 1; /* above the paper grain (body::before, z-index 0) */
   display: flex;
   flex-direction: column;
   height: 100%;
-  background-color: var(--color-base);
+  /* Transparent so the watercolor wash on body shows through. */
   padding-left: var(--seam-width);
 }
 
@@ -58,7 +86,7 @@ body,
   bottom: 0;
   width: var(--seam-width);
   background-color: var(--color-accent);
-  opacity: 0.55;
+  opacity: 0.7;
   z-index: 2;
 }
 
@@ -70,17 +98,28 @@ body,
   justify-content: space-between;
   height: var(--chrome-height);
   padding: 0 var(--space-6);
-  background-color: var(--color-surface-0);
-  border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  /* Borderless: a gradient veil fades to transparent so content below slides
+   * seamlessly underneath without hitting a hard divider. */
+  background: linear-gradient(
+    to bottom,
+    var(--color-base) 0%,
+    rgba(246, 241, 231, 0.92) 55%,
+    rgba(246, 241, 231, 0) 100%
+  );
+  backdrop-filter: blur(2px);
 }
 
-.app-chrome__name {
-  font-family: var(--font-serif);
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: var(--color-text-accent);
+.app-wordmark {
+  height: 20px;
+  width: auto;
+  display: block;
+  user-select: none;
+  /* The wordmark is the brand, not an action: don't let it pick up hover/active. */
+  pointer-events: none;
 }
 
 /* --- Navigation tabs (ink is the interaction colour) --- */
@@ -109,18 +148,11 @@ body,
   color: var(--color-text-primary);
 }
 
-/* Active tab: ink, underlined, with a small kraft tick. */
+/* Active tab: ink label on a Myrtle underline (the selected-state colour). */
 .app-nav__tab--active {
   color: var(--color-text-primary);
   font-weight: 600;
-  border-bottom-color: var(--color-text-primary);
-}
-
-.app-nav__tab--active::before {
-  content: '✓';
-  margin-right: var(--space-1);
-  color: var(--color-accent);
-  font-size: 11px;
+  border-bottom-color: var(--color-action);
 }
 
 /* Disabled tab (Live when no meeting, Draft while meeting is active) */
@@ -171,29 +203,16 @@ body,
 }
 
 /* --- Screens + paper grid ---
- * Meeting work (draft/live/review) sits on dotted paper; the grid scrolls
- * with the content like a real page. Settings gets squared paper to read as
- * "configuration". The grid is a faint hairline tint and never competes.
+ * Meeting work (draft/live/review) and the overview stay grid-free: the
+ * watercolor wash is the only floor, to maximise calm. The grid appears only on
+ * Settings (a faint pencil dot-grid) to signal "technical mode". See the Final
+ * Master Spec in docs/design/cahier-design-brief.md.
  */
 
 .screen {
   height: 100%;
   overflow-y: auto;
   padding: var(--space-8) var(--space-10);
-}
-
-.screen--draft,
-.screen--live,
-.screen--review {
-  background-image: radial-gradient(var(--grid-line) 1.1px, transparent 1.2px);
-  background-size: var(--grid-size) var(--grid-size);
-  background-position: var(--space-4) var(--space-4);
-}
-
-.screen--home {
-  background-image: radial-gradient(rgba(30, 27, 23, 0.14) 1.5px, transparent 1.6px);
-  background-size: var(--grid-size) var(--grid-size);
-  background-position: var(--space-4) var(--space-4);
 }
 
 /* --- Home screen --- */
@@ -387,17 +406,20 @@ body,
   margin: 0;
 }
 
+/* Settings: faint pencil dot-grid (~10% pencil) signals "configuration". */
 .screen--settings {
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(154, 147, 136, 0.1) 1px, transparent 1.2px);
   background-size: var(--grid-size) var(--grid-size);
   background-position: var(--space-4) var(--space-4);
 }
 
-/* Live recording signal: a narrow ink-red wash bleeds in from the seam edge.
- * Only shown when capture is active (screen--live--recording modifier class).
- * LiveScreen adds this modifier when micPermission === 'granted'.
+/* Live recording signal at the page edge.
+ * Red is restricted to the recording dot in the top chrome (Final Master Spec),
+ * so in-page liveness is a calm KRAFT breath bleeding in from the binding seam,
+ * not red. It marks "this page is live" off the same binding the seam marks,
+ * without face-lighting the user on a call.
+ * Shown only when capture is active (screen--live--recording modifier, added by
+ * LiveScreen when micPermission === 'granted').
  */
 .screen--live--recording::before {
   content: '';
@@ -407,17 +429,17 @@ body,
   bottom: 0;
   width: 96px;
   pointer-events: none;
-  background: linear-gradient(to right, rgba(168, 50, 45, 0.22), rgba(168, 50, 45, 0) 100%);
+  background: linear-gradient(to right, rgba(166, 121, 76, 0.16), rgba(166, 121, 76, 0) 100%);
   animation: live-bleed var(--duration-slow) var(--ease-in-out) infinite alternate;
   z-index: 1;
 }
 
 @keyframes live-bleed {
   from {
-    opacity: 0.75;
+    opacity: 0.85;
   }
   to {
-    opacity: 0.35;
+    opacity: 0.4;
   }
 }
 
@@ -747,32 +769,41 @@ body,
 
 /* --- Buttons (ink is the action colour) --- */
 
+/* Primary = the Fountain Pen: solid Myrtle fill, paper text. */
 .btn {
   font-family: var(--font-body);
   font-size: 13px;
   font-weight: 500;
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-text-primary);
-  background-color: var(--color-text-primary);
-  color: var(--color-text-inverted);
+  border: 1px solid var(--color-action);
+  background-color: var(--color-action);
+  color: var(--color-on-action);
   cursor: pointer;
   transition:
     background-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .btn:hover {
-  background-color: #000;
+  background-color: var(--color-action-hover);
+  border-color: var(--color-action-hover);
+  box-shadow: var(--shadow-sm);
 }
 
+/* Secondary/ghost = neutral ink outline, no fill. */
 .btn--secondary {
   background-color: transparent;
+  border-color: var(--color-border);
   color: var(--color-text-primary);
 }
 
 .btn--secondary:hover {
   background-color: var(--color-surface-2);
+  border-color: var(--color-text-primary);
+  box-shadow: none;
 }
 
 /* --- No-key banner (attention without alarm: umber, not red) --- */
@@ -1572,8 +1603,8 @@ body,
   flex-wrap: wrap;
   padding: var(--space-3) var(--space-4);
   background-color: var(--color-surface-1);
-  border: 1px solid var(--color-border-dim);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-float);
 }
 
 .settings-model-card__info {
@@ -1633,8 +1664,8 @@ body,
   gap: var(--space-3);
   padding: var(--space-4);
   background-color: var(--color-surface-1);
-  border: 1px solid var(--color-border-dim);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-float);
   margin-bottom: var(--space-6);
 }
 
@@ -1690,9 +1721,9 @@ body,
   font-weight: 500;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-text-primary);
-  background-color: var(--color-text-primary);
-  color: var(--color-text-inverted);
+  border: 1px solid var(--color-action);
+  background-color: var(--color-action);
+  color: var(--color-on-action);
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;

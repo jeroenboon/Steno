@@ -1,0 +1,1102 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Steno · Cahier — Final Master Spec (exploratie)</title>
+
+    <!--
+      Standalone design exploration for the "Cahier" Final Master Specification.
+      This is NOT app code. It is a single-file mockup to look at and react to
+      before tokens.css / app.css / components are rewritten. Fonts load from the
+      Google CDN here for convenience; the real Electron app self-hosts them.
+
+      Three screens are shown via the top nav: Live (the heart), Instellingen
+      (technical dot-grid), Overzicht (the home list). The boldest decision is
+      visible everywhere: Myrtle green is now the Fountain Pen action colour.
+    -->
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* =====================================================================
+       * TOKENS — Cahier, Final Master Spec
+       * ===================================================================== */
+      :root {
+        /* Canvas */
+        --bg-canvas: #f6f1e7;
+        --bg-raised: #fbf7ef;
+        --bg-recessed: #ece4d5;
+        --bg-recessed-deep: #e3d9c6;
+
+        /* Ink */
+        --text-ink: #1e1b17;
+        --text-pencil: #9a9388;
+        --text-warm: #6b6457;
+
+        /* Identity + accents */
+        --brand-kraft: #a6794c;
+        --accent-myrtle: #2f4f3e;
+        --accent-myrtle-deep: #25402f;
+        --accent-myrtle-wash: rgba(47, 79, 62, 0.07);
+        --signal-red: #a8322d;
+
+        /* Hairlines */
+        --hairline: rgba(30, 27, 23, 0.1);
+        --hairline-dim: rgba(30, 27, 23, 0.06);
+
+        /* Shadow — Myrtle-tinted float, no hard borders */
+        --shadow-float: 0 8px 24px rgba(47, 79, 62, 0.08);
+        --shadow-soft: 0 2px 8px rgba(47, 79, 62, 0.05);
+
+        /* Type */
+        --font-display: 'Fraunces', Georgia, serif;
+        --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+        --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+        /* 8px baseline grid */
+        --s1: 4px;
+        --s2: 8px;
+        --s3: 12px;
+        --s4: 16px;
+        --s6: 24px;
+        --s8: 32px;
+        --s10: 40px;
+        --s12: 48px;
+        --s16: 64px;
+
+        --radius-sm: 4px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+
+        --ease: cubic-bezier(0.16, 1, 0.3, 1);
+        --measure: 680px;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+
+      body {
+        font-family: var(--font-body);
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--text-ink);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+        /* THE WATERCOLOR WASH: warm ivory top, faint moss settling at the foot. */
+        background:
+          radial-gradient(
+            140% 90% at 50% -20%,
+            #fcf9f1 0%,
+            #f6f1e7 46%,
+            rgba(246, 241, 231, 0) 100%
+          ),
+          radial-gradient(120% 70% at 50% 118%, rgba(47, 79, 62, 0.08) 0%, rgba(47, 79, 62, 0) 62%),
+          var(--bg-canvas);
+        background-attachment: fixed;
+      }
+
+      /* Diffuse paper grain, very faint, sits over the wash. */
+      body::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        opacity: 0.035;
+        mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+      }
+
+      /* The left binding seam — kraft, 1px, the only physical motif. */
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 1px;
+        z-index: 60;
+        background: var(--brand-kraft);
+        opacity: 0.7;
+      }
+
+      .app {
+        position: relative;
+        z-index: 1;
+        min-height: 100%;
+        padding-left: 1px; /* clear the seam */
+      }
+
+      /* =====================================================================
+       * TOP CHROME — borderless, sticky, fades to transparent
+       * ===================================================================== */
+      .chrome {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: var(--s4);
+        padding: var(--s4) var(--s10);
+        /* No border. A gradient veil so content slides under cleanly. */
+        background: linear-gradient(
+          to bottom,
+          var(--bg-canvas) 0%,
+          rgba(246, 241, 231, 0.92) 55%,
+          rgba(246, 241, 231, 0) 100%
+        );
+        backdrop-filter: blur(2px);
+      }
+
+      /* Wordmark: pencil -> ink, the brand gradient. Kraft tail. */
+      .wordmark {
+        font-family: var(--font-display);
+        font-weight: 500;
+        font-size: 22px;
+        letter-spacing: -0.02em;
+        user-select: none;
+        background: linear-gradient(
+          100deg,
+          var(--text-pencil) 0%,
+          var(--text-ink) 52%,
+          var(--brand-kraft) 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        line-height: 1;
+      }
+
+      .nav {
+        display: flex;
+        justify-content: center;
+        gap: var(--s2);
+      }
+
+      .nav button {
+        font-family: var(--font-body);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-warm);
+        background: none;
+        border: none;
+        padding: var(--s2) var(--s3);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        position: relative;
+        transition: color 0.15s var(--ease);
+      }
+
+      .nav button:hover {
+        color: var(--text-ink);
+      }
+
+      .nav button[aria-current='page'] {
+        color: var(--text-ink);
+        font-weight: 600;
+      }
+
+      .nav button[aria-current='page']::after {
+        content: '';
+        position: absolute;
+        left: var(--s3);
+        right: var(--s3);
+        bottom: 2px;
+        height: 2px;
+        border-radius: 2px;
+        background: var(--accent-myrtle);
+      }
+
+      .nav button:disabled {
+        opacity: 0.32;
+        cursor: not-allowed;
+      }
+
+      .nav .live-dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        margin-left: 6px;
+        border-radius: 50%;
+        background: var(--signal-red);
+        vertical-align: middle;
+        animation: pulse 1.4s var(--ease) infinite alternate;
+      }
+
+      /* Egress badge — literal mono status chip, the one place red lives. */
+      .chrome__right {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .egress {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--s2);
+        padding: 5px var(--s3);
+        border-radius: 999px;
+        background: var(--bg-raised);
+        box-shadow: inset 0 0 0 1px var(--hairline);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--text-warm);
+        white-space: nowrap;
+        user-select: none;
+      }
+
+      .egress .rec {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--signal-red);
+        animation: pulse 1.4s var(--ease) infinite alternate;
+      }
+
+      @keyframes pulse {
+        from {
+          opacity: 1;
+        }
+        to {
+          opacity: 0.35;
+        }
+      }
+
+      /* =====================================================================
+       * SCREEN SCAFFOLD
+       * ===================================================================== */
+      .screen {
+        display: none;
+        padding: var(--s8) var(--s10) var(--s16);
+        animation: rise 0.4s var(--ease) both;
+      }
+      .screen.is-active {
+        display: block;
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+      }
+
+      .h1 {
+        font-family: var(--font-display);
+        font-weight: 500;
+        font-size: 32px;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        margin: 0;
+        color: var(--text-ink);
+      }
+      .h2 {
+        font-family: var(--font-display);
+        font-weight: 500;
+        font-size: 24px;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        margin: 0;
+      }
+      .eyebrow {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-pencil);
+        margin: 0 0 var(--s3);
+      }
+      .meta {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-pencil);
+      }
+
+      /* =====================================================================
+       * BUTTONS — Myrtle is the Fountain Pen (primary). Ink is neutral.
+       * ===================================================================== */
+      .btn {
+        font-family: var(--font-body);
+        font-size: 13px;
+        font-weight: 500;
+        padding: var(--s2) var(--s4);
+        border-radius: var(--radius-sm);
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all 0.15s var(--ease);
+      }
+      .btn--primary {
+        background: var(--accent-myrtle);
+        color: var(--bg-canvas);
+      }
+      .btn--primary:hover {
+        background: var(--accent-myrtle-deep);
+        box-shadow: var(--shadow-soft);
+      }
+      .btn--ghost {
+        background: transparent;
+        color: var(--text-ink);
+        border-color: var(--hairline);
+      }
+      .btn--ghost:hover {
+        background: var(--bg-recessed);
+      }
+
+      /* =====================================================================
+       * LIVE — the notebook. Transcript canvas + right marginalia + leaders.
+       * ===================================================================== */
+      .live-head {
+        max-width: var(--measure);
+        margin: 0 auto var(--s8);
+      }
+      .live-head__row {
+        display: flex;
+        align-items: baseline;
+        gap: var(--s3);
+        flex-wrap: wrap;
+      }
+      .agenda-chip {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--accent-myrtle);
+        background: var(--accent-myrtle-wash);
+        padding: 2px var(--s2);
+        border-radius: 999px;
+      }
+
+      /* Two-track layout: reading column + margin track. */
+      .notebook {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, var(--measure)) minmax(220px, 320px);
+        gap: var(--s12);
+        justify-content: center;
+        align-items: start;
+      }
+
+      /* The SVG leader layer floats over the whole notebook. */
+      .leaders {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        overflow: visible;
+        z-index: 0;
+      }
+      .leaders path {
+        fill: none;
+        stroke: var(--text-pencil);
+        stroke-width: 1.25;
+        stroke-dasharray: 1 5;
+        stroke-linecap: round;
+        opacity: 0.55;
+      }
+      .leaders path.is-confirmed {
+        stroke: var(--accent-myrtle);
+        opacity: 0.5;
+      }
+
+      /* Transcript */
+      .transcript {
+        position: relative;
+        z-index: 1;
+      }
+      .turn {
+        margin-bottom: var(--s6);
+      }
+      .turn__who {
+        font-family: var(--font-body);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-warm);
+        margin-bottom: var(--s2);
+      }
+      .turn__line {
+        font-family: var(--font-mono);
+        font-size: 14px;
+        line-height: 1.7;
+        color: var(--text-ink);
+        margin: 0 0 var(--s2);
+        transition: color 0.5s var(--ease);
+      }
+      .turn__line.is-interim {
+        color: var(--text-pencil);
+      }
+      .turn__line .caret {
+        display: inline-block;
+        width: 2px;
+        height: 1em;
+        margin-left: 2px;
+        background: var(--text-pencil);
+        vertical-align: text-bottom;
+        animation: blink 1s steps(2) infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      /* Marginalia track */
+      .margin {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--s6);
+      }
+      .margin__group-label {
+        font-family: var(--font-body);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-warm);
+        margin: 0 0 var(--s3);
+      }
+
+      .card {
+        position: relative;
+        background: var(--bg-raised);
+        border-radius: var(--radius-md);
+        padding: var(--s4);
+        box-shadow: var(--shadow-float);
+        margin-bottom: var(--s3);
+        transition:
+          transform 0.2s var(--ease),
+          box-shadow 0.2s var(--ease);
+      }
+      .card:last-child {
+        margin-bottom: 0;
+      }
+
+      .card__kind {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--text-pencil);
+        margin-bottom: var(--s2);
+        display: flex;
+        align-items: center;
+        gap: var(--s2);
+      }
+      .card__text {
+        font-size: 14px;
+        line-height: 1.5;
+        margin: 0;
+      }
+
+      /* Proposed = pencil, italic, a quick note in the margin. */
+      .card--proposed .card__text {
+        color: var(--text-pencil);
+        font-style: italic;
+      }
+      /* Confirmed = inked, upright, Myrtle check. */
+      .card--confirmed {
+        box-shadow:
+          var(--shadow-float),
+          inset 0 0 0 1px rgba(47, 79, 62, 0.18);
+      }
+      .card--confirmed .card__text {
+        color: var(--text-ink);
+        font-style: normal;
+      }
+      .card__check {
+        color: var(--accent-myrtle);
+        font-weight: 600;
+      }
+
+      .card__owner {
+        margin-top: var(--s3);
+        font-size: 12px;
+        color: var(--text-warm);
+      }
+      .card__owner b {
+        color: var(--accent-myrtle);
+        font-weight: 500;
+      }
+
+      .card__actions {
+        display: flex;
+        gap: var(--s2);
+        margin-top: var(--s3);
+        opacity: 0;
+        transition: opacity 0.15s var(--ease);
+      }
+      .card:hover .card__actions {
+        opacity: 1;
+      }
+      .icon-btn {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--hairline);
+        background: var(--bg-canvas);
+        color: var(--text-warm);
+        cursor: pointer;
+        font-size: 13px;
+        transition: all 0.15s var(--ease);
+      }
+      .icon-btn:hover {
+        border-color: var(--accent-myrtle);
+        color: var(--accent-myrtle);
+      }
+      .icon-btn--dismiss:hover {
+        border-color: var(--text-ink);
+        color: var(--text-ink);
+      }
+
+      .card.is-dismissed {
+        animation: strike-fade 0.5s var(--ease) forwards;
+      }
+      @keyframes strike-fade {
+        40% {
+          opacity: 1;
+        }
+        to {
+          opacity: 0;
+          transform: translateX(12px);
+        }
+      }
+
+      /* Control bar — floats, Myrtle-tinted shadow, no border. */
+      .controlbar {
+        max-width: var(--measure);
+        margin: var(--s12) auto 0;
+        display: flex;
+        align-items: center;
+        gap: var(--s4);
+        flex-wrap: wrap;
+        padding: var(--s4) var(--s6);
+        background: var(--bg-raised);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-float);
+      }
+      .controlbar .meta {
+        flex: 1;
+      }
+
+      /* Hold-to-confirm — friction without red. Myrtle fills L->R. */
+      .hold {
+        position: relative;
+        overflow: hidden;
+        font-family: var(--font-body);
+        font-size: 13px;
+        font-weight: 500;
+        padding: var(--s2) var(--s4);
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--hairline);
+        background: var(--bg-canvas);
+        color: var(--text-ink);
+        cursor: pointer;
+        user-select: none;
+      }
+      .hold__fill {
+        position: absolute;
+        inset: 0;
+        background: var(--accent-myrtle);
+        transform-origin: left;
+        transform: scaleX(0);
+        z-index: 0;
+      }
+      .hold.is-holding .hold__fill {
+        transition: transform 1.5s linear;
+        transform: scaleX(1);
+      }
+      .hold__label {
+        position: relative;
+        z-index: 1;
+        transition: color 0.3s var(--ease);
+      }
+      .hold.is-holding .hold__label {
+        color: var(--bg-canvas);
+      }
+      .hold.is-done .hold__label::after {
+        content: ' ✓';
+      }
+
+      /* Running summary block in the margin */
+      .summary {
+        background: var(--bg-recessed);
+        border-radius: var(--radius-md);
+        padding: var(--s4);
+      }
+      .summary p {
+        margin: var(--s2) 0 0;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text-ink);
+      }
+      .summary .disclaimer {
+        font-size: 11px;
+        font-style: italic;
+        color: var(--text-pencil);
+      }
+
+      /* =====================================================================
+       * SETTINGS — squared dot-grid says "technical mode"
+       * ===================================================================== */
+      #screen-settings {
+        background-image: radial-gradient(var(--text-pencil) 0.8px, transparent 0.9px);
+        background-size: 24px 24px;
+        background-position: 12px 12px;
+      }
+      .settings-wrap {
+        max-width: 620px;
+      }
+      .section {
+        padding: var(--s6) 0;
+        border-bottom: 1px solid var(--hairline-dim);
+      }
+      .section:last-child {
+        border-bottom: none;
+      }
+      .section h3 {
+        font-family: var(--font-body);
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0 0 var(--s4);
+      }
+      .segmented {
+        display: flex;
+        gap: var(--s1);
+        padding: var(--s1);
+        background: var(--bg-recessed);
+        border-radius: var(--radius-md);
+        max-width: 420px;
+      }
+      .segmented label {
+        flex: 1;
+        text-align: center;
+        padding: var(--s2);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-warm);
+      }
+      .segmented label small {
+        display: block;
+        font-weight: 400;
+        font-size: 11px;
+        color: var(--text-pencil);
+      }
+      .segmented input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .segmented input:checked + label,
+      .segmented label.is-on {
+        background: var(--bg-raised);
+        color: var(--text-ink);
+        box-shadow: var(--shadow-soft);
+      }
+      .field {
+        margin-top: var(--s4);
+      }
+      .field label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-warm);
+        margin-bottom: var(--s2);
+      }
+      .field input {
+        width: 100%;
+        font-family: var(--font-body);
+        font-size: 13px;
+        color: var(--text-ink);
+        background: var(--bg-recessed);
+        border: 1px solid var(--hairline);
+        border-radius: var(--radius-sm);
+        padding: var(--s2) var(--s3);
+      }
+      .field input:focus {
+        outline: 2px solid var(--accent-myrtle);
+        outline-offset: 1px;
+        border-color: transparent;
+      }
+      .disclosure {
+        margin-top: var(--s4);
+        font-size: 12px;
+        line-height: 1.55;
+        color: var(--text-warm);
+        padding: var(--s2) var(--s3);
+        background: var(--bg-raised);
+        border-left: 2px solid var(--accent-myrtle);
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      }
+
+      /* =====================================================================
+       * OVERZICHT — editorial meeting list
+       * ===================================================================== */
+      .home-wrap {
+        max-width: var(--measure);
+      }
+      .home-list {
+        list-style: none;
+        margin: var(--s6) 0 0;
+        padding: 0;
+      }
+      .home-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--s4);
+        padding: var(--s4) 0;
+        border-bottom: 1px solid var(--hairline-dim);
+        cursor: pointer;
+        transition: padding-left 0.15s var(--ease);
+      }
+      .home-row:hover {
+        padding-left: var(--s2);
+      }
+      .home-row__title {
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .home-row__meta {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--text-pencil);
+        white-space: nowrap;
+      }
+      .home-actions {
+        display: flex;
+        gap: var(--s3);
+        margin-top: var(--s6);
+      }
+
+      @media (max-width: 980px) {
+        .notebook {
+          grid-template-columns: 1fr;
+        }
+        .leaders {
+          display: none;
+        }
+        .chrome {
+          grid-template-columns: 1fr auto;
+        }
+        .nav {
+          display: none;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation-duration: 0.001ms !important;
+          transition-duration: 0.001ms !important;
+        }
+        .hold.is-holding .hold__fill {
+          transition: transform 1.5s linear !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <!-- ============================ CHROME ============================ -->
+      <header class="chrome">
+        <div class="wordmark">Steno</div>
+        <nav class="nav" aria-label="Schermen">
+          <button data-go="overzicht">Overzicht</button>
+          <button disabled>Voorbereiding</button>
+          <button data-go="live" aria-current="page">Live<span class="live-dot"></span></button>
+          <button disabled>Bekijken</button>
+          <button data-go="settings">Instellingen</button>
+        </nav>
+        <div class="chrome__right">
+          <span class="egress" title="Gegevensverwerking">
+            <span class="rec"></span>
+            [ audio lokaal · notulen via Anthropic ]
+          </span>
+        </div>
+      </header>
+
+      <!-- ============================ LIVE ============================ -->
+      <main class="screen is-active" id="screen-live">
+        <div class="live-head">
+          <p class="eyebrow">Vergadering loopt · 00:24:18</p>
+          <div class="live-head__row">
+            <h1 class="h1">Roadmap Q3</h1>
+            <span class="agenda-chip">Agendapunt 2 · Prioriteiten</span>
+          </div>
+        </div>
+
+        <div class="notebook">
+          <!-- Curved dotted leaders connecting source span -> margin card.
+               Hand-placed for the mock; the real app measures and draws them. -->
+          <svg class="leaders" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M 690 96 C 760 96, 740 150, 800 150" class="is-confirmed" />
+            <path d="M 690 250 C 760 250, 740 300, 800 300" />
+            <path d="M 690 372 C 760 372, 740 470, 800 470" />
+          </svg>
+
+          <!-- Transcript canvas -->
+          <section class="transcript">
+            <div class="turn">
+              <div class="turn__who">Maarten</div>
+              <p class="turn__line">
+                Oké, dan stellen we de mobiele app uit naar Q4. Dat geeft het team de ruimte om de
+                API eerst af te ronden.
+              </p>
+            </div>
+            <div class="turn">
+              <div class="turn__who">Linde</div>
+              <p class="turn__line">
+                Eens. Ik trek de gesprekken met de twee designbureaus, dan hebben we begin augustus
+                een keuze.
+              </p>
+            </div>
+            <div class="turn">
+              <div class="turn__who">Maarten</div>
+              <p class="turn__line">
+                Belangrijk is wel dat de migratie van de oude database eruit gaat voor de release,
+                anders lopen we vast op performance.
+              </p>
+            </div>
+            <div class="turn">
+              <div class="turn__who">Linde</div>
+              <p class="turn__line is-interim">
+                ja precies, en dan moeten we ook nog even kijken naar de<span class="caret"></span>
+              </p>
+            </div>
+          </section>
+
+          <!-- Margin track -->
+          <aside class="margin" aria-label="Beslissingen en acties">
+            <div>
+              <h2 class="margin__group-label">Beslissingen</h2>
+              <article class="card card--confirmed">
+                <div class="card__kind">
+                  Beslissing <span class="card__check">✓ Bevestigd</span>
+                </div>
+                <p class="card__text">Mobiele app verschuift naar Q4.</p>
+              </article>
+              <article class="card card--proposed" data-card>
+                <div class="card__kind">Beslissing · voorgesteld</div>
+                <p class="card__text">Databasemigratie moet vóór de release zijn afgerond.</p>
+                <div class="card__actions">
+                  <button class="icon-btn" title="Bevestigen" data-confirm>✓</button>
+                  <button class="icon-btn" title="Bewerken">✎</button>
+                  <button class="icon-btn icon-btn--dismiss" title="Verwerpen" data-dismiss>
+                    ×
+                  </button>
+                </div>
+              </article>
+            </div>
+
+            <div>
+              <h2 class="margin__group-label">Acties</h2>
+              <article class="card card--proposed" data-card>
+                <div class="card__kind">Actie · voorgesteld</div>
+                <p class="card__text">
+                  Gesprekken voeren met twee designbureaus, keuze begin augustus.
+                </p>
+                <p class="card__owner">Eigenaar · <b>Linde</b></p>
+                <div class="card__actions">
+                  <button class="icon-btn" title="Bevestigen" data-confirm>✓</button>
+                  <button class="icon-btn" title="Bewerken">✎</button>
+                  <button class="icon-btn icon-btn--dismiss" title="Verwerpen" data-dismiss>
+                    ×
+                  </button>
+                </div>
+              </article>
+            </div>
+
+            <div class="summary">
+              <h2 class="margin__group-label" style="margin-bottom: 0">Vergaderingsoverzicht</h2>
+              <p class="disclaimer">Informatief · niet gezaghebbend over beslissingen en acties.</p>
+              <p>
+                Het team verschuift de mobiele app naar Q4 om de API af te ronden. Designkeuze volgt
+                begin augustus.
+              </p>
+            </div>
+          </aside>
+        </div>
+
+        <div class="controlbar">
+          <span class="meta">Microfoon actief · systeemaudio actief · 00:24:18</span>
+          <button class="btn btn--ghost">Pauzeren</button>
+          <button class="hold" id="hold-end" aria-label="Houd ingedrukt om te beëindigen">
+            <span class="hold__fill"></span>
+            <span class="hold__label">Houd vast om te beëindigen</span>
+          </button>
+        </div>
+      </main>
+
+      <!-- ============================ SETTINGS ============================ -->
+      <main class="screen" id="screen-settings">
+        <div class="settings-wrap">
+          <p class="eyebrow">Configuratie</p>
+          <h1 class="h1">Instellingen</h1>
+
+          <div class="section">
+            <h3>Spraakherkenning (ASR)</h3>
+            <div class="segmented">
+              <label class="is-on">Lokaal <small>Whisper, on-device</small></label>
+              <label>Cloud <small>Deepgram</small></label>
+            </div>
+            <div class="disclosure">
+              <b>Audiogegevens:</b> blijven op dit apparaat. Whisper draait lokaal, er gaat niets
+              naar een server.
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>Extractieprovider (LLM)</h3>
+            <div class="segmented">
+              <label class="is-on">Anthropic <small>Cloud</small></label>
+              <label>Aangepast <small>OpenAI-compatibel</small></label>
+            </div>
+            <div class="field">
+              <label>Anthropic API-sleutel</label>
+              <input type="password" placeholder="sk-ant-..." value="••••••••••••••" />
+            </div>
+            <div class="disclosure">
+              <b>Tekstgegevens:</b> transcriptfragmenten gaan naar Anthropic om beslissingen en
+              acties te bepalen. Je API-sleutel blijft lokaal.
+            </div>
+          </div>
+
+          <div class="section">
+            <button class="btn btn--primary">Instellingen opslaan</button>
+          </div>
+        </div>
+      </main>
+
+      <!-- ============================ OVERZICHT ============================ -->
+      <main class="screen" id="screen-overzicht">
+        <div class="home-wrap">
+          <p class="eyebrow">Maandag 23 juni 2026</p>
+          <h1 class="h1">Overzicht</h1>
+          <div class="home-actions">
+            <button class="btn btn--primary" data-go="live">Nieuwe vergadering</button>
+            <button class="btn btn--ghost">Importeer opname</button>
+          </div>
+
+          <h2 class="margin__group-label" style="margin-top: var(--s12)">Eerdere vergaderingen</h2>
+          <ul class="home-list">
+            <li class="home-row">
+              <span class="home-row__title">Roadmap Q3</span>
+              <span class="home-row__meta">23 jun · 4 deelnemers</span>
+            </li>
+            <li class="home-row">
+              <span class="home-row__title">Bestuursvergadering juni</span>
+              <span class="home-row__meta">19 jun · 6 deelnemers</span>
+            </li>
+            <li class="home-row">
+              <span class="home-row__title">Retro sprint 14</span>
+              <span class="home-row__meta">12 jun · 5 deelnemers</span>
+            </li>
+          </ul>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // Screen switching
+      const screens = {
+        live: document.getElementById('screen-live'),
+        settings: document.getElementById('screen-settings'),
+        overzicht: document.getElementById('screen-overzicht'),
+      }
+      function go(name) {
+        Object.values(screens).forEach((s) => s.classList.remove('is-active'))
+        screens[name]?.classList.add('is-active')
+        document.querySelectorAll('.nav button').forEach((b) => {
+          b.removeAttribute('aria-current')
+          if (b.dataset.go === name) b.setAttribute('aria-current', 'page')
+        })
+      }
+      document.querySelectorAll('[data-go]').forEach((el) => {
+        el.addEventListener('click', () => go(el.dataset.go))
+      })
+
+      // Confirm: pencil -> ink (proposed -> confirmed) in place
+      document.querySelectorAll('[data-confirm]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const card = e.target.closest('[data-card]')
+          card.classList.remove('card--proposed')
+          card.classList.add('card--confirmed')
+          const kind = card.querySelector('.card__kind')
+          const base = kind.textContent.split('·')[0].trim()
+          kind.innerHTML = base + ' <span class="card__check">✓ Bevestigd</span>'
+          card.querySelector('.card__actions')?.remove()
+        })
+      })
+
+      // Dismiss: strike + fade
+      document.querySelectorAll('[data-dismiss]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          const card = e.target.closest('[data-card]')
+          card.classList.add('is-dismissed')
+          setTimeout(() => card.remove(), 500)
+        })
+      })
+
+      // Hold-to-confirm (1.5s). Pointer + keyboard (Enter/Space).
+      const hold = document.getElementById('hold-end')
+      let holdTimer = null
+      function startHold() {
+        if (hold.classList.contains('is-done')) return
+        hold.classList.add('is-holding')
+        holdTimer = setTimeout(() => {
+          hold.classList.remove('is-holding')
+          hold.classList.add('is-done')
+          hold.querySelector('.hold__label').textContent = 'Beëindigd'
+          hold.querySelector('.hold__fill').style.transform = 'scaleX(1)'
+        }, 1500)
+      }
+      function cancelHold() {
+        if (hold.classList.contains('is-done')) return
+        clearTimeout(holdTimer)
+        hold.classList.remove('is-holding')
+      }
+      hold.addEventListener('pointerdown', startHold)
+      hold.addEventListener('pointerup', cancelHold)
+      hold.addEventListener('pointerleave', cancelHold)
+      hold.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
+          e.preventDefault()
+          startHold()
+        }
+      })
+      hold.addEventListener('keyup', cancelHold)
+
+      // Interim -> final demo: the pencil line inks in after a beat.
+      setTimeout(() => {
+        const interim = document.querySelector('.turn__line.is-interim')
+        if (!interim) return
+        interim.querySelector('.caret')?.remove()
+        interim.textContent =
+          'ja precies, en dan moeten we ook nog even kijken naar de licentiekosten van de oude tooling.'
+        interim.classList.remove('is-interim')
+      }, 3200)
+    </script>
+  </body>
+</html>

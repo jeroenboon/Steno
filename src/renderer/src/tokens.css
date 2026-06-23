@@ -5,14 +5,19 @@
  * not skeuomorphism). Warm ivory paper, drafted in pencil, committed in ink.
  * See docs/design/cahier-design-brief.md.
  *
- * Core rules encoded below:
+ * Core rules encoded below (Final Master Spec):
  *   - Kraft (--color-accent) is IDENTITY ONLY: wordmark, seam, hairlines.
  *     Never an interactive colour (brown on ivory fails contrast).
- *   - INK is the interaction colour: buttons, links, active nav.
- *   - Ink-red (--color-live) is sacred to the live/recording signal.
- *     Destructive actions use ink + friction, not colour, so --color-danger
- *     is ink, not red.
- *   - Myrtle green (--color-confirmed) marks the Confirmed state.
+ *   - MYRTLE is the "Fountain Pen" action colour (--color-action): primary
+ *     buttons (solid fill, paper text), active nav, selected states. It is the
+ *     same hue as the Confirmed state (--color-confirmed) on purpose: confirming
+ *     and acting are one gesture, inked green. This supersedes the earlier
+ *     "ink is the action colour" rule (see cahier-design-brief.md).
+ *   - INK (--color-text-primary) is the neutral/secondary colour: body text,
+ *     ghost-button outlines and labels, destructive actions (which use friction,
+ *     not colour). --color-danger stays ink, never red.
+ *   - Ink-red (--color-live) is sacred to the live/recording signal, and is now
+ *     restricted to the recording dot in the top chrome.
  *   - Pencil-gray (--color-proposed / --color-text-tertiary) is the tentative
  *     mark: interim transcript spans and proposed items.
  *
@@ -34,15 +39,31 @@
   --color-border: #d8cdb8; /* kraft-tinted hairline */
   --color-border-dim: #e6ddcc; /* fainter divider */
 
+  /* --- The watercolor wash ---
+   * The canvas is not a flat hex: it is a diffuse radial wash, warm ivory at the
+   * crown settling to a barely-there mossy hue at the foot. Consumed by the body
+   * background in app.css; --color-base remains the solid fallback. */
+  --wash-crown: #fcf9f1; /* lightest, top-centre */
+  --wash-moss: rgba(47, 79, 62, 0.08); /* faint Myrtle, pools at the foot */
+  --wash-grain-opacity: 0.035; /* diffuse paper grain over the wash */
+
   /* --- Accent: Kraft brown (IDENTITY ONLY, never interactive) --- */
   --color-accent: #a6794c;
   --color-accent-dim: #8a6238;
   --color-accent-glow: rgba(166, 121, 76, 0.15);
   --color-accent-muted: #ece0cb; /* faint kraft wash for subtle fills */
 
+  /* --- Action: Myrtle green (the "Fountain Pen") ---
+   * The interaction colour. Primary buttons, active nav tick, selected states.
+   * Same hue as --color-confirmed by design. Paper text rides on top. */
+  --color-action: #2f4f3e;
+  --color-action-hover: #25402f;
+  --color-action-wash: rgba(47, 79, 62, 0.07); /* selected/hover tint */
+  --color-on-action: #f6f1e7; /* paper text on a Myrtle fill */
+
   /* --- Semantic states --- */
-  --color-live: #a8322d; /* ink-red: live/recording ONLY */
-  --color-confirmed: #2f4f3e; /* Myrtle green */
+  --color-live: #a8322d; /* ink-red: live/recording ONLY (chrome dot) */
+  --color-confirmed: #2f4f3e; /* Myrtle green (= --color-action) */
   --color-proposed: #9a9388; /* pencil-gray (tentative) */
   --color-dismissed: #b8ae9c; /* faded / erased */
   --color-danger: #1e1b17; /* ink — destructive uses friction, not red */
@@ -89,6 +110,9 @@
   --shadow-md: 0 4px 12px rgba(60, 50, 30, 0.1);
   --shadow-lg: 0 8px 24px rgba(60, 50, 30, 0.12);
   --shadow-accent: 0 0 0 1px var(--color-accent), 0 0 12px var(--color-accent-glow);
+  /* Soft, Myrtle-tinted float for raised elements (margin cards, control bar).
+   * Separates from the canvas without introducing a hard border. */
+  --shadow-float: 0 8px 24px rgba(47, 79, 62, 0.08);
 
   /* --- Motion --- */
   --duration-fast: 120ms;
@@ -100,5 +124,5 @@
   /* --- Layout --- */
   --chrome-height: 48px;
   --sidebar-width: 220px;
-  --seam-width: 3px; /* the decorative left binding seam */
+  --seam-width: 1px; /* the decorative left binding seam (kraft, extreme edge) */
 }
