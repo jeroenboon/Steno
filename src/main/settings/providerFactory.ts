@@ -35,12 +35,15 @@ import {
   type AnthropicExtractionProviderOptions,
 } from '../providers/AnthropicExtractionProvider'
 import { AzureOpenAIExtractionProvider } from '../providers/AzureOpenAIExtractionProvider'
+import { createAzureOpenAIRealtimeAsrProvider } from '../providers/AzureOpenAIRealtimeAsrProvider'
 import { AzureWhisperBatchAsrProvider } from '../providers/AzureWhisperBatchAsrProvider'
 import { DeepgramAsrProvider } from '../providers/DeepgramAsrProvider'
 import { LocalAsrProvider } from '../providers/LocalAsrProvider'
 import { MistralVoxtralBatchAsrProvider } from '../providers/MistralVoxtralBatchAsrProvider'
+import { MistralVoxtralRealtimeAsrProvider } from '../providers/MistralVoxtralRealtimeAsrProvider'
 import { OpenAIBatchAsrProvider } from '../providers/OpenAIBatchAsrProvider'
 import { OpenAICompatibleExtractionProvider } from '../providers/OpenAICompatibleExtractionProvider'
+import { OpenAIRealtimeAsrProvider } from '../providers/OpenAIRealtimeAsrProvider'
 import { ModelDownloader } from '../providers/sherpa/ModelDownloader'
 
 import type { SecretStorage } from './SecretStorage'
@@ -75,9 +78,9 @@ export type BuildAsrResult = { ok: true; provider: ASRProvider } | { ok: false; 
 
 /**
  * Whether the ASR provider is being built for a live meeting or a file import.
- * The OpenAI/Mistral/Azure adapters are batch-only (file import); selecting one
- * for a live meeting is gated with a descriptive error until realtime streaming
- * ships (multi-provider plan, Phase 4). Deepgram/Local serve both.
+ * The OpenAI/Mistral/Azure vendors now expose both modes: a realtime streaming
+ * adapter for `'live'` (Phase 4) and a batch adapter for `'import'`. The factory
+ * picks per usage. Deepgram/Local serve both modes from a single adapter.
  */
 export type AsrUsage = 'live' | 'import'
 
@@ -85,6 +88,8 @@ export type AsrUsage = 'live' | 'import'
 const OPENAI_AUDIO_BASE_URL = 'https://api.openai.com/v1'
 const MISTRAL_AUDIO_BASE_URL = 'https://api.mistral.ai/v1'
 const DEFAULT_AZURE_WHISPER_API_VERSION = '2024-06-01'
+// Realtime uses a preview api-version distinct from the batch Whisper default.
+const DEFAULT_AZURE_REALTIME_API_VERSION = '2024-10-01-preview'
 export type BuildExtractionResult =
   | { ok: true; provider: ExtractionProvider }
   | { ok: false; error: string }
@@ -200,36 +205,53 @@ function buildAsrProvider(
     }
 
     case 'openai-audio': {
-      assertImportOnly(usage, 'OpenAI audio')
       const cfg = settings.openaiAudio
       const apiKey = requireKey(storage, cfg.keyRef)
-      const opts: ConstructorParameters<typeof OpenAIBatchAsrProvider>[0] = {
+      const language = cfg.language ?? settings.primaryLanguage
+      if (usage === 'live') {
+        return new OpenAIRealtimeAsrProvider({ apiKey, model: cfg.model, language })
+      }
+      return new OpenAIBatchAsrProvider({
         apiKey,
         baseUrl: OPENAI_AUDIO_BASE_URL,
         model: cfg.model,
         displayName: cfg.displayName,
-        language: cfg.language ?? settings.primaryLanguage,
-      }
-      return new OpenAIBatchAsrProvider(opts)
+        language,
+      })
     }
 
     case 'mistral-voxtral': {
-      assertImportOnly(usage, 'Mistral Voxtral')
       const cfg = settings.mistralVoxtral
       const apiKey = requireKey(storage, cfg.keyRef)
+      const language = cfg.language ?? settings.primaryLanguage
+      if (usage === 'live') {
+        return new MistralVoxtralRealtimeAsrProvider({ apiKey, model: cfg.model, language })
+      }
       return new MistralVoxtralBatchAsrProvider({
         apiKey,
         baseUrl: MISTRAL_AUDIO_BASE_URL,
         model: cfg.model,
         displayName: cfg.displayName,
-        language: cfg.language ?? settings.primaryLanguage,
+        language,
       })
     }
 
     case 'azure-speech': {
-      assertImportOnly(usage, 'Azure Speech')
       const cfg = settings.azureSpeech
       const apiKey = requireKey(storage, cfg.keyRef)
+      const language = cfg.language ?? settings.primaryLanguage
+      if (usage === 'live') {
+        // Azure reuses the OpenAI Realtime wire (Phase 4.2); the same deployment
+        // config drives the realtime URL with a preview api-version default.
+        return createAzureOpenAIRealtimeAsrProvider({
+          apiKey,
+          endpoint: cfg.endpoint,
+          deployment: cfg.deployment,
+          apiVersion: cfg.apiVersion ?? DEFAULT_AZURE_REALTIME_API_VERSION,
+          model: cfg.model,
+          language,
+        })
+      }
       return new AzureWhisperBatchAsrProvider({
         apiKey,
         endpoint: cfg.endpoint,
@@ -237,24 +259,10 @@ function buildAsrProvider(
         apiVersion: cfg.apiVersion ?? DEFAULT_AZURE_WHISPER_API_VERSION,
         model: cfg.model,
         displayName: cfg.displayName,
-        language: cfg.language ?? settings.primaryLanguage,
+        language,
       })
     }
   }
-}
-
-/**
- * Throw a descriptive, Dutch error when a batch-only ASR provider is selected
- * for a live meeting. These providers have no realtime wire yet (Phase 4); the
- * caller (live runtime) surfaces this and falls back. Import builds skip this.
- */
-function assertImportOnly(usage: AsrUsage, providerLabel: string): void {
-  if (usage === 'import') return
-  throw new Error(
-    `${providerLabel} kan alleen voor import worden gebruikt; ` +
-      'live-transcriptie via deze provider is nog niet beschikbaar. ' +
-      'Kies Deepgram of Lokaal voor live.',
-  )
 }
 
 /** Look up a required secret by keyRef, throwing a clear error when absent. */

@@ -30,6 +30,8 @@ vi.mock('electron', () => ({
   },
 }))
 
+import { MistralVoxtralRealtimeAsrProvider } from '../providers/MistralVoxtralRealtimeAsrProvider'
+import { OpenAIRealtimeAsrProvider } from '../providers/OpenAIRealtimeAsrProvider'
 import { ModelDownloader } from '../providers/sherpa/ModelDownloader'
 
 import { computeEgressState, buildDisclosureCopy, type EgressState } from './egressState'
@@ -792,7 +794,7 @@ describe('buildProviders', () => {
     expect(() => buildProviders(settings, storage)).toThrow(/gedownload/i)
   })
 
-  it('gates openai-audio ASR for a live meeting with an import-only error', () => {
+  it('builds a streaming OpenAI realtime ASR provider for a live meeting', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('anthropic', 'ant-key')
     storage.setSecret('openai-key', 'sk-openai')
@@ -802,14 +804,17 @@ describe('buildProviders', () => {
       extractionProvider: 'anthropic',
       primaryLanguage: 'en',
       openaiAudio: {
-        model: 'gpt-4o-mini-transcribe',
+        model: 'gpt-4o-transcribe',
         keyRef: 'openai-key',
         displayName: 'OpenAI Audio',
       },
     }
 
-    // buildProviders builds for live by default.
-    expect(() => buildProviders(settings, storage)).toThrow(/import/i)
+    // buildProviders builds for live by default — no longer an import-only throw.
+    const { asr } = buildProviders(settings, storage)
+    expect(asr).toBeInstanceOf(OpenAIRealtimeAsrProvider)
+    // Streaming providers do not expose the batch transcribe method.
+    expect(typeof asr.transcribeBatch).toBe('undefined')
   })
 
   it('builds an OpenAI batch ASR provider for import', () => {
@@ -834,7 +839,7 @@ describe('buildProviders', () => {
     }
   })
 
-  it('gates mistral-voxtral ASR for a live meeting with an import-only error', () => {
+  it('builds a streaming Mistral Voxtral realtime ASR provider for a live meeting', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('anthropic', 'ant-key')
     storage.setSecret('mistral-key', 'sk-mistral')
@@ -844,13 +849,15 @@ describe('buildProviders', () => {
       extractionProvider: 'anthropic',
       primaryLanguage: 'en',
       mistralVoxtral: {
-        model: 'Voxtral Mini Transcribe V2',
+        model: 'voxtral-mini-2507',
         keyRef: 'mistral-key',
         displayName: 'Mistral Voxtral',
       },
     }
 
-    expect(() => buildProviders(settings, storage)).toThrow(/import/i)
+    const { asr } = buildProviders(settings, storage)
+    expect(asr).toBeInstanceOf(MistralVoxtralRealtimeAsrProvider)
+    expect(typeof asr.transcribeBatch).toBe('undefined')
   })
 
   it('builds a Mistral Voxtral batch ASR provider for import', () => {
@@ -875,7 +882,7 @@ describe('buildProviders', () => {
     }
   })
 
-  it('gates azure-speech ASR for a live meeting with an import-only error', () => {
+  it('builds a streaming Azure realtime ASR provider for a live meeting', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('anthropic', 'ant-key')
     storage.setSecret('azure-speech-key', 'azure-key')
@@ -885,16 +892,20 @@ describe('buildProviders', () => {
       extractionProvider: 'anthropic',
       primaryLanguage: 'en',
       azureSpeech: {
-        endpoint: 'https://my-resource.cognitiveservices.azure.com/',
-        deployment: 'my-speech-deployment',
-        apiVersion: '2024-02-15-preview',
-        model: 'whisper',
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'gpt-4o-transcribe',
+        apiVersion: '2024-10-01-preview',
+        model: 'gpt-4o-transcribe',
         keyRef: 'azure-speech-key',
         displayName: 'Azure Speech',
       },
     }
 
-    expect(() => buildProviders(settings, storage)).toThrow(/import/i)
+    // Azure reuses the OpenAI realtime wire (Phase 4.2), so the live provider
+    // is an OpenAIRealtimeAsrProvider with an Azure connection.
+    const { asr } = buildProviders(settings, storage)
+    expect(asr).toBeInstanceOf(OpenAIRealtimeAsrProvider)
+    expect(typeof asr.transcribeBatch).toBe('undefined')
   })
 
   it('builds an Azure Whisper batch ASR provider for import', () => {

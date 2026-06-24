@@ -53,7 +53,15 @@ Voxtral's batch response carries speaker diarization. It maps onto `TranscriptSp
 - Responses are Zod-validated at the boundary (principle #8); keys travel only in headers and are never logged (principle #12).
 - The ASR role card offers the import-only vendors with an explicit "alleen voor import" notice; Azure Speech persists only once its endpoint validates.
 
-## What's next (Phase 4)
+## Update — Phase 4 shipped (2026-06-24): realtime streaming, live gate lifted
 
-- Per-vendor realtime streaming adapters (OpenAI Realtime, reused for Azure OpenAI; Mistral Voxtral Realtime), each with its own interim/final + reconnect logic behind the same `ASRProvider` port.
-- Remove the live gate and let the runtime pick streaming for live, batch for import, per provider capability; update egress/disclosure for live audio leaving to the vendor.
+The batch-first decision held; the deferred streaming adapters are now built, so the import-only gate is gone:
+
+- **Per-vendor streaming adapters** behind the same `ASRProvider` port, each following the Deepgram template (injected `WebSocketFactory` + `sleep` + `Clock`, interim/final spans, bounded reconnect/backoff, content never logged): `OpenAIRealtimeAsrProvider` (OpenAI Realtime transcription wire) and `MistralVoxtralRealtimeAsrProvider` (Voxtral Realtime, distinct wire, diarization → `speakerLabel`).
+- **Azure reuses the OpenAI Realtime wire** rather than a new adapter: `createAzureOpenAIRealtimeAsrProvider` builds an `OpenAIRealtimeAsrProvider` with an injected Azure connection (deployment `wss://…/openai/realtime` URL + `api-key` header). The connection (URL + auth) is the only injection point; all frame handling is shared. This mirrors `AzureOpenAIExtractionProvider`/`AzureWhisperBatchAsrProvider`.
+- **The factory gates by usage, both ways.** `buildAsrProvider(settings, storage, usage)` now builds the streaming adapter for `'live'` and the batch adapter for `'import'`; the "kan alleen voor import" throw is removed. The streaming adapters do **not** extend `ImportOnlyAsrProvider` (their streaming half is real); the batch adapters still do.
+- **Egress is unchanged** — it derives from `asrProvider` regardless of mode, so a cloud ASR already reported `cloud:OpenAI` / `cloud:Mistral` / `cloud:Azure`; live audio now genuinely leaves to that vendor, which the existing indicator/disclosure already states.
+
+### The shared-field seam (accepted trade-off)
+
+Each cloud-ASR vendor still has **one** config block serving both modes, so `model` (and Azure's `deployment`) is shared between batch and streaming even though the right value differs (e.g. `gpt-4o-mini-transcribe` for batch vs a realtime-capable model for live; a Whisper deployment vs a `gpt-4o-transcribe` realtime deployment). The user sets the value appropriate to how they use the vendor; model/deployment ids are user-overridable data, not code. Splitting into per-mode fields is deferred until a concrete need appears. Azure's realtime path defaults `apiVersion` to a preview version (`2024-10-01-preview`) distinct from the batch Whisper default (`2024-06-01`).
