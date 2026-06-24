@@ -322,6 +322,44 @@ describe('AnthropicExtractionProvider', () => {
       participants: [{ name: 'Jeroen' }],
     }
 
+    it('infers from a text source and returns a title', async () => {
+      mockCreate.mockResolvedValueOnce(
+        makeInferToolUseResponse({ ...validInferred, title: 'Begrotingsoverleg' }),
+      )
+
+      const provider = makeProvider()
+      const result = await provider.inferContext({
+        source: { text: 'Agenda: de Q3-begroting bespreken' },
+      })
+
+      expect(result.title).toBe('Begrotingsoverleg')
+      expect(result.agendaItems[0]?.title).toBe('Begroting')
+    })
+
+    it('passes known agenda items as grounding and excludes topics already covered', async () => {
+      mockCreate.mockResolvedValueOnce(
+        makeInferToolUseResponse({
+          agendaItems: [
+            { title: 'Begroting', topic: 'Q3-begroting' },
+            { title: 'Planning', topic: 'Nieuw onderwerp' },
+          ],
+          participants: [],
+        }),
+      )
+
+      const provider = makeProvider()
+      const result = await provider.inferContext({
+        source: { spans },
+        knownAgendaItems: [{ title: 'Begroting', topic: 'Reeds geagendeerd' }],
+      })
+
+      // The known agenda is carried into the request for grounding.
+      const serialised = JSON.stringify(mockCreate.mock.calls[0]?.[0])
+      expect(serialised).toContain('Reeds geagendeerd')
+      // A returned topic that repeats a known title is dropped (append-only).
+      expect(result.agendaItems.map((a) => a.title)).toEqual(['Planning'])
+    })
+
     it('returns inferred agenda items and participants from the transcript', async () => {
       mockCreate.mockResolvedValueOnce(makeInferToolUseResponse(validInferred))
 

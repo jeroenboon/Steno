@@ -139,7 +139,13 @@ Commit: `feat(extraction): generalise inferContext to text or spans with groundi
 
 ---
 
-### Step 1.3 — Anthropic `inferContext`: text source, title, grounding
+### Step 1.3 — Anthropic `inferContext`: text source, title, grounding ✅ done
+
+> Note: the normalised-title compare grounding needs (and Step 4.1's dedup will
+> reuse) was extracted to `src/shared/agenda/agendaTitle.ts`
+> (`normaliseAgendaTitle`, `isTitleCovered`) so both paths share one source of
+> truth. The adapter both prompts for "only new topics" and post-filters the
+> result, so append-only holds even if the model repeats a known topic.
 
 **Context:** the real adapter must honour all three call shapes. When given
 `knownAgendaItems`, the prompt instructs the model to return only topics not already
