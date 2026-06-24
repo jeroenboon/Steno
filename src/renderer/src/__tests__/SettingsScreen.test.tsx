@@ -729,6 +729,132 @@ describe('SettingsScreen — extraction provider presets (Phase 1.2)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Phase 3.4: import-only cloud ASR providers (OpenAI / Mistral / Azure Speech)
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — import-only cloud ASR (Phase 3.4)', () => {
+  beforeEach(() => {
+    setup()
+  })
+
+  it('offers OpenAI, Mistral and Azure as ASR options', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+    const select = screen.getByTestId('asr-provider-select')
+    const values = Array.from((select as HTMLSelectElement).options).map((o) => o.value)
+    expect(values).toContain('openai-audio')
+    expect(values).toContain('mistral-voxtral')
+    expect(values).toContain('azure-speech')
+  })
+
+  it('shows the import-only notice and config when OpenAI audio is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+
+    act(() => {
+      fireEvent.change(screen.getByTestId('asr-provider-select'), {
+        target: { value: 'openai-audio' },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('asr-import-only-notice')).toBeDefined()
+      expect(screen.getByTestId('audio-model')).toBeDefined()
+      expect(screen.getByTestId('audio-key-input')).toBeDefined()
+    })
+  })
+
+  it('persists asrProvider openai-audio with the default model on selection', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+
+    act(() => {
+      fireEvent.change(screen.getByTestId('asr-provider-select'), {
+        target: { value: 'openai-audio' },
+      })
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return (
+            json.includes('"asrProvider":"openai-audio"') &&
+            json.includes('"model":"gpt-4o-mini-transcribe"')
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+
+  it('saves the audio key via secret:set under the vendor keyRef', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('asr-provider-select'), {
+        target: { value: 'openai-audio' },
+      })
+    })
+    await waitFor(() => screen.getByTestId('audio-key-input'))
+
+    fireEvent.change(screen.getByTestId('audio-key-input'), { target: { value: 'sk-audio-123' } })
+    act(() => {
+      fireEvent.click(screen.getByTestId('save-audio-key'))
+    })
+
+    await waitFor(() => {
+      expect(mockApi.secretSet).toHaveBeenCalledWith({ key: 'openai', value: 'sk-audio-123' })
+    })
+  })
+
+  it('shows the Azure Speech endpoint/deployment fields when selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('asr-provider-select'), {
+        target: { value: 'azure-speech' },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('azure-speech-endpoint')).toBeDefined()
+      expect(screen.getByTestId('azure-speech-deployment')).toBeDefined()
+      expect(screen.getByTestId('azure-speech-api-version')).toBeDefined()
+    })
+  })
+
+  it('persists azure-speech only once the endpoint is a valid URL', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('asr-provider-select'), {
+        target: { value: 'azure-speech' },
+      })
+    })
+    await waitFor(() => screen.getByTestId('azure-speech-endpoint'))
+
+    // Fill deployment + a valid endpoint; then a settings:set should carry them.
+    fireEvent.change(screen.getByTestId('azure-speech-deployment'), {
+      target: { value: 'whisper' },
+    })
+    fireEvent.change(screen.getByTestId('azure-speech-endpoint'), {
+      target: { value: 'https://my-resource.openai.azure.com/' },
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return (
+            json.includes('"asrProvider":"azure-speech"') && json.includes('"deployment":"whisper"')
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Phase 2.2: Azure OpenAI extraction config panel
 // ---------------------------------------------------------------------------
 

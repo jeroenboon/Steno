@@ -64,6 +64,37 @@ interface AzureValidationErrors {
   displayName?: string
 }
 
+/**
+ * Fields for the import-only cloud ASR providers (Phase 3.4). One object serves
+ * the active audio provider; only the relevant fields are shown (OpenAI/Mistral
+ * need just `model`, Azure Speech also needs endpoint/deployment/apiVersion).
+ */
+interface AudioAsrFields {
+  model: string
+  endpoint: string
+  deployment: string
+  apiVersion: string
+  keyRef: string
+  displayName: string
+}
+
+/** Default model id per cloud audio vendor (user-overridable). */
+const AUDIO_DEFAULTS: Record<
+  'openai-audio' | 'mistral-voxtral' | 'azure-speech',
+  { model: string; keyRef: string; displayName: string }
+> = {
+  'openai-audio': { model: 'gpt-4o-mini-transcribe', keyRef: 'openai', displayName: 'OpenAI' },
+  'mistral-voxtral': { model: 'voxtral-mini-2507', keyRef: 'mistral', displayName: 'Mistral' },
+  'azure-speech': { model: 'whisper', keyRef: 'azure', displayName: 'Azure Speech' },
+}
+
+/** The AppSettings config-block key for a simple (non-Azure) audio provider. */
+function keyForProvider(
+  provider: 'openai-audio' | 'mistral-voxtral',
+): 'openaiAudio' | 'mistralVoxtral' {
+  return provider === 'openai-audio' ? 'openaiAudio' : 'mistralVoxtral'
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -202,6 +233,40 @@ function KeyField(props: KeyFieldProps): React.JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
+// TextField — a single labelled text input (config fields)
+// ---------------------------------------------------------------------------
+
+interface TextFieldProps {
+  id: string
+  label: string
+  placeholder: string
+  value: string
+  type?: 'text' | 'url'
+  onChange: (v: string) => void
+}
+
+function TextField(props: TextFieldProps): React.JSX.Element {
+  return (
+    <div className="form-group">
+      <label htmlFor={props.id} className="form-label">
+        {props.label}
+      </label>
+      <input
+        id={props.id}
+        data-testid={props.id}
+        type={props.type ?? 'text'}
+        className="form-input"
+        placeholder={props.placeholder}
+        value={props.value}
+        onChange={(e) => {
+          props.onChange(e.currentTarget.value)
+        }}
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -262,6 +327,20 @@ export function SettingsScreen(): React.JSX.Element {
   const [azureSaveState, setAzureSaveState] = useState<KeySaveState>('idle')
   const [azureDirty, setAzureDirty] = useState(false)
 
+  // ---- import-only cloud ASR fields + key (Phase 3.4) ----
+  const [audioFields, setAudioFields] = useState<AudioAsrFields>({
+    model: '',
+    endpoint: '',
+    deployment: '',
+    apiVersion: '2024-06-01',
+    keyRef: '',
+    displayName: '',
+  })
+  const [audioKeyEntry, setAudioKeyEntry] = useState('')
+  const [audioKeySave, setAudioKeySave] = useState<KeySaveState>('idle')
+  const [audioKeyPresent, setAudioKeyPresent] = useState(false)
+  const [audioKeyEditing, setAudioKeyEditing] = useState(false)
+
   // ---- load on mount ----
   useEffect(() => {
     void (async () => {
@@ -296,34 +375,68 @@ export function SettingsScreen(): React.JSX.Element {
         })
       }
 
+      if (s.asrProvider === 'openai-audio') {
+        setAudioFields((f) => ({
+          ...f,
+          model: s.openaiAudio.model,
+          keyRef: s.openaiAudio.keyRef,
+          displayName: s.openaiAudio.displayName,
+        }))
+      } else if (s.asrProvider === 'mistral-voxtral') {
+        setAudioFields((f) => ({
+          ...f,
+          model: s.mistralVoxtral.model,
+          keyRef: s.mistralVoxtral.keyRef,
+          displayName: s.mistralVoxtral.displayName,
+        }))
+      } else if (s.asrProvider === 'azure-speech') {
+        setAudioFields((f) => ({
+          ...f,
+          model: s.azureSpeech.model,
+          endpoint: s.azureSpeech.endpoint,
+          deployment: s.azureSpeech.deployment,
+          apiVersion: s.azureSpeech.apiVersion ?? f.apiVersion,
+          keyRef: s.azureSpeech.keyRef,
+          displayName: s.azureSpeech.displayName,
+        }))
+      }
+
       // Check key presence (never retrieves the value). Tolerate failure.
+      // Keyed by ref name so shared keys (a vendor key serving ASR + extraction)
+      // and the active audio provider all resolve from one lookup.
       try {
-        const keyChecks: Promise<{ has: boolean }>[] = [
-          window.api.secretHas({ key: 'deepgram' }),
-          window.api.secretHas({ key: 'anthropic' }),
-        ]
-        // Also check the extra key for the active cloud extraction provider
-        // (openai-compatible or azure-openai — mutually exclusive, so it shares
-        // the same trailing slot).
-        const extraKeyRef =
+        const extractionKeyRef =
           s.extractionProvider === 'openai-compatible'
             ? s.openaiCompatible.keyRef
             : s.extractionProvider === 'azure-openai'
               ? s.azureOpenAI.keyRef
               : null
-        if (extraKeyRef !== null) {
-          keyChecks.push(window.api.secretHas({ key: extraKeyRef }))
+        const audioKeyRef =
+          s.asrProvider === 'openai-audio'
+            ? s.openaiAudio.keyRef
+            : s.asrProvider === 'mistral-voxtral'
+              ? s.mistralVoxtral.keyRef
+              : s.asrProvider === 'azure-speech'
+                ? s.azureSpeech.keyRef
+                : null
+
+        const refs = new Set<string>(['deepgram', 'anthropic'])
+        if (extractionKeyRef !== null) refs.add(extractionKeyRef)
+        if (audioKeyRef !== null) refs.add(audioKeyRef)
+
+        const entries = await Promise.all(
+          [...refs].map(async (key) => [key, (await window.api.secretHas({ key })).has] as const),
+        )
+        const present = new Map<string, boolean>(entries)
+
+        setDeepgramKeyPresent(present.get('deepgram') ?? false)
+        setAnthropicKeyPresent(present.get('anthropic') ?? false)
+        if (extractionKeyRef !== null) {
+          const has = present.get(extractionKeyRef) ?? false
+          if (s.extractionProvider === 'openai-compatible') setCustomKeyPresent(has)
+          else if (s.extractionProvider === 'azure-openai') setAzureKeyPresent(has)
         }
-        const results = await Promise.all(keyChecks)
-        const dgResult = results[0]
-        const antResult = results[1]
-        const extraResult = results[2]
-        if (dgResult !== undefined) setDeepgramKeyPresent(dgResult.has)
-        if (antResult !== undefined) setAnthropicKeyPresent(antResult.has)
-        if (extraResult !== undefined) {
-          if (s.extractionProvider === 'openai-compatible') setCustomKeyPresent(extraResult.has)
-          else if (s.extractionProvider === 'azure-openai') setAzureKeyPresent(extraResult.has)
-        }
+        if (audioKeyRef !== null) setAudioKeyPresent(present.get(audioKeyRef) ?? false)
       } catch (err) {
         console.error('[Settings] secretHas failed:', err)
       }
@@ -381,8 +494,105 @@ export function SettingsScreen(): React.JSX.Element {
     }
   }
 
-  function handleAsrChange(provider: 'deepgram' | 'local-parakeet'): void {
-    void persistSettings({ ...settings, asrProvider: provider })
+  type AsrSelectValue =
+    | 'deepgram'
+    | 'local-parakeet'
+    | 'openai-audio'
+    | 'mistral-voxtral'
+    | 'azure-speech'
+
+  function handleAsrChange(provider: AsrSelectValue): void {
+    if (provider === 'deepgram' || provider === 'local-parakeet') {
+      void persistSettings({
+        ...settings,
+        asrProvider: provider,
+        openaiAudio: undefined,
+        mistralVoxtral: undefined,
+        azureSpeech: undefined,
+      } as AppSettings)
+      return
+    }
+    // Cloud audio (import-only): prefill defaults and reveal the config panel.
+    const defaults = AUDIO_DEFAULTS[provider]
+    const nextFields: AudioAsrFields = {
+      model: defaults.model,
+      endpoint: '',
+      deployment: '',
+      apiVersion: '2024-06-01',
+      keyRef: defaults.keyRef,
+      displayName: defaults.displayName,
+    }
+    setAudioFields(nextFields)
+    setAudioKeySave('idle')
+    applyAudioProvider(provider, nextFields)
+  }
+
+  /**
+   * Build the AppSettings for an import-only audio provider from its fields,
+   * update local state always (so the panel renders), and persist only when the
+   * config is schema-valid (Azure needs a real endpoint before it validates).
+   */
+  function applyAudioProvider(
+    provider: 'openai-audio' | 'mistral-voxtral' | 'azure-speech',
+    fields: AudioAsrFields,
+  ): void {
+    const base = {
+      ...settings,
+      deepgram: undefined,
+      openaiAudio: undefined,
+      mistralVoxtral: undefined,
+      azureSpeech: undefined,
+      primaryLanguage: settings.primaryLanguage,
+    }
+    let next: AppSettings
+    let valid: boolean
+    const common = {
+      model: fields.model.trim(),
+      keyRef: fields.keyRef,
+      displayName: fields.displayName.trim(),
+      language: settings.primaryLanguage,
+    }
+    if (provider === 'azure-speech') {
+      next = {
+        ...base,
+        asrProvider: 'azure-speech',
+        azureSpeech: {
+          ...common,
+          endpoint: fields.endpoint,
+          deployment: fields.deployment.trim(),
+          apiVersion: fields.apiVersion.trim(),
+        },
+      } as AppSettings
+      valid =
+        isValidUrl(fields.endpoint) &&
+        fields.deployment.trim().length > 0 &&
+        common.model.length > 0 &&
+        common.displayName.length > 0
+    } else {
+      next = { ...base, asrProvider: provider, [keyForProvider(provider)]: common } as AppSettings
+      valid = common.model.length > 0 && common.displayName.length > 0
+    }
+
+    setSettings(next)
+    if (valid) {
+      void window.api.settingsSet(next).catch((err: unknown) => {
+        console.error('[Settings] settingsSet failed:', err)
+      })
+    }
+  }
+
+  async function handleSaveAudioKey(): Promise<void> {
+    if (audioKeyEntry.trim().length === 0) return
+    setAudioKeySave('saving')
+    try {
+      await window.api.secretSet({ key: audioFields.keyRef, value: audioKeyEntry })
+      setAudioKeyPresent(true)
+      setAudioKeyEntry('')
+      setAudioKeySave('saved')
+      setAudioKeyEditing(false)
+    } catch {
+      setAudioKeySave('error')
+    }
   }
 
   function handleExtractionChange(
@@ -584,6 +794,15 @@ export function SettingsScreen(): React.JSX.Element {
   const isCustomOpenAI = settings.extractionProvider === 'openai-compatible'
   const isAzure = settings.extractionProvider === 'azure-openai'
   const isLocalAsr = settings.asrProvider === 'local-parakeet'
+  // Narrowed to the import-only cloud audio union (or null), so the config panel
+  // can index AUDIO_DEFAULTS and call applyAudioProvider type-safely.
+  const audioProvider: 'openai-audio' | 'mistral-voxtral' | 'azure-speech' | null =
+    settings.asrProvider === 'openai-audio' ||
+    settings.asrProvider === 'mistral-voxtral' ||
+    settings.asrProvider === 'azure-speech'
+      ? settings.asrProvider
+      : null
+  const isAzureSpeech = settings.asrProvider === 'azure-speech'
 
   // Derive the extraction provider select value: if openai-compatible, use the preset;
   // azure-openai maps to the 'azure' option; otherwise use the provider.
@@ -630,13 +849,28 @@ export function SettingsScreen(): React.JSX.Element {
                     label: t('settings.asr.mode.cloud'),
                     sublabel: t('settings.asr.mode.cloud.sub'),
                   },
+                  {
+                    value: 'openai-audio',
+                    label: t('settings.asr.mode.openai'),
+                    sublabel: t('settings.asr.mode.openai.sub'),
+                  },
+                  {
+                    value: 'mistral-voxtral',
+                    label: t('settings.asr.mode.mistral'),
+                    sublabel: t('settings.asr.mode.mistral.sub'),
+                  },
+                  {
+                    value: 'azure-speech',
+                    label: t('settings.asr.mode.azure'),
+                    sublabel: t('settings.asr.mode.azure.sub'),
+                  },
                 ],
               },
             ] as ProviderGroup[]
           }
           selectedValue={settings.asrProvider}
           onChange={(v) => {
-            handleAsrChange(v as 'deepgram' | 'local-parakeet')
+            handleAsrChange(v as AsrSelectValue)
           }}
           configPanel={
             isLocalAsr ? (
@@ -705,6 +939,92 @@ export function SettingsScreen(): React.JSX.Element {
                   </div>
                 )}
               </>
+            ) : audioProvider !== null ? (
+              /* Import-only cloud audio (OpenAI / Mistral / Azure Speech) */
+              <div className="settings-audio-asr">
+                <p data-testid="asr-import-only-notice" className="settings-disclosure" role="note">
+                  {t('settings.asr.importOnly.notice')}
+                </p>
+
+                {isAzureSpeech && (
+                  <>
+                    <TextField
+                      id="azure-speech-endpoint"
+                      label={t('settings.asr.azure.endpoint.label')}
+                      placeholder={t('settings.asr.azure.endpoint.placeholder')}
+                      type="url"
+                      value={audioFields.endpoint}
+                      onChange={(v) => {
+                        const next = { ...audioFields, endpoint: v }
+                        setAudioFields(next)
+                        applyAudioProvider('azure-speech', next)
+                      }}
+                    />
+                    <TextField
+                      id="azure-speech-deployment"
+                      label={t('settings.asr.azure.deployment.label')}
+                      placeholder={t('settings.asr.azure.deployment.placeholder')}
+                      value={audioFields.deployment}
+                      onChange={(v) => {
+                        const next = { ...audioFields, deployment: v }
+                        setAudioFields(next)
+                        applyAudioProvider('azure-speech', next)
+                      }}
+                    />
+                    <TextField
+                      id="azure-speech-api-version"
+                      label={t('settings.asr.azure.apiVersion.label')}
+                      placeholder={t('settings.asr.azure.apiVersion.placeholder')}
+                      value={audioFields.apiVersion}
+                      onChange={(v) => {
+                        const next = { ...audioFields, apiVersion: v }
+                        setAudioFields(next)
+                        applyAudioProvider('azure-speech', next)
+                      }}
+                    />
+                  </>
+                )}
+
+                <TextField
+                  id="audio-model"
+                  label={t('settings.asr.audio.model.label')}
+                  placeholder={AUDIO_DEFAULTS[audioProvider].model}
+                  value={audioFields.model}
+                  onChange={(v) => {
+                    const next = { ...audioFields, model: v }
+                    setAudioFields(next)
+                    applyAudioProvider(audioProvider, next)
+                  }}
+                />
+
+                <KeyField
+                  idBase="audio"
+                  label={t('settings.asr.audio.key.label')}
+                  placeholder={t('settings.asr.audio.key.placeholder')}
+                  present={audioKeyPresent}
+                  editing={audioKeyEditing}
+                  value={audioKeyEntry}
+                  saveState={audioKeySave}
+                  testIdInput="audio-key-input"
+                  testIdSave="save-audio-key"
+                  testIdMissing="audio-key-missing"
+                  missingText={t('settings.asr.audio.key.missing')}
+                  onChange={(v) => {
+                    setAudioKeyEntry(v)
+                    if (audioKeySave === 'saved') setAudioKeySave('idle')
+                  }}
+                  onSave={() => {
+                    void handleSaveAudioKey()
+                  }}
+                  onReplace={() => {
+                    setAudioKeyEditing(true)
+                  }}
+                  onCancel={() => {
+                    setAudioKeyEditing(false)
+                    setAudioKeyEntry('')
+                  }}
+                />
+              </div>
             ) : (
               /* Deepgram key entry */
               <KeyField
