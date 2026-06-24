@@ -747,7 +747,7 @@ describe('SettingsScreen — import-only cloud ASR (Phase 3.4)', () => {
     expect(values).toContain('azure-speech')
   })
 
-  it('shows the import-only notice and config when OpenAI audio is selected', async () => {
+  it('shows the audio config when OpenAI audio is selected', async () => {
     render(<SettingsScreen />)
     await waitFor(() => screen.getByTestId('asr-provider-select'))
 
@@ -758,10 +758,11 @@ describe('SettingsScreen — import-only cloud ASR (Phase 3.4)', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId('asr-import-only-notice')).toBeDefined()
       expect(screen.getByTestId('audio-model')).toBeDefined()
       expect(screen.getByTestId('audio-key-input')).toBeDefined()
     })
+    // The import-only notice is gone now that live streaming is supported.
+    expect(screen.queryByTestId('asr-import-only-notice')).toBeNull()
   })
 
   it('persists asrProvider openai-audio with the default model on selection', async () => {

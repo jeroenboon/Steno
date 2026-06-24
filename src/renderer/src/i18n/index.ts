@@ -125,14 +125,11 @@ const nl = {
   'settings.asr.mode.cloud': 'Deepgram',
   'settings.asr.mode.cloud.sub': 'Deepgram',
   'settings.asr.mode.openai': 'OpenAI',
-  'settings.asr.mode.openai.sub': 'Alleen import',
+  'settings.asr.mode.openai.sub': 'Live en import',
   'settings.asr.mode.mistral': 'Mistral Voxtral',
-  'settings.asr.mode.mistral.sub': 'Alleen import',
+  'settings.asr.mode.mistral.sub': 'Live en import',
   'settings.asr.mode.azure': 'Azure Speech',
-  'settings.asr.mode.azure.sub': 'Alleen import',
-  // Import-only ASR providers (Phase 3.4): batch transcription for file import.
-  'settings.asr.importOnly.notice':
-    'Deze provider werkt alleen voor het importeren van audiobestanden; live-transcriptie is nog niet beschikbaar. Kies Lokaal of Deepgram voor live vergaderingen.',
+  'settings.asr.mode.azure.sub': 'Live en import',
   'settings.asr.audio.model.label': 'Model',
   'settings.asr.audio.key.label': 'API-sleutel',
   'settings.asr.audio.key.placeholder': '...',

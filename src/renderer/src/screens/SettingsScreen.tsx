@@ -940,12 +940,8 @@ export function SettingsScreen(): React.JSX.Element {
                 )}
               </>
             ) : audioProvider !== null ? (
-              /* Import-only cloud audio (OpenAI / Mistral / Azure Speech) */
+              /* Cloud audio (OpenAI / Mistral / Azure Speech) — live + import */
               <div className="settings-audio-asr">
-                <p data-testid="asr-import-only-notice" className="settings-disclosure" role="note">
-                  {t('settings.asr.importOnly.notice')}
-                </p>
-
                 {isAzureSpeech && (
                   <>
                     <TextField
