@@ -147,6 +147,8 @@ const nl = {
   'settings.extraction.mode.openai.sub': 'Cloud',
   'settings.extraction.mode.mistral': 'Mistral',
   'settings.extraction.mode.mistral.sub': 'Cloud',
+  'settings.extraction.mode.azure': 'Azure OpenAI',
+  'settings.extraction.mode.azure.sub': 'Cloud',
   'settings.extraction.mode.custom': 'Aangepast',
   'settings.extraction.mode.custom.sub': 'OpenAI-compatibel',
   'settings.extraction.anthropic.key.label': 'Anthropic API-sleutel',
@@ -175,6 +177,23 @@ const nl = {
   'settings.custom.save': 'Instellingen opslaan',
   'settings.custom.saved': 'Opgeslagen',
 
+  // Azure OpenAI extraction config (Phase 2.2)
+  'settings.azure.endpoint.label': 'Endpoint',
+  'settings.azure.endpoint.placeholder': 'https://mijn-resource.openai.azure.com/',
+  'settings.azure.deployment.label': 'Deployment',
+  'settings.azure.deployment.placeholder': 'mijn-gpt-deployment',
+  'settings.azure.apiVersion.label': 'API-versie',
+  'settings.azure.apiVersion.placeholder': '2024-12-01-preview',
+  'settings.azure.model.label': 'Model',
+  'settings.azure.model.placeholder': 'gpt-4o-mini',
+  'settings.azure.displayName.label': 'Weergavenaam',
+  'settings.azure.displayName.placeholder': 'Azure OpenAI',
+  'settings.azure.key.label': 'API-sleutel',
+  'settings.azure.key.placeholder': '...',
+  'settings.azure.key.missing': 'Geen sleutel ingesteld. Vul je Azure API-sleutel in.',
+  'settings.azure.save': 'Instellingen opslaan',
+  'settings.azure.saved': 'Opgeslagen',
+
   'settings.language.heading': 'Vergadertaal',
 
   'settings.disclosure.audio.label': 'Audiogegevens:',
@@ -183,6 +202,10 @@ const nl = {
   'settings.validation.baseUrl': 'Voer een geldige URL in (bijv. https://api.example.com/v1)',
   'settings.validation.model': 'Voer een modelnaam in',
   'settings.validation.displayName': 'Voer een weergavenaam in',
+  'settings.validation.endpoint':
+    'Voer een geldige endpoint-URL in (bijv. https://mijn-resource.openai.azure.com/)',
+  'settings.validation.deployment': 'Voer een deployment-naam in',
+  'settings.validation.apiVersion': 'Voer een API-versie in',
 
   // No-key banner (item 0016)
   'nokey.banner.title': 'API-sleutels niet ingesteld',

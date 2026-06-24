@@ -729,6 +729,135 @@ describe('SettingsScreen — extraction provider presets (Phase 1.2)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Phase 2.2: Azure OpenAI extraction config panel
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — Azure OpenAI extraction (Phase 2.2)', () => {
+  const azureSettings: AppSettings = {
+    asrProvider: 'deepgram',
+    extractionProvider: 'azure-openai',
+    primaryLanguage: 'nl',
+    azureOpenAI: {
+      endpoint: 'https://my-resource.openai.azure.com/',
+      deployment: 'my-deployment',
+      apiVersion: '2024-12-01-preview',
+      model: 'gpt-4o-mini',
+      keyRef: 'azure',
+      displayName: 'Azure OpenAI',
+    },
+  }
+
+  beforeEach(() => {
+    setup()
+  })
+
+  it('offers Azure as a selection option in the extraction provider select', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      const select = screen.getByTestId('extraction-provider-select')
+      const azureOption = Array.from((select as HTMLSelectElement).options).find(
+        (o) => o.value === 'azure',
+      )
+      expect(azureOption).toBeDefined()
+    })
+  })
+
+  it('shows the Azure config fields (endpoint/deployment/apiVersion) when azure-openai is selected', async () => {
+    setup({ settingsGet: vi.fn().mockResolvedValue(azureSettings) })
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('azure-openai-endpoint')).toBeDefined()
+      expect(screen.getByTestId('azure-openai-deployment')).toBeDefined()
+      expect(screen.getByTestId('azure-openai-api-version')).toBeDefined()
+    })
+  })
+
+  it('reveals the Azure endpoint field when Azure is picked from the select', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('extraction-provider-select'))
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'azure' } })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('azure-openai-endpoint')).toBeDefined()
+    })
+  })
+
+  it('persists settings as azure-openai with the deployment config when saved', async () => {
+    setup({ settingsGet: vi.fn().mockResolvedValue(azureSettings) })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('azure-openai-deployment'))
+
+    // Editing a field marks the form dirty so the save button is enabled.
+    const deploymentInput = screen.getByTestId('azure-openai-deployment')
+    fireEvent.change(deploymentInput, { target: { value: 'prod-deployment' } })
+
+    const saveBtn = screen.getByTestId('save-azure-openai')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return (
+            json.includes('"extractionProvider":"azure-openai"') &&
+            json.includes('"deployment":"prod-deployment"')
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+
+  it('saves the Azure key via secret:set under its keyRef', async () => {
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(azureSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: false }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('azure-openai-key'))
+
+    const input = screen.getByTestId('azure-openai-key')
+    fireEvent.change(input, { target: { value: 'azure-secret-789' } })
+
+    const saveBtn = screen.getByTestId('save-azure-key')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(mockApi.secretSet).toHaveBeenCalledWith({ key: 'azure', value: 'azure-secret-789' })
+    })
+  })
+
+  it('does NOT include the Azure key value in any settings:set call', async () => {
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(azureSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: false }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('azure-openai-key'))
+
+    const input = screen.getByTestId('azure-openai-key')
+    fireEvent.change(input, { target: { value: 'AZURE_SUPER_SECRET' } })
+    act(() => {
+      fireEvent.click(screen.getByTestId('save-azure-key'))
+    })
+    await waitFor(() => {
+      expect(mockApi.secretSet).toHaveBeenCalled()
+    })
+
+    for (const call of mockApi.settingsSet.mock.calls) {
+      expect(JSON.stringify(call[0])).not.toContain('AZURE_SUPER_SECRET')
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Phase 1.2 bugfix: key saved state and error handling
 // ---------------------------------------------------------------------------
 

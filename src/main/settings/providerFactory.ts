@@ -34,6 +34,7 @@ import {
   AnthropicExtractionProvider,
   type AnthropicExtractionProviderOptions,
 } from '../providers/AnthropicExtractionProvider'
+import { AzureOpenAIExtractionProvider } from '../providers/AzureOpenAIExtractionProvider'
 import { DeepgramAsrProvider } from '../providers/DeepgramAsrProvider'
 import { LocalAsrProvider } from '../providers/LocalAsrProvider'
 import { OpenAICompatibleExtractionProvider } from '../providers/OpenAICompatibleExtractionProvider'
@@ -237,10 +238,22 @@ function buildExtractionProvider(
     }
 
     case 'azure-openai': {
-      throw new Error(
-        'Azure OpenAI extraction provider is not yet implemented. ' +
-          'Please use Anthropic or OpenAI-compatible providers for now.',
-      )
+      const { endpoint, deployment, apiVersion, model, keyRef, displayName } = settings.azureOpenAI
+      const apiKey = storage.getSecret(keyRef)
+      if (apiKey === null) {
+        throw new Error(
+          `Azure OpenAI API key is not set for keyRef "${keyRef}". ` +
+            `Store the key via SecretStorage with the key name "${keyRef}" before building providers.`,
+        )
+      }
+      return new AzureOpenAIExtractionProvider({
+        apiKey,
+        endpoint,
+        deployment,
+        apiVersion,
+        model,
+        displayName,
+      })
     }
   }
 }

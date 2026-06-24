@@ -733,7 +733,7 @@ describe('buildProviders', () => {
     expect(() => buildProviders(settings, storage)).toThrow(/my-llm-key/i)
   })
 
-  it('throws "not yet implemented" when azure-openai extraction is selected', () => {
+  it('builds an Azure OpenAI extraction provider from settings', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('deepgram', 'dg-key-123')
     storage.setSecret('azure-key', 'azure-api-key')
@@ -752,7 +752,30 @@ describe('buildProviders', () => {
       },
     }
 
-    expect(() => buildProviders(settings, storage)).toThrow(/not yet implemented/i)
+    const { extraction } = buildProviders(settings, storage)
+    expect(typeof extraction.extract).toBe('function')
+  })
+
+  it('throws a clear error when the Azure OpenAI key is missing from storage', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('deepgram', 'dg-key-123')
+    // No 'azure-key' stored
+
+    const settings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'en',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'my-gpt-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure OpenAI',
+      },
+    }
+
+    expect(() => buildProviders(settings, storage)).toThrow(/azure-key/i)
   })
 
   it('throws when local-parakeet model is not downloaded', () => {
