@@ -159,6 +159,26 @@ describe('OpenAICompatibleExtractionProvider.extract', () => {
     expect(body).toContain('discussionSummaries')
   })
 
+  it('sends a stable prompt_cache_key for the cacheable prefix across rolling ticks', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(validExtraction)))
+    const provider = makeProvider(fetchMock)
+
+    await provider.extract(extractionRequest)
+    await provider.extract(extractionRequest)
+
+    const body1 = JSON.parse(
+      (fetchMock.mock.calls[0]?.[1] as RequestInit).body as string,
+    ) as Record<string, unknown>
+    const body2 = JSON.parse(
+      (fetchMock.mock.calls[1]?.[1] as RequestInit).body as string,
+    ) as Record<string, unknown>
+
+    expect(typeof body1.prompt_cache_key).toBe('string')
+    expect((body1.prompt_cache_key as string).length).toBeGreaterThan(0)
+    // Identical agenda/participants prefix → identical routing key → cache hit.
+    expect(body2.prompt_cache_key).toBe(body1.prompt_cache_key)
+  })
+
   it('tags error logs with the vendor displayName', async () => {
     const logged: string[] = []
     const errorSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {

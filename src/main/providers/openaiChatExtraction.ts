@@ -138,6 +138,12 @@ export class ChatExtractionEngine {
     const body = JSON.stringify({
       model: this._model,
       response_format: { type: 'json_object' },
+      // Route identical prefixes to the same cache. The rolling cadence sends a
+      // byte-identical system prompt (agenda + participants + instructions) every
+      // 15-30s, so a stable key derived from it maximises OpenAI/Azure prompt-cache
+      // hits on the dominant rolling cost (Phase 5.4). The key is non-sensitive
+      // (a hash of the prompt, never the transcript or the API key).
+      prompt_cache_key: `${this._model}:${stableHash(systemPrompt)}`,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
@@ -168,6 +174,21 @@ export class ChatExtractionEngine {
 // ---------------------------------------------------------------------------
 // Helpers (shared prompt building + response parsing)
 // ---------------------------------------------------------------------------
+
+/**
+ * Deterministic, non-cryptographic hash (FNV-1a, 32-bit) of a string, as hex.
+ * Used only to derive a stable, non-sensitive prompt_cache_key from the system
+ * prompt — never for security. Identical prompts hash identically, so rolling
+ * ticks within a meeting share a cache route.
+ */
+function stableHash(text: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16)
+}
 
 function extractContent(json: unknown): string | null {
   if (json === null || typeof json !== 'object') return null

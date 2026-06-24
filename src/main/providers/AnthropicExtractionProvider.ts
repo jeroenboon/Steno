@@ -328,7 +328,11 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
     const response = await this._client.messages.create({
       model,
       max_tokens: 4096,
-      system: systemPrompt,
+      // Cache the stable prefix (tools + agenda + participants + instructions).
+      // The rolling cadence fires this same prefix every 15-30s with only the
+      // transcript (the user message) growing, so an ephemeral cache breakpoint
+      // on the system block cuts the dominant rolling cost (ADR 0010, Phase 5.4).
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
       tools: [
         {
