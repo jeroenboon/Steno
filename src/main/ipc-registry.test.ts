@@ -632,4 +632,55 @@ describe('IPC registry — model:status and model:download (item 0024)', () => {
       ).rejects.toThrow()
     })
   })
+
+  describe('provider:testConnection', () => {
+    it('delegates to the injected testConnection dep with the requested role', async () => {
+      const testConnection = vi.fn().mockResolvedValue({ ok: true })
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        testConnection,
+      })
+
+      const response = await registry.dispatch('provider:testConnection', { role: 'extraction' })
+
+      expect(response).toEqual({ ok: true })
+      expect(testConnection).toHaveBeenCalledWith('extraction')
+    })
+
+    it('passes through a failure result from the dep', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        testConnection: () => Promise.resolve({ ok: false, error: 'HTTP 401' }),
+      })
+
+      const response = await registry.dispatch('provider:testConnection', { role: 'asr' })
+
+      expect(response).toEqual({ ok: false, error: 'HTTP 401' })
+    })
+
+    it('returns unavailable when the dep is absent', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+      })
+
+      const response = await registry.dispatch('provider:testConnection', { role: 'asr' })
+
+      expect(response).toEqual({ ok: false, error: 'unavailable' })
+    })
+
+    it('rejects an invalid role', async () => {
+      const registry = createIpcRegistry({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+        settingsStore: mockSettingsStore as any,
+        testConnection: () => Promise.resolve({ ok: true }),
+      })
+
+      await expect(
+        registry.dispatch('provider:testConnection', { role: 'bogus' }),
+      ).rejects.toThrow()
+    })
+  })
 })

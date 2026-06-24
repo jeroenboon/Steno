@@ -73,6 +73,7 @@ beforeEach(() => {
   useAppStore.setState({
     route: 'draft',
     activeMeeting: null,
+    liveMeetingId: null,
     micPermission: 'unknown',
     transcriptSpans: [],
   })
@@ -154,24 +155,24 @@ describe('Live tab nav guards', () => {
     expect(liveTab).toBeDisabled()
   })
 
-  it('Draft tab is disabled when a meeting is active', async () => {
-    useAppStore.setState({ route: 'live', activeMeeting: 'mtg-1' })
+  it('Draft tab is disabled when a live meeting is in progress', async () => {
+    useAppStore.setState({ route: 'live', activeMeeting: 'mtg-1', liveMeetingId: 'mtg-1' })
     renderApp()
 
     const draftTab = await screen.findByRole('button', { name: /voorbereiding/i })
     expect(draftTab).toBeDisabled()
   })
 
-  it('Live tab is enabled when a meeting is active', async () => {
-    useAppStore.setState({ route: 'draft', activeMeeting: 'mtg-1' })
+  it('Live tab is enabled when a live meeting is in progress', async () => {
+    useAppStore.setState({ route: 'draft', activeMeeting: 'mtg-1', liveMeetingId: 'mtg-1' })
     renderApp()
 
     const liveTab = await screen.findByRole('button', { name: /live/i })
     expect(liveTab).not.toBeDisabled()
   })
 
-  it('Live tab shows a recording indicator when meeting is active', async () => {
-    useAppStore.setState({ route: 'home', activeMeeting: 'mtg-1' })
+  it('Live tab shows a recording indicator when a live meeting is in progress', async () => {
+    useAppStore.setState({ route: 'home', activeMeeting: 'mtg-1', liveMeetingId: 'mtg-1' })
     renderApp()
 
     expect(await screen.findByTestId('nav-live-dot')).toBeInTheDocument()

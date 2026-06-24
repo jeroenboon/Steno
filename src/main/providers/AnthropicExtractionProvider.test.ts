@@ -158,14 +158,40 @@ describe('AnthropicExtractionProvider', () => {
   // Prompt context: agenda, participants, language
   // -------------------------------------------------------------------------
 
-  /** Helper: get the `system` prompt string from the first mockCreate call. */
+  /**
+   * Helper: get the `system` prompt text from the first mockCreate call.
+   * Handles both the plain-string form and the cached-block-array form
+   * (`[{ type:'text', text, cache_control }]`) introduced for prompt caching.
+   */
   function captureSystemPrompt(): string {
     const arg: unknown = mockCreate.mock.calls[0]?.[0]
     if (typeof arg !== 'object' || arg === null || !('system' in arg)) return ''
     // After 'system' in arg, TS narrows arg to object & { system: unknown }
     const system: unknown = (arg as Record<string, unknown>).system
-    return typeof system === 'string' ? system : ''
+    if (typeof system === 'string') return system
+    if (Array.isArray(system)) {
+      return system
+        .map((block) =>
+          typeof block === 'object' && block !== null && 'text' in block
+            ? String((block as Record<string, unknown>).text)
+            : '',
+        )
+        .join('')
+    }
+    return ''
   }
+
+  it('marks the system prompt as a cached prefix (cache_control ephemeral)', async () => {
+    mockCreate.mockResolvedValueOnce(makeToolUseResponse(validRollingContent))
+
+    const provider = makeProvider()
+    await provider.extract(rollingRequest)
+
+    const arg = mockCreate.mock.calls[0]?.[0] as { system: unknown }
+    expect(Array.isArray(arg.system)).toBe(true)
+    const block = (arg.system as Record<string, unknown>[])[0]
+    expect(block).toMatchObject({ type: 'text', cache_control: { type: 'ephemeral' } })
+  })
 
   it('includes agenda item titles in the request to the model', async () => {
     mockCreate.mockResolvedValueOnce(makeToolUseResponse(validRollingContent))

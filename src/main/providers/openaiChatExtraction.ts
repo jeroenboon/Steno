@@ -1,113 +1,112 @@
 /**
- * CustomOpenAIExtractionProvider (item 0012).
+ * Shared extraction engine for OpenAI-compatible chat-completions endpoints.
  *
- * An ExtractionProvider adapter for OpenAI-compatible endpoints (OpenAI,
- * Azure OpenAI, local proxies, etc.). Uses the OpenAI chat completions API
- * with JSON mode / structured output via `response_format: { type: "json_object" }`.
- *
- * ## Design
- *
- * This adapter uses the Fetch API directly (no OpenAI SDK dependency) to keep
- * the dependency surface minimal and to avoid pulling in the full SDK for
- * what is a simple chat completion call.
- *
- * The structured-output strategy mirrors AnthropicExtractionProvider:
- *   - We ask the model to respond with JSON matching the ExtractionResponse schema.
- *   - One retry on validation failure; skip the turn if the retry also fails.
+ * OpenAI, Mistral and Azure OpenAI all speak the same `chat/completions` wire
+ * with JSON mode (`response_format: { type: "json_object" }`). They differ only
+ * in the request URL and the auth header (OpenAI/Mistral use
+ * `Authorization: Bearer`, Azure uses `api-key`). That difference is captured by
+ * the injected `ChatCompletionsTarget`; everything else — prompt building,
+ * response parsing, Zod validation, and the one-retry-then-degrade strategy
+ * (mirroring AnthropicExtractionProvider) — lives here, so the per-vendor
+ * adapters stay thin.
  *
  * ## Privacy (principle #12)
- * The API key is injected (never read from disk here). It is passed in the
- * Authorization header and is never logged.
- *
- * ## Constructor params
- * - `apiKey`     — Raw API key for the endpoint. Injected by the factory.
- * - `baseUrl`    — Base URL, e.g. https://api.openai.com/v1
- * - `model`      — Model identifier, e.g. gpt-4o
- * - `displayName` — Shown in logs (non-sensitive) and egress disclosure.
- * - `fetch`       — Injected for testability. Defaults to global fetch.
+ * The API key only ever appears inside the injected `target.headers`; it is
+ * never logged. Logs carry the non-sensitive `logTag` (e.g. `[OpenAI]`,
+ * `[Azure]`) so vendors are distinguishable without exposing content or keys.
  */
 
 import type { TranscriptSpan } from '@shared/domain/types'
 import {
   ExtractionResponseSchema,
   InferredContextSchema,
-  type ExtractionProvider,
   type ExtractionRequest,
   type ExtractionResponse,
   type InferredContext,
 } from '@shared/providers'
 
 // ---------------------------------------------------------------------------
-// Constructor options
+// Target + engine options
 // ---------------------------------------------------------------------------
 
-export interface CustomOpenAIExtractionProviderOptions {
-  apiKey: string
-  baseUrl: string
+/**
+ * How to reach a specific chat-completions endpoint: the fully resolved URL and
+ * the request headers (including the vendor-specific auth header). Computed once
+ * by the adapter, since neither changes per request.
+ */
+export interface ChatCompletionsTarget {
+  url: string
+  headers: Record<string, string>
+}
+
+export interface ChatExtractionEngineOptions {
+  /** Model identifier sent in the request body. */
   model: string
-  displayName: string
-  fetch?: typeof globalThis.fetch
+  /** Non-sensitive log tag, e.g. `[OpenAI]` or `[Azure]`. */
+  logTag: string
+  /** Resolved URL + headers (carries the auth header — never logged). */
+  target: ChatCompletionsTarget
+  /** Injected for testability. */
+  fetch: typeof globalThis.fetch
 }
 
 // ---------------------------------------------------------------------------
-// Adapter
+// Engine
 // ---------------------------------------------------------------------------
 
-export class CustomOpenAIExtractionProvider implements ExtractionProvider {
-  private readonly _apiKey: string
-  private readonly _baseUrl: string
+export class ChatExtractionEngine {
   private readonly _model: string
-  private readonly _displayName: string
+  private readonly _logTag: string
+  private readonly _target: ChatCompletionsTarget
   private readonly _fetch: typeof globalThis.fetch
 
-  constructor(opts: CustomOpenAIExtractionProviderOptions) {
-    this._apiKey = opts.apiKey
-    this._baseUrl = opts.baseUrl.replace(/\/$/, '') // strip trailing slash
+  constructor(opts: ChatExtractionEngineOptions) {
     this._model = opts.model
-    this._displayName = opts.displayName
-    this._fetch = opts.fetch ?? globalThis.fetch
+    this._logTag = opts.logTag
+    this._target = opts.target
+    this._fetch = opts.fetch
   }
 
   async extract(request: ExtractionRequest): Promise<ExtractionResponse> {
     const first = await this._callAndValidate(request)
     if (first !== null) return first
 
-    console.error(
-      `[CustomOpenAIExtractionProvider:${this._displayName}] Validation failed, retrying`,
-    )
+    console.error(`${this._logTag} Validation failed, retrying`)
     const retry = await this._callAndValidate(request)
     if (retry !== null) return retry
 
-    console.error(
-      `[CustomOpenAIExtractionProvider:${this._displayName}] Retry failed, skipping turn`,
-    )
+    console.error(`${this._logTag} Retry failed, skipping turn`)
     return { proposedDecisions: [], proposedActions: [] }
   }
 
-  /**
-   * Infer Agenda Items and Participants from a whole transcript, for an
-   * Imported Meeting where the user did not supply them (item 0026). Mirrors
-   * extract()'s one-retry-then-empty strategy so a bad response degrades to an
-   * empty context rather than throwing into the import.
-   *
-   * Never logs transcript content or the API key (principle #12).
-   */
   async inferContext(spans: TranscriptSpan[]): Promise<InferredContext> {
     if (spans.length === 0) return { agendaItems: [], participants: [] }
 
     const first = await this._callAndValidateInfer(spans)
     if (first !== null) return first
 
-    console.error(
-      `[CustomOpenAIExtractionProvider:${this._displayName}] Context inference failed, retrying`,
-    )
+    console.error(`${this._logTag} Context inference failed, retrying`)
     const retry = await this._callAndValidateInfer(spans)
     if (retry !== null) return retry
 
-    console.error(
-      `[CustomOpenAIExtractionProvider:${this._displayName}] Context inference retry failed, returning empty`,
-    )
+    console.error(`${this._logTag} Context inference retry failed, returning empty`)
     return { agendaItems: [], participants: [] }
+  }
+
+  private async _callAndValidate(request: ExtractionRequest): Promise<ExtractionResponse | null> {
+    const content = await this._post(buildSystemPrompt(request), buildUserMessage(request))
+    if (content === null) return null
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(content) as unknown
+    } catch {
+      return null
+    }
+
+    const validated = ExtractionResponseSchema.safeParse(parsed)
+    if (!validated.success) return null
+    return validated.data
   }
 
   private async _callAndValidateInfer(spans: TranscriptSpan[]): Promise<InferredContext | null> {
@@ -115,34 +114,7 @@ export class CustomOpenAIExtractionProvider implements ExtractionProvider {
       .map((s) => `[${s.id}] ${s.speakerLabel ? `${s.speakerLabel}: ` : ''}${s.text}`)
       .join('\n')
 
-    const url = `${this._baseUrl}/chat/completions`
-    const body = JSON.stringify({
-      model: this._model,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: buildInferSystemPrompt() },
-        { role: 'user', content: `Transcript:\n${spanLines}` },
-      ],
-    })
-
-    const response = await this._fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this._apiKey}`,
-      },
-      body,
-    })
-
-    if (!response.ok) {
-      console.error(
-        `[CustomOpenAIExtractionProvider:${this._displayName}] HTTP ${String(response.status)} on inference`,
-      )
-      return null
-    }
-
-    const json: unknown = await response.json()
-    const content = extractContent(json)
+    const content = await this._post(buildInferSystemPrompt(), `Transcript:\n${spanLines}`)
     if (content === null) return null
 
     let parsed: unknown
@@ -157,61 +129,66 @@ export class CustomOpenAIExtractionProvider implements ExtractionProvider {
     return validated.data
   }
 
-  private async _callAndValidate(request: ExtractionRequest): Promise<ExtractionResponse | null> {
-    const systemPrompt = buildSystemPrompt(request)
-    const userMessage = buildUserMessage(request)
-
-    // Privacy: never log apiKey, transcript content, or raw response body
-    const url = `${this._baseUrl}/chat/completions`
-
+  /**
+   * POST one chat-completions request and return the message content string, or
+   * null on a transport/HTTP/shape failure. Never logs the key, the transcript,
+   * or the raw response body (principle #12).
+   */
+  private async _post(systemPrompt: string, userMessage: string): Promise<string | null> {
     const body = JSON.stringify({
       model: this._model,
       response_format: { type: 'json_object' },
+      // Route identical prefixes to the same cache. The rolling cadence sends a
+      // byte-identical system prompt (agenda + participants + instructions) every
+      // 15-30s, so a stable key derived from it maximises OpenAI/Azure prompt-cache
+      // hits on the dominant rolling cost (Phase 5.4). The key is non-sensitive
+      // (a hash of the prompt, never the transcript or the API key).
+      prompt_cache_key: `${this._model}:${stableHash(systemPrompt)}`,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
       ],
     })
 
-    const response = await this._fetch(url, {
+    const response = await this._fetch(this._target.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this._apiKey}`,
-      },
+      headers: this._target.headers,
       body,
     })
 
     if (!response.ok) {
-      console.error(
-        `[CustomOpenAIExtractionProvider:${this._displayName}] HTTP ${String(response.status)}`,
-      )
+      console.error(`${this._logTag} HTTP ${String(response.status)}`)
       return null
     }
 
     const json: unknown = await response.json()
     const content = extractContent(json)
     if (content === null) {
-      console.error(`[CustomOpenAIExtractionProvider:${this._displayName}] No content in response`)
+      console.error(`${this._logTag} No content in response`)
       return null
     }
-
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(content) as unknown
-    } catch {
-      return null
-    }
-
-    const validated = ExtractionResponseSchema.safeParse(parsed)
-    if (!validated.success) return null
-    return validated.data
+    return content
   }
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers (shared prompt building + response parsing)
 // ---------------------------------------------------------------------------
+
+/**
+ * Deterministic, non-cryptographic hash (FNV-1a, 32-bit) of a string, as hex.
+ * Used only to derive a stable, non-sensitive prompt_cache_key from the system
+ * prompt — never for security. Identical prompts hash identically, so rolling
+ * ticks within a meeting share a cache route.
+ */
+function stableHash(text: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16)
+}
 
 function extractContent(json: unknown): string | null {
   if (json === null || typeof json !== 'object') return null

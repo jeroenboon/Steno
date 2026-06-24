@@ -153,7 +153,7 @@ export class ImportSessionController {
       this._participantRepo.insert({ id: randomUUID(), name: p.name }, opts.meetingId)
     }
 
-    const asrResult = this._buildAsr(this._settingsStore.current, this._secretStorage)
+    const asrResult = this._buildAsr(this._settingsStore.current, this._secretStorage, 'import')
     if (!asrResult.ok) {
       this._emitProgress('error', { error: asrResult.error })
       this._asrProvider = null

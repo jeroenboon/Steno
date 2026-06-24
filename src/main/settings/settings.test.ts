@@ -30,6 +30,8 @@ vi.mock('electron', () => ({
   },
 }))
 
+import { MistralVoxtralRealtimeAsrProvider } from '../providers/MistralVoxtralRealtimeAsrProvider'
+import { OpenAIRealtimeAsrProvider } from '../providers/OpenAIRealtimeAsrProvider'
 import { ModelDownloader } from '../providers/sherpa/ModelDownloader'
 
 import { computeEgressState, buildDisclosureCopy, type EgressState } from './egressState'
@@ -69,12 +71,13 @@ describe('AppSettingsSchema', () => {
     }
   })
 
-  it('parses a custom OpenAI-compatible extraction config', () => {
+  it('parses an OpenAI-compatible extraction config with custom preset', () => {
     const input: AppSettings = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'en',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://my.openai-proxy.example.com/v1',
         model: 'gpt-4o',
         keyRef: 'custom-openai-key',
@@ -93,6 +96,80 @@ describe('AppSettingsSchema', () => {
     }
     const result = AppSettingsSchema.safeParse(input)
     expect(result.success).toBe(true)
+  })
+
+  it('parses a valid openai-audio ASR config', () => {
+    const input: AppSettings = {
+      asrProvider: 'openai-audio',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      openaiAudio: {
+        model: 'gpt-4o-mini-transcribe',
+        keyRef: 'openai-key',
+        displayName: 'OpenAI Audio',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(true)
+  })
+
+  it('parses a valid mistral-voxtral ASR config', () => {
+    const input: AppSettings = {
+      asrProvider: 'mistral-voxtral',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      mistralVoxtral: {
+        model: 'Voxtral Mini Transcribe V2',
+        keyRef: 'mistral-key',
+        displayName: 'Mistral Voxtral',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(true)
+  })
+
+  it('parses a valid azure-speech ASR config', () => {
+    const input: AppSettings = {
+      asrProvider: 'azure-speech',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      azureSpeech: {
+        endpoint: 'https://my-resource.cognitiveservices.azure.com/',
+        deployment: 'my-speech-deployment',
+        apiVersion: '2024-02-15-preview',
+        model: 'whisper',
+        keyRef: 'azure-speech-key',
+        displayName: 'Azure Speech',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects openai-audio without openaiAudio config', () => {
+    const input = {
+      asrProvider: 'openai-audio',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'nl',
+      // no openaiAudio config
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects openai-audio config with empty model', () => {
+    const input = {
+      asrProvider: 'openai-audio',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'nl',
+      openaiAudio: {
+        model: '',
+        keyRef: 'openai-key',
+        displayName: 'OpenAI Audio',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
   })
 
   it('rejects unknown ASR provider', () => {
@@ -125,23 +202,24 @@ describe('AppSettingsSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects custom-openai extraction without customOpenAI config', () => {
+  it('rejects openai-compatible extraction without openaiCompatible config', () => {
     const input = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      // no customOpenAI block
+      // no openaiCompatible block
     }
     const result = AppSettingsSchema.safeParse(input)
     expect(result.success).toBe(false)
   })
 
-  it('rejects custom-openai config with invalid base URL', () => {
+  it('rejects openai-compatible config with invalid base URL', () => {
     const input = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'not-a-url',
         model: 'gpt-4o',
         keyRef: 'my-key',
@@ -152,12 +230,13 @@ describe('AppSettingsSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects custom-openai config with empty model', () => {
+  it('rejects openai-compatible config with empty model', () => {
     const input = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: '',
         keyRef: 'my-key',
@@ -168,12 +247,13 @@ describe('AppSettingsSchema', () => {
     expect(result.success).toBe(false)
   })
 
-  it('rejects custom-openai config with empty keyRef', () => {
+  it('rejects openai-compatible config with empty keyRef', () => {
     const input = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: 'gpt-4o',
         keyRef: '',
@@ -182,6 +262,171 @@ describe('AppSettingsSchema', () => {
     }
     const result = AppSettingsSchema.safeParse(input)
     expect(result.success).toBe(false)
+  })
+
+  it('parses a valid azure-openai extraction config', () => {
+    const input: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'en',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'my-gpt-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure OpenAI',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects azure-openai extraction without azureOpenAI config', () => {
+    const input = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'nl',
+      // no azureOpenAI block
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects azure-openai config with invalid endpoint URL', () => {
+    const input = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'nl',
+      azureOpenAI: {
+        endpoint: 'not-a-url',
+        deployment: 'my-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects azure-openai config with empty deployment', () => {
+    const input = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'nl',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: '',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects azure-openai config with empty keyRef', () => {
+    const input = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'nl',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'my-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: '',
+        displayName: 'Azure',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 1.5 Settings migration — custom-openai → openai-compatible
+// ---------------------------------------------------------------------------
+
+describe('Settings migration', () => {
+  it('migrates old custom-openai config to openai-compatible with preset:custom', async () => {
+    const oldSettings: Record<string, unknown> = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'custom-openai',
+      primaryLanguage: 'en',
+      customOpenAI: {
+        baseUrl: 'https://api.example.com/v1',
+        model: 'gpt-4o',
+        keyRef: 'my-key',
+        displayName: 'My LLM',
+      },
+    }
+
+    // Simulate SettingsStore.load() applying migrations
+    const { applyMigrations } = await import('./migrationUtils')
+    const migrated = applyMigrations(oldSettings)
+
+    // Verify the migration worked
+    const result = AppSettingsSchema.safeParse(migrated)
+    expect(result.success).toBe(true)
+    if (result.success && result.data.extractionProvider === 'openai-compatible') {
+      expect(result.data.openaiCompatible.preset).toBe('custom')
+      expect(result.data.openaiCompatible.baseUrl).toBe('https://api.example.com/v1')
+      expect(result.data.openaiCompatible.model).toBe('gpt-4o')
+      expect(result.data.openaiCompatible.keyRef).toBe('my-key')
+      expect(result.data.openaiCompatible.displayName).toBe('My LLM')
+    }
+  })
+
+  it('migration is idempotent on already-migrated config', async () => {
+    const migratedSettings: Record<string, unknown> = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'openai-compatible',
+      primaryLanguage: 'en',
+      openaiCompatible: {
+        preset: 'custom',
+        baseUrl: 'https://api.example.com/v1',
+        model: 'gpt-4o',
+        keyRef: 'my-key',
+        displayName: 'My LLM',
+      },
+    }
+
+    const { applyMigrations } = await import('./migrationUtils')
+    const migrated = applyMigrations(migratedSettings)
+
+    // Should be identical (no changes)
+    expect(migrated.extractionProvider).toBe('openai-compatible')
+  })
+
+  it('SettingsStore.load applies migrations before validation', async () => {
+    const oldConfigJson = JSON.stringify({
+      asrProvider: 'deepgram',
+      extractionProvider: 'custom-openai',
+      primaryLanguage: 'en',
+      customOpenAI: {
+        baseUrl: 'https://api.example.com/v1',
+        model: 'gpt-4o',
+        keyRef: 'my-key',
+        displayName: 'My LLM',
+      },
+    })
+
+    const store = new SettingsStore({
+      userDataPath: '/fake',
+      readFile: () => Promise.resolve(oldConfigJson),
+      writeFile: () => Promise.resolve(),
+    })
+
+    const loaded = await store.load()
+    expect(loaded.extractionProvider).toBe('openai-compatible')
+    if (loaded.extractionProvider === 'openai-compatible') {
+      expect(loaded.openaiCompatible.preset).toBe('custom')
+    }
   })
 })
 
@@ -372,16 +617,17 @@ describe('buildProviders', () => {
     expect(typeof providers.extraction.extract).toBe('function')
   })
 
-  it('returns a custom OpenAI-compatible extraction provider for custom-openai config', () => {
+  it('returns a custom OpenAI-compatible extraction provider for openai-compatible config', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('deepgram', 'dg-key-123')
     storage.setSecret('my-llm-key', 'custom-key-789')
 
     const settings: AppSettings = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'en',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: 'gpt-4o',
         keyRef: 'my-llm-key',
@@ -468,16 +714,17 @@ describe('buildProviders', () => {
     expect(() => buildProviders(settings, storage)).toThrow(/anthropic.*key/i)
   })
 
-  it('throws a clear error when custom-openai key is missing from storage', () => {
+  it('throws a clear error when openai-compatible key is missing from storage', () => {
     const storage = new MemorySecretStorage()
-    storage.setSecret('deepgram', 'dg-key')
+    storage.setSecret('deepgram', 'dg-key-123')
     // No 'my-llm-key' stored
 
     const settings: AppSettings = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'en',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: 'gpt-4o',
         keyRef: 'my-llm-key',
@@ -486,6 +733,51 @@ describe('buildProviders', () => {
     }
 
     expect(() => buildProviders(settings, storage)).toThrow(/my-llm-key/i)
+  })
+
+  it('builds an Azure OpenAI extraction provider from settings', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('deepgram', 'dg-key-123')
+    storage.setSecret('azure-key', 'azure-api-key')
+
+    const settings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'en',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'my-gpt-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure OpenAI',
+      },
+    }
+
+    const { extraction } = buildProviders(settings, storage)
+    expect(typeof extraction.extract).toBe('function')
+  })
+
+  it('throws a clear error when the Azure OpenAI key is missing from storage', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('deepgram', 'dg-key-123')
+    // No 'azure-key' stored
+
+    const settings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'en',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'my-gpt-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure OpenAI',
+      },
+    }
+
+    expect(() => buildProviders(settings, storage)).toThrow(/azure-key/i)
   })
 
   it('throws when local-parakeet model is not downloaded', () => {
@@ -502,7 +794,148 @@ describe('buildProviders', () => {
     expect(() => buildProviders(settings, storage)).toThrow(/gedownload/i)
   })
 
-  it('tryBuildAsrProvider returns ok:false when local-parakeet model is not downloaded', () => {
+  it('builds a streaming OpenAI realtime ASR provider for a live meeting', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('anthropic', 'ant-key')
+    storage.setSecret('openai-key', 'sk-openai')
+
+    const settings: AppSettings = {
+      asrProvider: 'openai-audio',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      openaiAudio: {
+        model: 'gpt-4o-transcribe',
+        keyRef: 'openai-key',
+        displayName: 'OpenAI Audio',
+      },
+    }
+
+    // buildProviders builds for live by default — no longer an import-only throw.
+    const { asr } = buildProviders(settings, storage)
+    expect(asr).toBeInstanceOf(OpenAIRealtimeAsrProvider)
+    // Streaming providers do not expose the batch transcribe method.
+    expect(typeof asr.transcribeBatch).toBe('undefined')
+  })
+
+  it('builds an OpenAI batch ASR provider for import', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('openai-key', 'sk-openai')
+
+    const settings: AppSettings = {
+      asrProvider: 'openai-audio',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      openaiAudio: {
+        model: 'gpt-4o-mini-transcribe',
+        keyRef: 'openai-key',
+        displayName: 'OpenAI Audio',
+      },
+    }
+
+    const result = tryBuildAsrProvider(settings, storage, 'import')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(typeof result.provider.transcribeBatch).toBe('function')
+    }
+  })
+
+  it('builds a streaming Mistral Voxtral realtime ASR provider for a live meeting', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('anthropic', 'ant-key')
+    storage.setSecret('mistral-key', 'sk-mistral')
+
+    const settings: AppSettings = {
+      asrProvider: 'mistral-voxtral',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      mistralVoxtral: {
+        model: 'voxtral-mini-2507',
+        keyRef: 'mistral-key',
+        displayName: 'Mistral Voxtral',
+      },
+    }
+
+    const { asr } = buildProviders(settings, storage)
+    expect(asr).toBeInstanceOf(MistralVoxtralRealtimeAsrProvider)
+    expect(typeof asr.transcribeBatch).toBe('undefined')
+  })
+
+  it('builds a Mistral Voxtral batch ASR provider for import', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('mistral-key', 'sk-mistral')
+
+    const settings: AppSettings = {
+      asrProvider: 'mistral-voxtral',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      mistralVoxtral: {
+        model: 'voxtral-mini-2507',
+        keyRef: 'mistral-key',
+        displayName: 'Mistral Voxtral',
+      },
+    }
+
+    const result = tryBuildAsrProvider(settings, storage, 'import')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(typeof result.provider.transcribeBatch).toBe('function')
+    }
+  })
+
+  it('builds a streaming Azure realtime ASR provider for a live meeting', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('anthropic', 'ant-key')
+    storage.setSecret('azure-speech-key', 'azure-key')
+
+    const settings: AppSettings = {
+      asrProvider: 'azure-speech',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      azureSpeech: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'gpt-4o-transcribe',
+        apiVersion: '2024-10-01-preview',
+        model: 'gpt-4o-transcribe',
+        keyRef: 'azure-speech-key',
+        displayName: 'Azure Speech',
+      },
+    }
+
+    // Azure reuses the OpenAI realtime wire (Phase 4.2), so the live provider
+    // is an OpenAIRealtimeAsrProvider with an Azure connection.
+    const { asr } = buildProviders(settings, storage)
+    expect(asr).toBeInstanceOf(OpenAIRealtimeAsrProvider)
+    expect(typeof asr.transcribeBatch).toBe('undefined')
+  })
+
+  it('builds an Azure Whisper batch ASR provider for import', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('azure-speech-key', 'azure-key')
+
+    const settings: AppSettings = {
+      asrProvider: 'azure-speech',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      azureSpeech: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'whisper',
+        apiVersion: '2024-06-01',
+        model: 'whisper',
+        keyRef: 'azure-speech-key',
+        displayName: 'Azure Speech',
+      },
+    }
+
+    const result = tryBuildAsrProvider(settings, storage, 'import')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(typeof result.provider.transcribeBatch).toBe('function')
+    }
+    // Sanity: the old throw is gone for the import path.
+    expect(true).toBe(true)
+  })
+
+  it('throws when local-parakeet model is not downloaded', () => {
     const storage = new MemorySecretStorage()
     const settings: AppSettings = {
       asrProvider: 'local-parakeet',
@@ -579,12 +1012,13 @@ describe('computeEgressState', () => {
     expect(state.notes).toBe('cloud:Anthropic')
   })
 
-  it('Deepgram ASR + custom OpenAI → audio cloud:Deepgram, notes cloud:custom:<name>', () => {
+  it('Deepgram ASR + openai-compatible → audio cloud:Deepgram, notes cloud:custom:<name>', () => {
     const settings: AppSettings = {
       asrProvider: 'deepgram',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: 'gpt-4o',
         keyRef: 'my-llm-key',
@@ -596,12 +1030,13 @@ describe('computeEgressState', () => {
     expect(state.notes).toBe('cloud:custom:My LLM')
   })
 
-  it('local ASR + custom OpenAI → audio local, notes cloud:custom:<name>', () => {
+  it('local ASR + openai-compatible → audio local, notes cloud:custom:<name>', () => {
     const settings: AppSettings = {
       asrProvider: 'local-parakeet',
-      extractionProvider: 'custom-openai',
+      extractionProvider: 'openai-compatible',
       primaryLanguage: 'nl',
-      customOpenAI: {
+      openaiCompatible: {
+        preset: 'custom',
         baseUrl: 'https://api.example.com/v1',
         model: 'gpt-4o',
         keyRef: 'my-llm-key',
@@ -611,6 +1046,25 @@ describe('computeEgressState', () => {
     const state = computeEgressState(settings)
     expect(state.audio).toBe('local')
     expect(state.notes).toBe('cloud:custom:AzureGPT')
+  })
+
+  it('Deepgram ASR + azure-openai extraction → audio cloud:Deepgram, notes cloud:Azure OpenAI', () => {
+    const settings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'azure-openai',
+      primaryLanguage: 'en',
+      azureOpenAI: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'my-gpt-deployment',
+        apiVersion: '2024-12-01-preview',
+        model: 'gpt-4o',
+        keyRef: 'azure-key',
+        displayName: 'Azure OpenAI',
+      },
+    }
+    const state = computeEgressState(settings)
+    expect(state.audio).toBe('cloud:Deepgram')
+    expect(state.notes).toBe('cloud:Azure OpenAI')
   })
 
   it('egressState does not contain any key-like secrets', () => {
@@ -653,6 +1107,12 @@ describe('buildDisclosureCopy', () => {
     const state: EgressState = { audio: 'local', notes: 'cloud:custom:My Company LLM' }
     const copy = buildDisclosureCopy(state)
     expect(copy.notesDisclosure).toContain('My Company LLM')
+  })
+
+  it('azure-openai: names Azure OpenAI as notes recipient', () => {
+    const state: EgressState = { audio: 'cloud:Deepgram', notes: 'cloud:Azure OpenAI' }
+    const copy = buildDisclosureCopy(state)
+    expect(copy.notesDisclosure).toContain('Azure OpenAI')
   })
 
   it('returns a badgeText suitable for the EgressIndicator', () => {

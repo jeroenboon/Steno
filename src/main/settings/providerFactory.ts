@@ -6,7 +6,7 @@
  *
  * ## Why a factory function?
  * The providers (DeepgramAsrProvider, AnthropicExtractionProvider,
- * CustomOpenAIExtractionProvider) require API keys at construction time. Those
+ * OpenAICompatibleExtractionProvider) require API keys at construction time. Those
  * keys live in SecretStorage. The factory is the single place where settings
  * are wired to secrets to produce provider instances. This keeps all key
  * handling in the main process and out of the domain core.
@@ -34,9 +34,16 @@ import {
   AnthropicExtractionProvider,
   type AnthropicExtractionProviderOptions,
 } from '../providers/AnthropicExtractionProvider'
-import { CustomOpenAIExtractionProvider } from '../providers/CustomOpenAIExtractionProvider'
+import { AzureOpenAIExtractionProvider } from '../providers/AzureOpenAIExtractionProvider'
+import { createAzureOpenAIRealtimeAsrProvider } from '../providers/AzureOpenAIRealtimeAsrProvider'
+import { AzureWhisperBatchAsrProvider } from '../providers/AzureWhisperBatchAsrProvider'
 import { DeepgramAsrProvider } from '../providers/DeepgramAsrProvider'
 import { LocalAsrProvider } from '../providers/LocalAsrProvider'
+import { MistralVoxtralBatchAsrProvider } from '../providers/MistralVoxtralBatchAsrProvider'
+import { MistralVoxtralRealtimeAsrProvider } from '../providers/MistralVoxtralRealtimeAsrProvider'
+import { OpenAIBatchAsrProvider } from '../providers/OpenAIBatchAsrProvider'
+import { OpenAICompatibleExtractionProvider } from '../providers/OpenAICompatibleExtractionProvider'
+import { OpenAIRealtimeAsrProvider } from '../providers/OpenAIRealtimeAsrProvider'
 import { ModelDownloader } from '../providers/sherpa/ModelDownloader'
 
 import type { SecretStorage } from './SecretStorage'
@@ -68,6 +75,21 @@ export type BuildProvidersResult =
  * genuinely need both at once.
  */
 export type BuildAsrResult = { ok: true; provider: ASRProvider } | { ok: false; error: string }
+
+/**
+ * Whether the ASR provider is being built for a live meeting or a file import.
+ * The OpenAI/Mistral/Azure vendors now expose both modes: a realtime streaming
+ * adapter for `'live'` (Phase 4) and a batch adapter for `'import'`. The factory
+ * picks per usage. Deepgram/Local serve both modes from a single adapter.
+ */
+export type AsrUsage = 'live' | 'import'
+
+// Default endpoints for the batch ASR providers whose settings carry no baseUrl.
+const OPENAI_AUDIO_BASE_URL = 'https://api.openai.com/v1'
+const MISTRAL_AUDIO_BASE_URL = 'https://api.mistral.ai/v1'
+const DEFAULT_AZURE_WHISPER_API_VERSION = '2024-06-01'
+// Realtime uses a preview api-version distinct from the batch Whisper default.
+const DEFAULT_AZURE_REALTIME_API_VERSION = '2024-10-01-preview'
 export type BuildExtractionResult =
   | { ok: true; provider: ExtractionProvider }
   | { ok: false; error: string }
@@ -121,9 +143,13 @@ export function tryBuildProviders(
  * indifferent to whether an extraction key is configured. This is what the
  * audio pipeline uses so transcription works as soon as the Deepgram key is set.
  */
-export function tryBuildAsrProvider(settings: AppSettings, storage: SecretStorage): BuildAsrResult {
+export function tryBuildAsrProvider(
+  settings: AppSettings,
+  storage: SecretStorage,
+  usage: AsrUsage = 'live',
+): BuildAsrResult {
   try {
-    return { ok: true, provider: buildAsrProvider(settings, storage) }
+    return { ok: true, provider: buildAsrProvider(settings, storage, usage) }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
@@ -148,7 +174,11 @@ export function tryBuildExtractionProvider(
 // ASR provider construction
 // ---------------------------------------------------------------------------
 
-function buildAsrProvider(settings: AppSettings, storage: SecretStorage): ASRProvider {
+function buildAsrProvider(
+  settings: AppSettings,
+  storage: SecretStorage,
+  usage: AsrUsage = 'live',
+): ASRProvider {
   switch (settings.asrProvider) {
     case 'local-parakeet': {
       const modelDir = join(app.getPath('userData'), 'models', 'whisper-small-sherpa')
@@ -173,7 +203,78 @@ function buildAsrProvider(settings: AppSettings, storage: SecretStorage): ASRPro
       const language = settings.deepgram?.language ?? settings.primaryLanguage
       return new DeepgramAsrProvider({ apiKey, language })
     }
+
+    case 'openai-audio': {
+      const cfg = settings.openaiAudio
+      const apiKey = requireKey(storage, cfg.keyRef)
+      const language = cfg.language ?? settings.primaryLanguage
+      if (usage === 'live') {
+        return new OpenAIRealtimeAsrProvider({ apiKey, model: cfg.model, language })
+      }
+      return new OpenAIBatchAsrProvider({
+        apiKey,
+        baseUrl: OPENAI_AUDIO_BASE_URL,
+        model: cfg.model,
+        displayName: cfg.displayName,
+        language,
+      })
+    }
+
+    case 'mistral-voxtral': {
+      const cfg = settings.mistralVoxtral
+      const apiKey = requireKey(storage, cfg.keyRef)
+      const language = cfg.language ?? settings.primaryLanguage
+      if (usage === 'live') {
+        return new MistralVoxtralRealtimeAsrProvider({ apiKey, model: cfg.model, language })
+      }
+      return new MistralVoxtralBatchAsrProvider({
+        apiKey,
+        baseUrl: MISTRAL_AUDIO_BASE_URL,
+        model: cfg.model,
+        displayName: cfg.displayName,
+        language,
+      })
+    }
+
+    case 'azure-speech': {
+      const cfg = settings.azureSpeech
+      const apiKey = requireKey(storage, cfg.keyRef)
+      const language = cfg.language ?? settings.primaryLanguage
+      if (usage === 'live') {
+        // Azure reuses the OpenAI Realtime wire (Phase 4.2); the same deployment
+        // config drives the realtime URL with a preview api-version default.
+        return createAzureOpenAIRealtimeAsrProvider({
+          apiKey,
+          endpoint: cfg.endpoint,
+          deployment: cfg.deployment,
+          apiVersion: cfg.apiVersion ?? DEFAULT_AZURE_REALTIME_API_VERSION,
+          model: cfg.model,
+          language,
+        })
+      }
+      return new AzureWhisperBatchAsrProvider({
+        apiKey,
+        endpoint: cfg.endpoint,
+        deployment: cfg.deployment,
+        apiVersion: cfg.apiVersion ?? DEFAULT_AZURE_WHISPER_API_VERSION,
+        model: cfg.model,
+        displayName: cfg.displayName,
+        language,
+      })
+    }
   }
+}
+
+/** Look up a required secret by keyRef, throwing a clear error when absent. */
+function requireKey(storage: SecretStorage, keyRef: string): string {
+  const apiKey = storage.getSecret(keyRef)
+  if (apiKey === null) {
+    throw new Error(
+      `API key is not set for keyRef "${keyRef}". ` +
+        `Store the key via SecretStorage with the key name "${keyRef}" before building providers.`,
+    )
+  }
+  return apiKey
 }
 
 // ---------------------------------------------------------------------------
@@ -203,16 +304,35 @@ function buildExtractionProvider(
       return new AnthropicExtractionProvider(anthropicOpts)
     }
 
-    case 'custom-openai': {
-      const { baseUrl, model, keyRef, displayName } = settings.customOpenAI
+    case 'openai-compatible': {
+      const { baseUrl, model, keyRef, displayName } = settings.openaiCompatible
       const apiKey = storage.getSecret(keyRef)
       if (apiKey === null) {
         throw new Error(
-          `Custom OpenAI API key is not set for keyRef "${keyRef}". ` +
+          `OpenAI-compatible API key is not set for keyRef "${keyRef}". ` +
             `Store the key via SecretStorage with the key name "${keyRef}" before building providers.`,
         )
       }
-      return new CustomOpenAIExtractionProvider({ apiKey, baseUrl, model, displayName })
+      return new OpenAICompatibleExtractionProvider({ apiKey, baseUrl, model, displayName })
+    }
+
+    case 'azure-openai': {
+      const { endpoint, deployment, apiVersion, model, keyRef, displayName } = settings.azureOpenAI
+      const apiKey = storage.getSecret(keyRef)
+      if (apiKey === null) {
+        throw new Error(
+          `Azure OpenAI API key is not set for keyRef "${keyRef}". ` +
+            `Store the key via SecretStorage with the key name "${keyRef}" before building providers.`,
+        )
+      }
+      return new AzureOpenAIExtractionProvider({
+        apiKey,
+        endpoint,
+        deployment,
+        apiVersion,
+        model,
+        displayName,
+      })
     }
   }
 }

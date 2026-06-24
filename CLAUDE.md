@@ -66,7 +66,7 @@ The whole product rests on swapping providers, so the domain core depends only o
 
 - `src/shared/providers/ASRProvider.ts` and `ExtractionProvider.ts` — the two ports. DTOs are Zod schemas (`dtos.ts`); these are the boundary contracts.
 - `FakeASRProvider` / `FakeExtractionProvider` + an injectable `Clock` (real + fake) live alongside them and back **every** timing/provider test (deterministic tests, no real timers, no network).
-- Real adapters live in `src/main/providers/`: `DeepgramAsrProvider` (raw WebSocket, interim/final spans, ADR 0011), `LocalAsrProvider` (sherpa-onnx + Whisper, batch-per-chunk, no isFinal, ADR 0001), `AnthropicExtractionProvider` (haiku for rolling turns, sonnet for the final pass, JSON-with-one-retry-repair, ADR 0010), `CustomOpenAIExtractionProvider` (BYO OpenAI-compatible endpoint, ADR 0012).
+- Real adapters live in `src/main/providers/`: `DeepgramAsrProvider` (raw WebSocket, interim/final spans, ADR 0011), `LocalAsrProvider` (sherpa-onnx + Whisper, batch-per-chunk, no isFinal, ADR 0001), `AnthropicExtractionProvider` (haiku for rolling turns, sonnet for the final pass, JSON-with-one-retry-repair, ADR 0010), `OpenAICompatibleExtractionProvider` (OpenAI/Mistral/BYO OpenAI-compatible endpoint, ADR 0012/0027).
 - `src/main/settings/providerFactory.ts` resolves the configured provider. `tryBuildAsrProvider` / `tryBuildExtractionProvider` return a result object, not a throw: ASR and extraction are built **independently** so a missing extraction key never disables transcription, and vice versa. Missing keys degrade gracefully (Fake ASR fallback / extraction disabled) — the app must never crash on an unconfigured key.
 
 ### Validate at every boundary with Zod (rule #8)

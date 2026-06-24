@@ -75,7 +75,7 @@ const NAV_TABS: NavTab[] = [
 export function App(): React.JSX.Element {
   const route = useAppStore((s) => s.route)
   const setRoute = useAppStore((s) => s.setRoute)
-  const activeMeeting = useAppStore((s) => s.activeMeeting)
+  const liveMeetingId = useAppStore((s) => s.liveMeetingId)
 
   const [egressState, setEgressState] = useState<EgressState>(DEFAULT_EGRESS)
   const [keysConfigured, setKeysConfigured] = useState<boolean | null>(null)
@@ -106,8 +106,8 @@ export function App(): React.JSX.Element {
         const requiredKeys: string[] = []
         if (settings.asrProvider === 'deepgram') requiredKeys.push('deepgram')
         if (settings.extractionProvider === 'anthropic') requiredKeys.push('anthropic')
-        if (settings.extractionProvider === 'custom-openai') {
-          requiredKeys.push(settings.customOpenAI.keyRef)
+        if (settings.extractionProvider === 'openai-compatible') {
+          requiredKeys.push(settings.openaiCompatible.keyRef)
         }
         const results = await Promise.all(requiredKeys.map((key) => window.api.secretHas({ key })))
         setKeysConfigured(results.every((r) => r.has))
@@ -118,7 +118,10 @@ export function App(): React.JSX.Element {
     })()
   }, [])
 
-  const isMeetingActive = activeMeeting !== null
+  // A live recording session is in progress (not merely a meeting loaded for
+  // Review) — this is what enables the Live tab, shows the live dot, and locks
+  // the Draft tab.
+  const isMeetingActive = liveMeetingId !== null
 
   return (
     <div className="app-shell">

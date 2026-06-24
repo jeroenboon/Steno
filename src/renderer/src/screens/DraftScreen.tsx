@@ -41,6 +41,7 @@ interface Participant {
 export function DraftScreen(): React.JSX.Element {
   const setRoute = useAppStore((s) => s.setRoute)
   const setActiveMeeting = useAppStore((s) => s.setActiveMeeting)
+  const setLiveMeetingId = useAppStore((s) => s.setLiveMeetingId)
   const setStoreMeetingTitle = useAppStore((s) => s.setMeetingTitle)
   const setStoreAgendaItems = useAppStore((s) => s.setAgendaItems)
   const setStoreParticipants = useAppStore((s) => s.setParticipants)
@@ -158,8 +159,10 @@ export function DraftScreen(): React.JSX.Element {
       // Start the meeting (Draft → Live)
       await window.api.meetingStart({ meetingId: meeting.id })
 
-      // Update store and navigate
+      // Update store and navigate. Set both ids: activeMeeting is the focused
+      // meeting; liveMeetingId arms audio capture for this recording session.
       setActiveMeeting(meeting.id)
+      setLiveMeetingId(meeting.id)
       setStoreMeetingTitle(meeting.title)
       setStoreAgendaItems(agendaItems)
       setStoreParticipants(participants)

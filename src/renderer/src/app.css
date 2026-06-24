@@ -1608,6 +1608,53 @@ body::before {
 }
 
 /* ---------------------------------------------------------------------------
+ * Test connection affordance (Phase 5.1)
+ * --------------------------------------------------------------------------- */
+
+.settings-test-conn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.settings-test-conn__result {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.settings-test-conn__result--ok {
+  color: var(--color-confirmed);
+}
+
+.settings-test-conn__result--error {
+  color: var(--color-danger, #c0392b);
+}
+
+.settings-shared-key-notice {
+  font-size: 12px;
+  color: var(--color-text-muted, #6b7280);
+  margin: var(--space-2) 0 0;
+}
+
+.settings-key-help {
+  font-size: 12px;
+  color: var(--color-text-muted, #6b7280);
+  margin: var(--space-2) 0 0;
+}
+
+.settings-key-help__label {
+  font-weight: 600;
+}
+
+.settings-key-help__url {
+  user-select: all;
+  word-break: break-all;
+}
+
+/* ---------------------------------------------------------------------------
  * Local model card — identity + size + download/installed state
  * --------------------------------------------------------------------------- */
 

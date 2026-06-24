@@ -482,6 +482,8 @@ export function LiveScreen(): React.JSX.Element {
   const agendaItems = useAppStore((s) => s.agendaItems)
   const participants = useAppStore((s) => s.participants)
   const activeMeeting = useAppStore((s) => s.activeMeeting)
+  const liveMeetingId = useAppStore((s) => s.liveMeetingId)
+  const setLiveMeetingId = useAppStore((s) => s.setLiveMeetingId)
   const meetingTitle = useAppStore((s) => s.meetingTitle)
   const setRoute = useAppStore((s) => s.setRoute)
 
@@ -494,7 +496,9 @@ export function LiveScreen(): React.JSX.Element {
   const dismissNudge = useAppStore((s) => s.dismissNudge)
 
   // --- Session orchestration (audio capture + IPC subscriptions) ---
-  const { audioLevel } = useLiveSession(activeMeeting)
+  // Keyed on liveMeetingId (a recording session), not activeMeeting (which is
+  // also set when a meeting is merely loaded for Review).
+  const { audioLevel } = useLiveSession(liveMeetingId)
 
   // --- Marginalia leaders ---
   // The live-layout is the positioned container the leader overlay measures
@@ -587,6 +591,9 @@ export function LiveScreen(): React.JSX.Element {
     setEndingMeeting(true)
     try {
       await window.api.meetingEnd({ meetingId: activeMeeting })
+      // The recording session is over: clear the live id so useLiveSession tears
+      // down audio capture. activeMeeting stays set so Review can read the meeting.
+      setLiveMeetingId(null)
       // Navigation to 'review' happens when items:summaries arrives.
       // If the runtime has no provider, items:summaries may not fire — navigate anyway.
       setRoute('review')
@@ -594,7 +601,7 @@ export function LiveScreen(): React.JSX.Element {
       console.error('[LiveScreen] meetingEnd failed:', err)
       setEndingMeeting(false)
     }
-  }, [activeMeeting, endingMeeting, setRoute])
+  }, [activeMeeting, endingMeeting, setLiveMeetingId, setRoute])
 
   const handleManualAdd = useCallback(
     async (kind: ItemKind, text: string) => {

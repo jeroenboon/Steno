@@ -31,8 +31,17 @@ import type { AppSettings } from './settingsSchema'
 // EgressState type
 // ---------------------------------------------------------------------------
 
-export type AudioEgress = 'local' | 'cloud:Deepgram'
-export type NotesEgress = 'cloud:Anthropic' | `cloud:custom:${string}`
+/**
+ * Audio egress is either local (stays on device) or cloud (sent to a named provider).
+ * Using a tagged union string allows types like 'local' | `cloud:${string}`.
+ */
+export type AudioEgress = 'local' | `cloud:${string}`
+
+/**
+ * Notes egress is always cloud (sent to a named provider).
+ * Display names are embedded for custom endpoints; vendor names for standard providers.
+ */
+export type NotesEgress = `cloud:${string}`
 
 export interface EgressState {
   /** What happens to audio captured on this device. */
@@ -63,6 +72,12 @@ function computeAudioEgress(settings: AppSettings): AudioEgress {
       return 'local'
     case 'deepgram':
       return 'cloud:Deepgram'
+    case 'openai-audio':
+      return 'cloud:OpenAI'
+    case 'mistral-voxtral':
+      return 'cloud:Mistral'
+    case 'azure-speech':
+      return 'cloud:Azure'
   }
 }
 
@@ -70,9 +85,13 @@ function computeNotesEgress(settings: AppSettings): NotesEgress {
   switch (settings.extractionProvider) {
     case 'anthropic':
       return 'cloud:Anthropic'
-    case 'custom-openai': {
-      const name = settings.customOpenAI.displayName
+    case 'openai-compatible': {
+      const name = settings.openaiCompatible.displayName
       return `cloud:custom:${name}`
+    }
+    case 'azure-openai': {
+      const name = settings.azureOpenAI.displayName
+      return `cloud:${name}`
     }
   }
 }
@@ -127,8 +146,14 @@ function buildNotesDisclosure(notes: NotesEgress): string {
   if (notes === 'cloud:Anthropic') {
     return 'Transcripttekst wordt naar Anthropic gestuurd voor extractie van beslissingen en actiepunten.'
   }
-  // notes = 'cloud:custom:<name>'
-  const name = notes.slice('cloud:custom:'.length)
+  // Extract provider name from 'cloud:custom:<name>' or 'cloud:<name>'
+  const withCustomPrefix = 'cloud:custom:'
+  if (notes.startsWith(withCustomPrefix)) {
+    const name = notes.slice(withCustomPrefix.length)
+    return `Transcripttekst wordt naar ${name} gestuurd voor extractie van beslissingen en actiepunten.`
+  }
+  // Generic case for 'cloud:<name>' (e.g., 'cloud:Azure OpenAI')
+  const name = notes.slice('cloud:'.length)
   return `Transcripttekst wordt naar ${name} gestuurd voor extractie van beslissingen en actiepunten.`
 }
 
@@ -146,6 +171,13 @@ function buildAudioBadgePart(audio: AudioEgress): string {
 
 function buildNotesBadgePart(notes: NotesEgress): string {
   if (notes === 'cloud:Anthropic') return 'notulen via Anthropic'
-  const name = notes.slice('cloud:custom:'.length)
+  // Extract provider name from 'cloud:custom:<name>' or 'cloud:<name>'
+  const withCustomPrefix = 'cloud:custom:'
+  if (notes.startsWith(withCustomPrefix)) {
+    const name = notes.slice(withCustomPrefix.length)
+    return `notulen via ${name}`
+  }
+  // Generic case for 'cloud:<name>' (e.g., 'cloud:Azure OpenAI')
+  const name = notes.slice('cloud:'.length)
   return `notulen via ${name}`
 }

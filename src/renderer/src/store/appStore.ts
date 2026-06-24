@@ -61,10 +61,21 @@ export interface AppState {
   route: AppRoute
 
   /**
-   * ID of the meeting in progress, if any.
-   * Null when on the Draft screen before a meeting is created.
+   * ID of the meeting currently in focus — the live meeting during a session, or
+   * the meeting loaded for Review. Drives screens that need "the current meeting"
+   * (LiveScreen actions, ReviewScreen export). NOT a signal that audio is being
+   * captured — see `liveMeetingId` for that.
    */
   activeMeeting: string | null
+
+  /**
+   * ID of the meeting whose audio is actively being captured (a live recording
+   * session). Set only by the Draft → Live transition and cleared when the
+   * meeting ends. This — not `activeMeeting` — is what arms audio capture and the
+   * nav "live" affordances. Loading a past or imported meeting for Review sets
+   * `activeMeeting` but leaves this null, so review never starts the microphone.
+   */
+  liveMeetingId: string | null
 
   /**
    * Title of the active meeting (item 0022).
@@ -179,8 +190,11 @@ export interface AppState {
   /** Navigate to a different screen. */
   setRoute: (route: AppRoute) => void
 
-  /** Set (or clear) the active meeting id. */
+  /** Set (or clear) the active meeting id (focus, not capture). */
   setActiveMeeting: (id: string | null) => void
+
+  /** Set (or clear) the live recording session id (arms/disarms audio capture). */
+  setLiveMeetingId: (id: string | null) => void
 
   /** Set the active meeting title (item 0022). */
   setMeetingTitle: (title: string) => void
@@ -261,6 +275,7 @@ export type { CaptureMode, LoopbackState }
 export const useAppStore = create<AppState>()((set) => ({
   route: 'home',
   activeMeeting: null,
+  liveMeetingId: null,
   meetingTitle: '',
   meetingCreatedAt: null,
   meetingSource: 'live',
@@ -294,6 +309,9 @@ export const useAppStore = create<AppState>()((set) => ({
   },
   setActiveMeeting: (id) => {
     set({ activeMeeting: id })
+  },
+  setLiveMeetingId: (id) => {
+    set({ liveMeetingId: id })
   },
   setMeetingTitle: (title) => {
     set({ meetingTitle: title })

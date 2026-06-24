@@ -153,6 +153,26 @@ export type MeetingStartRequest = z.infer<typeof MeetingStartRequestSchema>
 export type MeetingStartResponse = z.infer<typeof MeetingStartResponseSchema>
 
 // ---------------------------------------------------------------------------
+// provider:testConnection — probe the configured provider's credentials (5.1)
+//
+// One cheap auth/reachability round-trip (models/projects listing) so the user
+// sees auth/URL errors at config time. Never returns or logs the key. The error
+// string is a short code (e.g. 'HTTP 401', 'no-key', 'network').
+// ---------------------------------------------------------------------------
+
+export const ProviderTestConnectionRequestSchema = z.object({
+  role: z.enum(['asr', 'extraction']),
+})
+
+export const ProviderTestConnectionResponseSchema = z.union([
+  z.object({ ok: z.literal(true) }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+])
+
+export type ProviderTestConnectionRequest = z.infer<typeof ProviderTestConnectionRequestSchema>
+export type ProviderTestConnectionResponse = z.infer<typeof ProviderTestConnectionResponseSchema>
+
+// ---------------------------------------------------------------------------
 // audio:start — tell main to open an ASR session (item 0015)
 // ---------------------------------------------------------------------------
 
@@ -664,6 +684,7 @@ export type IpcChannel =
   | 'egress:state'
   | 'secret:set'
   | 'secret:has'
+  | 'provider:testConnection'
   | 'meeting:create'
   | 'agendaItem:add'
   | 'agendaItem:remove'
@@ -735,6 +756,13 @@ export interface RendererApi {
    * (item 0016)
    */
   secretHas: (req: SecretHasRequest) => Promise<SecretHasResponse>
+  /**
+   * Probe the configured provider's credentials with one cheap round-trip (5.1).
+   * Surfaces auth/URL errors at config time. Never returns or logs the key.
+   */
+  providerTestConnection: (
+    req: ProviderTestConnectionRequest,
+  ) => Promise<ProviderTestConnectionResponse>
   /**
    * Tell main to open an ASR session. Call before sending audio frames.
    * (item 0015)

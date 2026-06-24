@@ -1,5 +1,5 @@
 /**
- * Settings screen (item 0016).
+ * Settings screen (item 0016, refactored Phase 0.4).
  *
  * Allows the user to:
  *   - Switch ASR between Lokaal (Whisper, on-device) and Cloud (Deepgram)
@@ -8,10 +8,10 @@
  *     never stored in the settings object or sent to settings:set
  *   - Set the primary meeting language
  *
- * UX: provider choices are segmented toggles (not dropdowns) so switching
- * between local and cloud is one click. A saved key shows a positive status
- * with a "Vervangen" affordance — the value itself never round-trips back
- * (secrets are write-only, ADR 0014), so we can only show that one exists.
+ * UX: Phase 0.4 refactored provider selection from SegmentedControl to role-card
+ * pattern with grouped select. Each provider role (Audio, Notulen) shows only the
+ * selected provider's config panel (progressive disclosure), ready to scale to many
+ * providers without overwhelming the page.
  *
  * Per ADR 0003: disclosure copy (buildDisclosureCopy) is shown at the point
  * of choice whenever a cloud provider is selected.
@@ -22,9 +22,13 @@
 
 import React, { useEffect, useState } from 'react'
 
+import { extractionPresets } from '../../../shared/providers'
 import { buildDisclosureCopy, computeEgressState } from '../../../shared/settings/egressState'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
-import { SegmentedControl } from '../components/SegmentedControl'
+import { ProviderKeyHelp } from '../components/ProviderKeyHelp'
+import { ProviderRoleCard, type ProviderGroup } from '../components/ProviderRoleCard'
+import { SharedKeyNotice } from '../components/SharedKeyNotice'
+import { TestConnectionButton } from '../components/TestConnectionButton'
 import { t } from '../i18n'
 
 // ---------------------------------------------------------------------------
@@ -46,6 +50,54 @@ interface CustomValidationErrors {
   displayName?: string
 }
 
+interface AzureFields {
+  endpoint: string
+  deployment: string
+  apiVersion: string
+  model: string
+  displayName: string
+  keyRef: string
+}
+
+interface AzureValidationErrors {
+  endpoint?: string
+  deployment?: string
+  apiVersion?: string
+  model?: string
+  displayName?: string
+}
+
+/**
+ * Fields for the import-only cloud ASR providers (Phase 3.4). One object serves
+ * the active audio provider; only the relevant fields are shown (OpenAI/Mistral
+ * need just `model`, Azure Speech also needs endpoint/deployment/apiVersion).
+ */
+interface AudioAsrFields {
+  model: string
+  endpoint: string
+  deployment: string
+  apiVersion: string
+  keyRef: string
+  displayName: string
+}
+
+/** Default model id per cloud audio vendor (user-overridable). */
+const AUDIO_DEFAULTS: Record<
+  'openai-audio' | 'mistral-voxtral' | 'azure-speech',
+  { model: string; keyRef: string; displayName: string }
+> = {
+  'openai-audio': { model: 'gpt-4o-mini-transcribe', keyRef: 'openai', displayName: 'OpenAI' },
+  'mistral-voxtral': { model: 'voxtral-mini-2507', keyRef: 'mistral', displayName: 'Mistral' },
+  'azure-speech': { model: 'whisper', keyRef: 'azure', displayName: 'Azure Speech' },
+}
+
+/** The AppSettings config-block key for a simple (non-Azure) audio provider. */
+function keyForProvider(
+  provider: 'openai-audio' | 'mistral-voxtral',
+): 'openaiAudio' | 'mistralVoxtral' {
+  return provider === 'openai-audio' ? 'openaiAudio' : 'mistralVoxtral'
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -63,6 +115,26 @@ function validateCustomFields(fields: CustomFields): CustomValidationErrors {
   const errors: CustomValidationErrors = {}
   if (!isValidUrl(fields.baseUrl)) {
     errors.baseUrl = t('settings.validation.baseUrl')
+  }
+  if (fields.model.trim().length === 0) {
+    errors.model = t('settings.validation.model')
+  }
+  if (fields.displayName.trim().length === 0) {
+    errors.displayName = t('settings.validation.displayName')
+  }
+  return errors
+}
+
+function validateAzureFields(fields: AzureFields): AzureValidationErrors {
+  const errors: AzureValidationErrors = {}
+  if (!isValidUrl(fields.endpoint)) {
+    errors.endpoint = t('settings.validation.endpoint')
+  }
+  if (fields.deployment.trim().length === 0) {
+    errors.deployment = t('settings.validation.deployment')
+  }
+  if (fields.apiVersion.trim().length === 0) {
+    errors.apiVersion = t('settings.validation.apiVersion')
   }
   if (fields.model.trim().length === 0) {
     errors.model = t('settings.validation.model')
@@ -164,6 +236,40 @@ function KeyField(props: KeyFieldProps): React.JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
+// TextField — a single labelled text input (config fields)
+// ---------------------------------------------------------------------------
+
+interface TextFieldProps {
+  id: string
+  label: string
+  placeholder: string
+  value: string
+  type?: 'text' | 'url'
+  onChange: (v: string) => void
+}
+
+function TextField(props: TextFieldProps): React.JSX.Element {
+  return (
+    <div className="form-group">
+      <label htmlFor={props.id} className="form-label">
+        {props.label}
+      </label>
+      <input
+        id={props.id}
+        data-testid={props.id}
+        type={props.type ?? 'text'}
+        className="form-input"
+        placeholder={props.placeholder}
+        value={props.value}
+        onChange={(e) => {
+          props.onChange(e.currentTarget.value)
+        }}
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -193,15 +299,50 @@ export function SettingsScreen(): React.JSX.Element {
 
   const [customKeyEntry, setCustomKeyEntry] = useState('')
   const [customKeySave, setCustomKeySave] = useState<KeySaveState>('idle')
+  const [customKeyPresent, setCustomKeyPresent] = useState(false)
+  const [customKeyEditing, setCustomKeyEditing] = useState(false)
 
   // ---- custom OpenAI fields ----
   const [customFields, setCustomFields] = useState<CustomFields>({
     baseUrl: '',
     model: '',
     displayName: '',
-    keyRef: 'custom-openai',
+    keyRef: 'openai-custom',
   })
   const [customErrors, setCustomErrors] = useState<CustomValidationErrors>({})
+  const [customOpenAISaveState, setCustomOpenAISaveState] = useState<KeySaveState>('idle')
+  const [customDirty, setCustomDirty] = useState(false)
+
+  // ---- Azure OpenAI fields + key (Phase 2.2) ----
+  const [azureKeyEntry, setAzureKeyEntry] = useState('')
+  const [azureKeySave, setAzureKeySave] = useState<KeySaveState>('idle')
+  const [azureKeyPresent, setAzureKeyPresent] = useState(false)
+  const [azureKeyEditing, setAzureKeyEditing] = useState(false)
+  const [azureFields, setAzureFields] = useState<AzureFields>({
+    endpoint: '',
+    deployment: '',
+    apiVersion: '2024-12-01-preview',
+    model: '',
+    displayName: 'Azure OpenAI',
+    keyRef: 'azure',
+  })
+  const [azureErrors, setAzureErrors] = useState<AzureValidationErrors>({})
+  const [azureSaveState, setAzureSaveState] = useState<KeySaveState>('idle')
+  const [azureDirty, setAzureDirty] = useState(false)
+
+  // ---- import-only cloud ASR fields + key (Phase 3.4) ----
+  const [audioFields, setAudioFields] = useState<AudioAsrFields>({
+    model: '',
+    endpoint: '',
+    deployment: '',
+    apiVersion: '2024-06-01',
+    keyRef: '',
+    displayName: '',
+  })
+  const [audioKeyEntry, setAudioKeyEntry] = useState('')
+  const [audioKeySave, setAudioKeySave] = useState<KeySaveState>('idle')
+  const [audioKeyPresent, setAudioKeyPresent] = useState(false)
+  const [audioKeyEditing, setAudioKeyEditing] = useState(false)
 
   // ---- load on mount ----
   useEffect(() => {
@@ -217,23 +358,88 @@ export function SettingsScreen(): React.JSX.Element {
       }
       setSettings(s)
 
-      if (s.extractionProvider === 'custom-openai') {
+      if (s.extractionProvider === 'openai-compatible') {
         setCustomFields({
-          baseUrl: s.customOpenAI.baseUrl,
-          model: s.customOpenAI.model,
-          displayName: s.customOpenAI.displayName,
-          keyRef: s.customOpenAI.keyRef,
+          baseUrl: s.openaiCompatible.baseUrl,
+          model: s.openaiCompatible.model,
+          displayName: s.openaiCompatible.displayName,
+          keyRef: s.openaiCompatible.keyRef,
         })
       }
 
+      if (s.extractionProvider === 'azure-openai') {
+        setAzureFields({
+          endpoint: s.azureOpenAI.endpoint,
+          deployment: s.azureOpenAI.deployment,
+          apiVersion: s.azureOpenAI.apiVersion,
+          model: s.azureOpenAI.model,
+          displayName: s.azureOpenAI.displayName,
+          keyRef: s.azureOpenAI.keyRef,
+        })
+      }
+
+      if (s.asrProvider === 'openai-audio') {
+        setAudioFields((f) => ({
+          ...f,
+          model: s.openaiAudio.model,
+          keyRef: s.openaiAudio.keyRef,
+          displayName: s.openaiAudio.displayName,
+        }))
+      } else if (s.asrProvider === 'mistral-voxtral') {
+        setAudioFields((f) => ({
+          ...f,
+          model: s.mistralVoxtral.model,
+          keyRef: s.mistralVoxtral.keyRef,
+          displayName: s.mistralVoxtral.displayName,
+        }))
+      } else if (s.asrProvider === 'azure-speech') {
+        setAudioFields((f) => ({
+          ...f,
+          model: s.azureSpeech.model,
+          endpoint: s.azureSpeech.endpoint,
+          deployment: s.azureSpeech.deployment,
+          apiVersion: s.azureSpeech.apiVersion ?? f.apiVersion,
+          keyRef: s.azureSpeech.keyRef,
+          displayName: s.azureSpeech.displayName,
+        }))
+      }
+
       // Check key presence (never retrieves the value). Tolerate failure.
+      // Keyed by ref name so shared keys (a vendor key serving ASR + extraction)
+      // and the active audio provider all resolve from one lookup.
       try {
-        const [dg, ant] = await Promise.all([
-          window.api.secretHas({ key: 'deepgram' }),
-          window.api.secretHas({ key: 'anthropic' }),
-        ])
-        setDeepgramKeyPresent(dg.has)
-        setAnthropicKeyPresent(ant.has)
+        const extractionKeyRef =
+          s.extractionProvider === 'openai-compatible'
+            ? s.openaiCompatible.keyRef
+            : s.extractionProvider === 'azure-openai'
+              ? s.azureOpenAI.keyRef
+              : null
+        const audioKeyRef =
+          s.asrProvider === 'openai-audio'
+            ? s.openaiAudio.keyRef
+            : s.asrProvider === 'mistral-voxtral'
+              ? s.mistralVoxtral.keyRef
+              : s.asrProvider === 'azure-speech'
+                ? s.azureSpeech.keyRef
+                : null
+
+        const refs = new Set<string>(['deepgram', 'anthropic'])
+        if (extractionKeyRef !== null) refs.add(extractionKeyRef)
+        if (audioKeyRef !== null) refs.add(audioKeyRef)
+
+        const entries = await Promise.all(
+          [...refs].map(async (key) => [key, (await window.api.secretHas({ key })).has] as const),
+        )
+        const present = new Map<string, boolean>(entries)
+
+        setDeepgramKeyPresent(present.get('deepgram') ?? false)
+        setAnthropicKeyPresent(present.get('anthropic') ?? false)
+        if (extractionKeyRef !== null) {
+          const has = present.get(extractionKeyRef) ?? false
+          if (s.extractionProvider === 'openai-compatible') setCustomKeyPresent(has)
+          else if (s.extractionProvider === 'azure-openai') setAzureKeyPresent(has)
+        }
+        if (audioKeyRef !== null) setAudioKeyPresent(present.get(audioKeyRef) ?? false)
       } catch (err) {
         console.error('[Settings] secretHas failed:', err)
       }
@@ -284,32 +490,186 @@ export function SettingsScreen(): React.JSX.Element {
 
   async function persistSettings(next: AppSettings): Promise<void> {
     setSettings(next)
-    await window.api.settingsSet(next)
+    try {
+      await window.api.settingsSet(next)
+    } catch (err) {
+      console.error('[Settings] settingsSet failed:', err)
+    }
   }
 
-  function handleAsrChange(provider: 'deepgram' | 'local-parakeet'): void {
-    void persistSettings({ ...settings, asrProvider: provider })
+  type AsrSelectValue =
+    | 'deepgram'
+    | 'local-parakeet'
+    | 'openai-audio'
+    | 'mistral-voxtral'
+    | 'azure-speech'
+
+  function handleAsrChange(provider: AsrSelectValue): void {
+    if (provider === 'deepgram' || provider === 'local-parakeet') {
+      void persistSettings({
+        ...settings,
+        asrProvider: provider,
+        openaiAudio: undefined,
+        mistralVoxtral: undefined,
+        azureSpeech: undefined,
+      } as AppSettings)
+      return
+    }
+    // Cloud audio (import-only): prefill defaults and reveal the config panel.
+    const defaults = AUDIO_DEFAULTS[provider]
+    const nextFields: AudioAsrFields = {
+      model: defaults.model,
+      endpoint: '',
+      deployment: '',
+      apiVersion: '2024-06-01',
+      keyRef: defaults.keyRef,
+      displayName: defaults.displayName,
+    }
+    setAudioFields(nextFields)
+    setAudioKeySave('idle')
+    applyAudioProvider(provider, nextFields)
   }
 
-  function handleExtractionChange(provider: 'anthropic' | 'custom-openai'): void {
+  /**
+   * Build the AppSettings for an import-only audio provider from its fields,
+   * update local state always (so the panel renders), and persist only when the
+   * config is schema-valid (Azure needs a real endpoint before it validates).
+   */
+  function applyAudioProvider(
+    provider: 'openai-audio' | 'mistral-voxtral' | 'azure-speech',
+    fields: AudioAsrFields,
+  ): void {
+    const base = {
+      ...settings,
+      deepgram: undefined,
+      openaiAudio: undefined,
+      mistralVoxtral: undefined,
+      azureSpeech: undefined,
+      primaryLanguage: settings.primaryLanguage,
+    }
+    let next: AppSettings
+    let valid: boolean
+    const common = {
+      model: fields.model.trim(),
+      keyRef: fields.keyRef,
+      displayName: fields.displayName.trim(),
+      language: settings.primaryLanguage,
+    }
+    if (provider === 'azure-speech') {
+      next = {
+        ...base,
+        asrProvider: 'azure-speech',
+        azureSpeech: {
+          ...common,
+          endpoint: fields.endpoint,
+          deployment: fields.deployment.trim(),
+          apiVersion: fields.apiVersion.trim(),
+        },
+      } as AppSettings
+      valid =
+        isValidUrl(fields.endpoint) &&
+        fields.deployment.trim().length > 0 &&
+        common.model.length > 0 &&
+        common.displayName.length > 0
+    } else {
+      next = { ...base, asrProvider: provider, [keyForProvider(provider)]: common } as AppSettings
+      valid = common.model.length > 0 && common.displayName.length > 0
+    }
+
+    setSettings(next)
+    if (valid) {
+      void window.api.settingsSet(next).catch((err: unknown) => {
+        console.error('[Settings] settingsSet failed:', err)
+      })
+    }
+  }
+
+  async function handleSaveAudioKey(): Promise<void> {
+    if (audioKeyEntry.trim().length === 0) return
+    setAudioKeySave('saving')
+    try {
+      await window.api.secretSet({ key: audioFields.keyRef, value: audioKeyEntry })
+      setAudioKeyPresent(true)
+      setAudioKeyEntry('')
+      setAudioKeySave('saved')
+      setAudioKeyEditing(false)
+    } catch {
+      setAudioKeySave('error')
+    }
+  }
+
+  function handleExtractionChange(
+    provider: 'anthropic' | 'openai' | 'mistral' | 'azure' | 'openai-compatible',
+  ): void {
     if (provider === 'anthropic') {
       void persistSettings({
         ...settings,
         extractionProvider: 'anthropic',
-        customOpenAI: undefined,
+        openaiCompatible: undefined,
+        azureOpenAI: undefined,
+      } as AppSettings)
+    } else if (provider === 'openai' || provider === 'mistral') {
+      // Prefill from preset catalog
+      const preset = extractionPresets[provider]
+      const newCustomFields: CustomFields = {
+        baseUrl: preset.defaultBaseUrl,
+        model: preset.defaultModel,
+        displayName: preset.displayName,
+        keyRef: provider, // keyRef is the vendor ID: 'openai', 'mistral'
+      }
+      setCustomFields(newCustomFields)
+      setCustomDirty(true)
+      setCustomOpenAISaveState('idle')
+      // Update local state to show the form
+      setSettings({
+        ...settings,
+        extractionProvider: 'openai-compatible',
+        openaiCompatible: {
+          preset: provider,
+          ...newCustomFields,
+        },
+        azureOpenAI: undefined,
+      } as AppSettings)
+    } else if (provider === 'azure') {
+      // Reveal the Azure config panel; persist only on explicit save (the
+      // fields may still be empty / invalid here).
+      setAzureDirty(true)
+      setAzureSaveState('idle')
+      setSettings({
+        ...settings,
+        extractionProvider: 'azure-openai',
+        openaiCompatible: undefined,
+        azureOpenAI: {
+          endpoint: azureFields.endpoint,
+          deployment: azureFields.deployment,
+          apiVersion: azureFields.apiVersion,
+          model: azureFields.model,
+          keyRef: azureFields.keyRef,
+          displayName: azureFields.displayName,
+        },
       } as AppSettings)
     } else {
+      // 'openai-compatible' (custom)
       const { baseUrl, model, displayName, keyRef } = customFields
       if (!isValidUrl(baseUrl) || model.trim().length === 0 || displayName.trim().length === 0) {
-        // Switch to custom but don't persist until fields are valid
-        setSettings({ ...settings, extractionProvider: 'custom-openai' } as AppSettings)
+        // Show form so user can fill in fields; update local state but don't persist yet
+        // Include placeholder config so initialization won't crash
+        setCustomDirty(true)
+        setCustomOpenAISaveState('idle')
+        setSettings({
+          ...settings,
+          extractionProvider: 'openai-compatible',
+          openaiCompatible: { preset: 'custom', baseUrl, model, keyRef, displayName },
+          azureOpenAI: undefined,
+        } as AppSettings)
         return
       }
       void persistSettings({
         ...settings,
-        extractionProvider: 'custom-openai',
-        customOpenAI: { baseUrl, model, keyRef, displayName },
-      })
+        extractionProvider: 'openai-compatible',
+        openaiCompatible: { preset: 'custom', baseUrl, model, keyRef, displayName },
+        azureOpenAI: undefined,
+      } as AppSettings)
     }
   }
 
@@ -350,24 +710,77 @@ export function SettingsScreen(): React.JSX.Element {
     setCustomKeySave('saving')
     try {
       await window.api.secretSet({ key: customFields.keyRef, value: customKeyEntry })
+      setCustomKeyPresent(true)
       setCustomKeyEntry('')
       setCustomKeySave('saved')
+      setCustomKeyEditing(false)
     } catch {
       setCustomKeySave('error')
     }
   }
 
-  function handleSaveCustomOpenAI(): void {
+  async function handleSaveCustomOpenAI(): Promise<void> {
     const errors = validateCustomFields(customFields)
     setCustomErrors(errors)
     if (Object.keys(errors).length > 0) return
 
     const { baseUrl, model, displayName, keyRef } = customFields
-    void persistSettings({
+    // Determine preset based on keyRef or settings
+    const preset: 'openai' | 'mistral' | 'custom' =
+      keyRef === 'openai' ? 'openai' : keyRef === 'mistral' ? 'mistral' : 'custom'
+
+    setCustomOpenAISaveState('saving')
+    await persistSettings({
       ...settings,
-      extractionProvider: 'custom-openai',
-      customOpenAI: { baseUrl, model: model.trim(), keyRef, displayName: displayName.trim() },
+      extractionProvider: 'openai-compatible',
+      openaiCompatible: {
+        preset,
+        baseUrl,
+        model: model.trim(),
+        keyRef,
+        displayName: displayName.trim(),
+      },
     })
+    setCustomOpenAISaveState('saved')
+    setCustomDirty(false)
+  }
+
+  async function handleSaveAzureKey(): Promise<void> {
+    if (azureKeyEntry.trim().length === 0) return
+    setAzureKeySave('saving')
+    try {
+      await window.api.secretSet({ key: azureFields.keyRef, value: azureKeyEntry })
+      setAzureKeyPresent(true)
+      setAzureKeyEntry('')
+      setAzureKeySave('saved')
+      setAzureKeyEditing(false)
+    } catch {
+      setAzureKeySave('error')
+    }
+  }
+
+  async function handleSaveAzureOpenAI(): Promise<void> {
+    const errors = validateAzureFields(azureFields)
+    setAzureErrors(errors)
+    if (Object.keys(errors).length > 0) return
+
+    const { endpoint, deployment, apiVersion, model, displayName, keyRef } = azureFields
+    setAzureSaveState('saving')
+    await persistSettings({
+      ...settings,
+      extractionProvider: 'azure-openai',
+      openaiCompatible: undefined,
+      azureOpenAI: {
+        endpoint,
+        deployment: deployment.trim(),
+        apiVersion: apiVersion.trim(),
+        model: model.trim(),
+        keyRef,
+        displayName: displayName.trim(),
+      },
+    } as AppSettings)
+    setAzureSaveState('saved')
+    setAzureDirty(false)
   }
 
   async function handleDownloadModel(): Promise<void> {
@@ -381,8 +794,28 @@ export function SettingsScreen(): React.JSX.Element {
     }
   }
 
-  const isCustomOpenAI = settings.extractionProvider === 'custom-openai'
+  const isCustomOpenAI = settings.extractionProvider === 'openai-compatible'
+  const isAzure = settings.extractionProvider === 'azure-openai'
   const isLocalAsr = settings.asrProvider === 'local-parakeet'
+  // Narrowed to the import-only cloud audio union (or null), so the config panel
+  // can index AUDIO_DEFAULTS and call applyAudioProvider type-safely.
+  const audioProvider: 'openai-audio' | 'mistral-voxtral' | 'azure-speech' | null =
+    settings.asrProvider === 'openai-audio' ||
+    settings.asrProvider === 'mistral-voxtral' ||
+    settings.asrProvider === 'azure-speech'
+      ? settings.asrProvider
+      : null
+  const isAzureSpeech = settings.asrProvider === 'azure-speech'
+
+  // Derive the extraction provider select value: if openai-compatible, use the preset;
+  // azure-openai maps to the 'azure' option; otherwise use the provider.
+  // Direct narrowing (not via the `isCustomOpenAI` boolean) so TypeScript propagates the discriminant.
+  const extractionProviderSelectValue =
+    settings.extractionProvider === 'openai-compatible'
+      ? settings.openaiCompatible.preset
+      : settings.extractionProvider === 'azure-openai'
+        ? 'azure'
+        : settings.extractionProvider
 
   // ---- render ----
 
@@ -395,309 +828,687 @@ export function SettingsScreen(): React.JSX.Element {
 
       <section className="screen__body settings-body">
         {/* ----------------------------------------------------------------
-            ASR provider
+            ASR provider (Audio role card with grouped select)
         ---------------------------------------------------------------- */}
-        <div className="settings-section">
-          <h2 className="settings-section__heading">{t('settings.asr.heading')}</h2>
-
-          <SegmentedControl
-            name="asr-mode"
-            testId="asr-mode"
-            ariaLabel={t('settings.asr.heading')}
-            value={settings.asrProvider}
-            options={[
+        <ProviderRoleCard
+          roleTitle={t('settings.asr.heading')}
+          groups={
+            [
               {
-                value: 'local-parakeet',
-                label: t('settings.asr.mode.local'),
-                sublabel: t('settings.asr.mode.local.sub'),
+                label: t('settings.asr.group.device'),
+                options: [
+                  {
+                    value: 'local-parakeet',
+                    label: t('settings.asr.mode.local'),
+                    sublabel: t('settings.asr.mode.local.sub'),
+                  },
+                ],
               },
               {
-                value: 'deepgram',
-                label: t('settings.asr.mode.cloud'),
-                sublabel: t('settings.asr.mode.cloud.sub'),
+                label: t('settings.asr.group.cloud'),
+                options: [
+                  {
+                    value: 'deepgram',
+                    label: t('settings.asr.mode.cloud'),
+                    sublabel: t('settings.asr.mode.cloud.sub'),
+                  },
+                  {
+                    value: 'openai-audio',
+                    label: t('settings.asr.mode.openai'),
+                    sublabel: t('settings.asr.mode.openai.sub'),
+                  },
+                  {
+                    value: 'mistral-voxtral',
+                    label: t('settings.asr.mode.mistral'),
+                    sublabel: t('settings.asr.mode.mistral.sub'),
+                  },
+                  {
+                    value: 'azure-speech',
+                    label: t('settings.asr.mode.azure'),
+                    sublabel: t('settings.asr.mode.azure.sub'),
+                  },
+                ],
               },
-            ]}
-            onChange={(v) => {
-              handleAsrChange(v as 'deepgram' | 'local-parakeet')
-            }}
-          />
+            ] as ProviderGroup[]
+          }
+          selectedValue={settings.asrProvider}
+          onChange={(v) => {
+            handleAsrChange(v as AsrSelectValue)
+          }}
+          configPanel={
+            isLocalAsr ? (
+              <>
+                {/* Local model card */}
+                {!modelDownloaded && (
+                  <div className="settings-model-card" data-testid="model-download-section">
+                    <div className="settings-model-card__info">
+                      <span className="settings-model-card__name">
+                        {t('settings.asr.model.name')}
+                      </span>
+                      <span className="settings-model-card__meta">
+                        {t('settings.asr.model.size')} · {t('settings.asr.model.notDownloaded')}
+                      </span>
+                    </div>
+                    {modelProgress === null ? (
+                      <button
+                        type="button"
+                        className="btn btn--primary"
+                        data-testid="download-model-btn"
+                        onClick={() => {
+                          void handleDownloadModel()
+                        }}
+                      >
+                        {t('settings.asr.model.download')}
+                      </button>
+                    ) : (
+                      <div className="settings-model-progress" data-testid="model-progress">
+                        <progress
+                          value={modelProgress.received}
+                          max={modelProgress.total}
+                          aria-label={t('settings.asr.model.downloading')}
+                        />
+                        <span>
+                          {modelProgress.total > 0
+                            ? `${String(Math.round((modelProgress.received / modelProgress.total) * 100))}%`
+                            : '0%'}
+                        </span>
+                      </div>
+                    )}
+                    {modelError !== null && (
+                      <p className="form-error" role="alert">
+                        {modelError}
+                      </p>
+                    )}
+                  </div>
+                )}
 
-          {/* Disclosure copy for ASR */}
-          <p data-testid="asr-disclosure" className="settings-disclosure">
-            <span className="settings-disclosure__label">
-              {t('settings.disclosure.audio.label')}
-            </span>{' '}
-            {disclosure.audioDisclosure}
-          </p>
+                {/* Local model installed */}
+                {modelDownloaded && (
+                  <div
+                    className="settings-model-card settings-model-card--installed"
+                    data-testid="model-installed-section"
+                  >
+                    <div className="settings-model-card__info">
+                      <span className="settings-model-card__name">
+                        {t('settings.asr.model.name')}
+                      </span>
+                      <span className="settings-model-card__meta">
+                        {t('settings.asr.model.size')}
+                      </span>
+                    </div>
+                    <span className="settings-model-card__badge">
+                      {t('settings.asr.model.installed')}
+                    </span>
+                  </div>
+                )}
+              </>
+            ) : audioProvider !== null ? (
+              /* Cloud audio (OpenAI / Mistral / Azure Speech) — live + import */
+              <div className="settings-audio-asr">
+                {isAzureSpeech && (
+                  <>
+                    <TextField
+                      id="azure-speech-endpoint"
+                      label={t('settings.asr.azure.endpoint.label')}
+                      placeholder={t('settings.asr.azure.endpoint.placeholder')}
+                      type="url"
+                      value={audioFields.endpoint}
+                      onChange={(v) => {
+                        const next = { ...audioFields, endpoint: v }
+                        setAudioFields(next)
+                        applyAudioProvider('azure-speech', next)
+                      }}
+                    />
+                    <TextField
+                      id="azure-speech-deployment"
+                      label={t('settings.asr.azure.deployment.label')}
+                      placeholder={t('settings.asr.azure.deployment.placeholder')}
+                      value={audioFields.deployment}
+                      onChange={(v) => {
+                        const next = { ...audioFields, deployment: v }
+                        setAudioFields(next)
+                        applyAudioProvider('azure-speech', next)
+                      }}
+                    />
+                    <TextField
+                      id="azure-speech-api-version"
+                      label={t('settings.asr.azure.apiVersion.label')}
+                      placeholder={t('settings.asr.azure.apiVersion.placeholder')}
+                      value={audioFields.apiVersion}
+                      onChange={(v) => {
+                        const next = { ...audioFields, apiVersion: v }
+                        setAudioFields(next)
+                        applyAudioProvider('azure-speech', next)
+                      }}
+                    />
+                  </>
+                )}
 
-          {/* Local model card */}
-          {isLocalAsr && !modelDownloaded && (
-            <div className="settings-model-card" data-testid="model-download-section">
-              <div className="settings-model-card__info">
-                <span className="settings-model-card__name">{t('settings.asr.model.name')}</span>
-                <span className="settings-model-card__meta">
-                  {t('settings.asr.model.size')} · {t('settings.asr.model.notDownloaded')}
-                </span>
-              </div>
-              {modelProgress === null ? (
-                <button
-                  type="button"
-                  className="btn btn--primary"
-                  data-testid="download-model-btn"
-                  onClick={() => {
-                    void handleDownloadModel()
+                <TextField
+                  id="audio-model"
+                  label={t('settings.asr.audio.model.label')}
+                  placeholder={AUDIO_DEFAULTS[audioProvider].model}
+                  value={audioFields.model}
+                  onChange={(v) => {
+                    const next = { ...audioFields, model: v }
+                    setAudioFields(next)
+                    applyAudioProvider(audioProvider, next)
                   }}
-                >
-                  {t('settings.asr.model.download')}
-                </button>
-              ) : (
-                <div className="settings-model-progress" data-testid="model-progress">
-                  <progress
-                    value={modelProgress.received}
-                    max={modelProgress.total}
-                    aria-label={t('settings.asr.model.downloading')}
-                  />
-                  <span>
-                    {modelProgress.total > 0
-                      ? `${String(Math.round((modelProgress.received / modelProgress.total) * 100))}%`
-                      : '0%'}
-                  </span>
-                </div>
-              )}
-              {modelError !== null && (
-                <p className="form-error" role="alert">
-                  {modelError}
-                </p>
-              )}
-            </div>
-          )}
+                />
 
-          {/* Local model installed */}
-          {isLocalAsr && modelDownloaded && (
-            <div
-              className="settings-model-card settings-model-card--installed"
-              data-testid="model-installed-section"
-            >
-              <div className="settings-model-card__info">
-                <span className="settings-model-card__name">{t('settings.asr.model.name')}</span>
-                <span className="settings-model-card__meta">{t('settings.asr.model.size')}</span>
+                <KeyField
+                  idBase="audio"
+                  label={t('settings.asr.audio.key.label')}
+                  placeholder={t('settings.asr.audio.key.placeholder')}
+                  present={audioKeyPresent}
+                  editing={audioKeyEditing}
+                  value={audioKeyEntry}
+                  saveState={audioKeySave}
+                  testIdInput="audio-key-input"
+                  testIdSave="save-audio-key"
+                  testIdMissing="audio-key-missing"
+                  missingText={t('settings.asr.audio.key.missing')}
+                  onChange={(v) => {
+                    setAudioKeyEntry(v)
+                    if (audioKeySave === 'saved') setAudioKeySave('idle')
+                  }}
+                  onSave={() => {
+                    void handleSaveAudioKey()
+                  }}
+                  onReplace={() => {
+                    setAudioKeyEditing(true)
+                  }}
+                  onCancel={() => {
+                    setAudioKeyEditing(false)
+                    setAudioKeyEntry('')
+                  }}
+                />
+
+                <ProviderKeyHelp keyRef={audioFields.keyRef} testId="audio-key-help" />
+
+                <SharedKeyNotice
+                  settings={settings}
+                  keyRef={audioFields.keyRef}
+                  testId="shared-key-audio"
+                />
+
+                <TestConnectionButton role="asr" testId="test-asr-connection" />
               </div>
-              <span className="settings-model-card__badge">
-                {t('settings.asr.model.installed')}
-              </span>
-            </div>
-          )}
+            ) : (
+              /* Deepgram key entry */
+              <>
+                <KeyField
+                  idBase="deepgram"
+                  label={t('settings.asr.key.label')}
+                  placeholder={t('settings.asr.key.placeholder')}
+                  present={deepgramKeyPresent}
+                  editing={deepgramKeyEditing}
+                  value={deepgramKeyEntry}
+                  saveState={deepgramKeySave}
+                  testIdInput="deepgram-key-input"
+                  testIdSave="save-deepgram-key"
+                  testIdMissing="deepgram-key-missing"
+                  missingText={t('settings.asr.key.missing')}
+                  onChange={(v) => {
+                    setDeepgramKeyEntry(v)
+                    if (deepgramKeySave === 'saved') setDeepgramKeySave('idle')
+                  }}
+                  onSave={() => {
+                    void handleSaveDeepgramKey()
+                  }}
+                  onReplace={() => {
+                    setDeepgramKeyEditing(true)
+                  }}
+                  onCancel={() => {
+                    setDeepgramKeyEditing(false)
+                    setDeepgramKeyEntry('')
+                  }}
+                />
 
-          {/* Deepgram key entry (cloud ASR) */}
-          {!isLocalAsr && (
-            <KeyField
-              idBase="deepgram"
-              label={t('settings.asr.key.label')}
-              placeholder={t('settings.asr.key.placeholder')}
-              present={deepgramKeyPresent}
-              editing={deepgramKeyEditing}
-              value={deepgramKeyEntry}
-              saveState={deepgramKeySave}
-              testIdInput="deepgram-key-input"
-              testIdSave="save-deepgram-key"
-              testIdMissing="deepgram-key-missing"
-              missingText={t('settings.asr.key.missing')}
-              onChange={(v) => {
-                setDeepgramKeyEntry(v)
-                if (deepgramKeySave === 'saved') setDeepgramKeySave('idle')
-              }}
-              onSave={() => {
-                void handleSaveDeepgramKey()
-              }}
-              onReplace={() => {
-                setDeepgramKeyEditing(true)
-              }}
-              onCancel={() => {
-                setDeepgramKeyEditing(false)
-                setDeepgramKeyEntry('')
-              }}
-            />
-          )}
-        </div>
+                <ProviderKeyHelp keyRef="deepgram" testId="deepgram-key-help" />
+
+                <TestConnectionButton role="asr" testId="test-asr-connection" />
+              </>
+            )
+          }
+          disclosure={
+            <p data-testid="asr-disclosure" className="settings-disclosure">
+              <span className="settings-disclosure__label">
+                {t('settings.disclosure.audio.label')}
+              </span>{' '}
+              {disclosure.audioDisclosure}
+            </p>
+          }
+          testId="asr-provider-select"
+        />
 
         {/* ----------------------------------------------------------------
-            Extraction provider
+            Extraction provider (Notulen role card with grouped select)
         ---------------------------------------------------------------- */}
-        <div className="settings-section">
-          <h2 className="settings-section__heading">{t('settings.extraction.heading')}</h2>
-
-          <SegmentedControl
-            name="extraction-mode"
-            testId="extraction-mode"
-            ariaLabel={t('settings.extraction.heading')}
-            value={settings.extractionProvider}
-            options={[
+        <ProviderRoleCard
+          roleTitle={t('settings.extraction.heading')}
+          groups={
+            [
               {
-                value: 'anthropic',
-                label: t('settings.extraction.mode.anthropic'),
-                sublabel: t('settings.extraction.mode.anthropic.sub'),
+                label: t('settings.extraction.group.cloud'),
+                options: [
+                  {
+                    value: 'anthropic',
+                    label: t('settings.extraction.mode.anthropic'),
+                    sublabel: t('settings.extraction.mode.anthropic.sub'),
+                  },
+                  {
+                    value: 'openai',
+                    label: t('settings.extraction.mode.openai'),
+                    sublabel: t('settings.extraction.mode.openai.sub'),
+                  },
+                  {
+                    value: 'mistral',
+                    label: t('settings.extraction.mode.mistral'),
+                    sublabel: t('settings.extraction.mode.mistral.sub'),
+                  },
+                  {
+                    value: 'azure',
+                    label: t('settings.extraction.mode.azure'),
+                    sublabel: t('settings.extraction.mode.azure.sub'),
+                  },
+                  {
+                    value: 'openai-compatible',
+                    label: t('settings.extraction.mode.custom'),
+                    sublabel: t('settings.extraction.mode.custom.sub'),
+                  },
+                ],
               },
-              {
-                value: 'custom-openai',
-                label: t('settings.extraction.mode.custom'),
-                sublabel: t('settings.extraction.mode.custom.sub'),
-              },
-            ]}
-            onChange={(v) => {
-              handleExtractionChange(v as 'anthropic' | 'custom-openai')
-            }}
-          />
-
-          {/* Disclosure copy for extraction */}
-          <p data-testid="extraction-disclosure" className="settings-disclosure">
-            <span className="settings-disclosure__label">
-              {t('settings.disclosure.notes.label')}
-            </span>{' '}
-            {disclosure.notesDisclosure}
-          </p>
-
-          {/* Anthropic key entry */}
-          {!isCustomOpenAI && (
-            <KeyField
-              idBase="anthropic"
-              label={t('settings.extraction.anthropic.key.label')}
-              placeholder={t('settings.extraction.anthropic.key.placeholder')}
-              present={anthropicKeyPresent}
-              editing={anthropicKeyEditing}
-              value={anthropicKeyEntry}
-              saveState={anthropicKeySave}
-              testIdInput="anthropic-key-input"
-              testIdSave="save-anthropic-key"
-              testIdMissing="anthropic-key-missing"
-              missingText={t('settings.extraction.anthropic.key.missing')}
-              onChange={(v) => {
-                setAnthropicKeyEntry(v)
-                if (anthropicKeySave === 'saved') setAnthropicKeySave('idle')
-              }}
-              onSave={() => {
-                void handleSaveAnthropicKey()
-              }}
-              onReplace={() => {
-                setAnthropicKeyEditing(true)
-              }}
-              onCancel={() => {
-                setAnthropicKeyEditing(false)
-                setAnthropicKeyEntry('')
-              }}
-            />
-          )}
-
-          {/* Custom OpenAI fields */}
-          {isCustomOpenAI && (
-            <div className="settings-custom-openai">
-              <div className="form-group">
-                <label htmlFor="custom-openai-base-url" className="form-label">
-                  {t('settings.custom.baseUrl.label')}
-                </label>
-                <input
-                  id="custom-openai-base-url"
-                  data-testid="custom-openai-base-url"
-                  type="url"
-                  className={`form-input${customErrors.baseUrl !== undefined ? ' form-input--error' : ''}`}
-                  placeholder={t('settings.custom.baseUrl.placeholder')}
-                  value={customFields.baseUrl}
-                  onChange={(e) => {
-                    setCustomFields((f) => ({ ...f, baseUrl: e.currentTarget.value }))
-                    setCustomErrors((err) => ({ ...err, baseUrl: undefined }))
-                  }}
-                />
-                {customErrors.baseUrl !== undefined && (
-                  <p className="form-error">{customErrors.baseUrl}</p>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="custom-openai-model" className="form-label">
-                  {t('settings.custom.model.label')}
-                </label>
-                <input
-                  id="custom-openai-model"
-                  data-testid="custom-openai-model"
-                  type="text"
-                  className={`form-input${customErrors.model !== undefined ? ' form-input--error' : ''}`}
-                  placeholder={t('settings.custom.model.placeholder')}
-                  value={customFields.model}
-                  onChange={(e) => {
-                    setCustomFields((f) => ({ ...f, model: e.currentTarget.value }))
-                    setCustomErrors((err) => ({ ...err, model: undefined }))
-                  }}
-                />
-                {customErrors.model !== undefined && (
-                  <p className="form-error">{customErrors.model}</p>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="custom-openai-display-name" className="form-label">
-                  {t('settings.custom.displayName.label')}
-                </label>
-                <input
-                  id="custom-openai-display-name"
-                  data-testid="custom-openai-display-name"
-                  type="text"
-                  className={`form-input${customErrors.displayName !== undefined ? ' form-input--error' : ''}`}
-                  placeholder={t('settings.custom.displayName.placeholder')}
-                  value={customFields.displayName}
-                  onChange={(e) => {
-                    setCustomFields((f) => ({ ...f, displayName: e.currentTarget.value }))
-                    setCustomErrors((err) => ({ ...err, displayName: undefined }))
-                  }}
-                />
-                {customErrors.displayName !== undefined && (
-                  <p className="form-error">{customErrors.displayName}</p>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="custom-openai-key" className="form-label">
-                  {t('settings.custom.key.label')}
-                </label>
-                <div className="form-row">
+            ] as ProviderGroup[]
+          }
+          selectedValue={extractionProviderSelectValue}
+          onChange={(v) => {
+            handleExtractionChange(
+              v as 'anthropic' | 'openai' | 'mistral' | 'azure' | 'openai-compatible',
+            )
+          }}
+          configPanel={
+            isAzure ? (
+              /* Azure OpenAI fields */
+              <div className="settings-azure-openai">
+                <div className="form-group">
+                  <label htmlFor="azure-openai-endpoint" className="form-label">
+                    {t('settings.azure.endpoint.label')}
+                  </label>
                   <input
-                    id="custom-openai-key"
-                    data-testid="custom-openai-key"
-                    type="password"
-                    className="form-input"
-                    placeholder={t('settings.custom.key.placeholder')}
-                    value={customKeyEntry}
-                    autoComplete="off"
+                    id="azure-openai-endpoint"
+                    data-testid="azure-openai-endpoint"
+                    type="url"
+                    className={`form-input${azureErrors.endpoint !== undefined ? ' form-input--error' : ''}`}
+                    placeholder={t('settings.azure.endpoint.placeholder')}
+                    value={azureFields.endpoint}
                     onChange={(e) => {
-                      setCustomKeyEntry(e.currentTarget.value)
-                      if (customKeySave === 'saved') setCustomKeySave('idle')
+                      const v = e.currentTarget.value
+                      setAzureFields((f) => ({ ...f, endpoint: v }))
+                      setAzureErrors((err) => {
+                        const next = { ...err }
+                        delete next.endpoint
+                        return next
+                      })
+                      setAzureDirty(true)
+                      if (azureSaveState === 'saved') setAzureSaveState('idle')
                     }}
                   />
-                  <button
-                    type="button"
-                    data-testid="save-custom-key"
-                    className="btn btn--secondary"
-                    disabled={customKeySave === 'saving' || customKeyEntry.trim().length === 0}
-                    onClick={() => {
-                      void handleSaveCustomKey()
-                    }}
-                  >
-                    {customKeySave === 'saved'
-                      ? t('settings.custom.key.saved')
-                      : t('settings.custom.key.save')}
-                  </button>
+                  {azureErrors.endpoint !== undefined && (
+                    <p className="form-error">{azureErrors.endpoint}</p>
+                  )}
                 </div>
-              </div>
 
-              <button
-                type="button"
-                data-testid="save-custom-openai"
-                className="btn btn--primary"
-                onClick={handleSaveCustomOpenAI}
-              >
-                {t('settings.custom.save')}
-              </button>
-            </div>
-          )}
-        </div>
+                <div className="form-group">
+                  <label htmlFor="azure-openai-deployment" className="form-label">
+                    {t('settings.azure.deployment.label')}
+                  </label>
+                  <input
+                    id="azure-openai-deployment"
+                    data-testid="azure-openai-deployment"
+                    type="text"
+                    className={`form-input${azureErrors.deployment !== undefined ? ' form-input--error' : ''}`}
+                    placeholder={t('settings.azure.deployment.placeholder')}
+                    value={azureFields.deployment}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value
+                      setAzureFields((f) => ({ ...f, deployment: v }))
+                      setAzureErrors((err) => {
+                        const next = { ...err }
+                        delete next.deployment
+                        return next
+                      })
+                      setAzureDirty(true)
+                      if (azureSaveState === 'saved') setAzureSaveState('idle')
+                    }}
+                  />
+                  {azureErrors.deployment !== undefined && (
+                    <p className="form-error">{azureErrors.deployment}</p>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="azure-openai-api-version" className="form-label">
+                    {t('settings.azure.apiVersion.label')}
+                  </label>
+                  <input
+                    id="azure-openai-api-version"
+                    data-testid="azure-openai-api-version"
+                    type="text"
+                    className={`form-input${azureErrors.apiVersion !== undefined ? ' form-input--error' : ''}`}
+                    placeholder={t('settings.azure.apiVersion.placeholder')}
+                    value={azureFields.apiVersion}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value
+                      setAzureFields((f) => ({ ...f, apiVersion: v }))
+                      setAzureErrors((err) => {
+                        const next = { ...err }
+                        delete next.apiVersion
+                        return next
+                      })
+                      setAzureDirty(true)
+                      if (azureSaveState === 'saved') setAzureSaveState('idle')
+                    }}
+                  />
+                  {azureErrors.apiVersion !== undefined && (
+                    <p className="form-error">{azureErrors.apiVersion}</p>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="azure-openai-model" className="form-label">
+                    {t('settings.azure.model.label')}
+                  </label>
+                  <input
+                    id="azure-openai-model"
+                    data-testid="azure-openai-model"
+                    type="text"
+                    className={`form-input${azureErrors.model !== undefined ? ' form-input--error' : ''}`}
+                    placeholder={t('settings.azure.model.placeholder')}
+                    value={azureFields.model}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value
+                      setAzureFields((f) => ({ ...f, model: v }))
+                      setAzureErrors((err) => {
+                        const next = { ...err }
+                        delete next.model
+                        return next
+                      })
+                      setAzureDirty(true)
+                      if (azureSaveState === 'saved') setAzureSaveState('idle')
+                    }}
+                  />
+                  {azureErrors.model !== undefined && (
+                    <p className="form-error">{azureErrors.model}</p>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="azure-openai-display-name" className="form-label">
+                    {t('settings.azure.displayName.label')}
+                  </label>
+                  <input
+                    id="azure-openai-display-name"
+                    data-testid="azure-openai-display-name"
+                    type="text"
+                    className={`form-input${azureErrors.displayName !== undefined ? ' form-input--error' : ''}`}
+                    placeholder={t('settings.azure.displayName.placeholder')}
+                    value={azureFields.displayName}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value
+                      setAzureFields((f) => ({ ...f, displayName: v }))
+                      setAzureErrors((err) => {
+                        const next = { ...err }
+                        delete next.displayName
+                        return next
+                      })
+                      setAzureDirty(true)
+                      if (azureSaveState === 'saved') setAzureSaveState('idle')
+                    }}
+                  />
+                  {azureErrors.displayName !== undefined && (
+                    <p className="form-error">{azureErrors.displayName}</p>
+                  )}
+                </div>
+
+                <KeyField
+                  idBase="azure-openai"
+                  label={t('settings.azure.key.label')}
+                  placeholder={t('settings.azure.key.placeholder')}
+                  present={azureKeyPresent}
+                  editing={azureKeyEditing}
+                  value={azureKeyEntry}
+                  saveState={azureKeySave}
+                  testIdInput="azure-openai-key"
+                  testIdSave="save-azure-key"
+                  testIdMissing="azure-key-missing"
+                  missingText={t('settings.azure.key.missing')}
+                  onChange={(v) => {
+                    setAzureKeyEntry(v)
+                    if (azureKeySave === 'saved') setAzureKeySave('idle')
+                  }}
+                  onSave={() => {
+                    void handleSaveAzureKey()
+                  }}
+                  onReplace={() => {
+                    setAzureKeyEditing(true)
+                  }}
+                  onCancel={() => {
+                    setAzureKeyEditing(false)
+                    setAzureKeyEntry('')
+                  }}
+                />
+
+                <button
+                  type="button"
+                  data-testid="save-azure-openai"
+                  className="btn btn--primary"
+                  disabled={azureSaveState === 'saving' || !azureDirty}
+                  onClick={() => {
+                    void handleSaveAzureOpenAI()
+                  }}
+                >
+                  {azureSaveState === 'saved'
+                    ? t('settings.azure.saved')
+                    : t('settings.azure.save')}
+                </button>
+
+                <ProviderKeyHelp keyRef={azureFields.keyRef} testId="azure-key-help" />
+
+                <SharedKeyNotice
+                  settings={settings}
+                  keyRef={azureFields.keyRef}
+                  testId="shared-key-azure"
+                />
+
+                <TestConnectionButton role="extraction" testId="test-extraction-connection" />
+              </div>
+            ) : !isCustomOpenAI ? (
+              /* Anthropic key entry */
+              <>
+                <KeyField
+                  idBase="anthropic"
+                  label={t('settings.extraction.anthropic.key.label')}
+                  placeholder={t('settings.extraction.anthropic.key.placeholder')}
+                  present={anthropicKeyPresent}
+                  editing={anthropicKeyEditing}
+                  value={anthropicKeyEntry}
+                  saveState={anthropicKeySave}
+                  testIdInput="anthropic-key-input"
+                  testIdSave="save-anthropic-key"
+                  testIdMissing="anthropic-key-missing"
+                  missingText={t('settings.extraction.anthropic.key.missing')}
+                  onChange={(v) => {
+                    setAnthropicKeyEntry(v)
+                    if (anthropicKeySave === 'saved') setAnthropicKeySave('idle')
+                  }}
+                  onSave={() => {
+                    void handleSaveAnthropicKey()
+                  }}
+                  onReplace={() => {
+                    setAnthropicKeyEditing(true)
+                  }}
+                  onCancel={() => {
+                    setAnthropicKeyEditing(false)
+                    setAnthropicKeyEntry('')
+                  }}
+                />
+
+                <ProviderKeyHelp keyRef="anthropic" testId="anthropic-key-help" />
+
+                <TestConnectionButton role="extraction" testId="test-extraction-connection" />
+              </>
+            ) : (
+              /* Custom OpenAI fields */
+              <div className="settings-custom-openai">
+                <div className="form-group">
+                  <label htmlFor="custom-openai-base-url" className="form-label">
+                    {t('settings.custom.baseUrl.label')}
+                  </label>
+                  <input
+                    id="custom-openai-base-url"
+                    data-testid="custom-openai-base-url"
+                    type="url"
+                    className={`form-input${customErrors.baseUrl !== undefined ? ' form-input--error' : ''}`}
+                    placeholder={t('settings.custom.baseUrl.placeholder')}
+                    value={customFields.baseUrl}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value
+                      setCustomFields((f) => ({ ...f, baseUrl: v }))
+                      setCustomErrors((err) => {
+                        const next = { ...err }
+                        delete next.baseUrl
+                        return next
+                      })
+                      setCustomDirty(true)
+                      if (customOpenAISaveState === 'saved') setCustomOpenAISaveState('idle')
+                    }}
+                  />
+                  {customErrors.baseUrl !== undefined && (
+                    <p className="form-error">{customErrors.baseUrl}</p>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="custom-openai-model" className="form-label">
+                    {t('settings.custom.model.label')}
+                  </label>
+                  <input
+                    id="custom-openai-model"
+                    data-testid="custom-openai-model"
+                    type="text"
+                    className={`form-input${customErrors.model !== undefined ? ' form-input--error' : ''}`}
+                    placeholder={t('settings.custom.model.placeholder')}
+                    value={customFields.model}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value
+                      setCustomFields((f) => ({ ...f, model: v }))
+                      setCustomErrors((err) => {
+                        const next = { ...err }
+                        delete next.model
+                        return next
+                      })
+                      setCustomDirty(true)
+                      if (customOpenAISaveState === 'saved') setCustomOpenAISaveState('idle')
+                    }}
+                  />
+                  {customErrors.model !== undefined && (
+                    <p className="form-error">{customErrors.model}</p>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="custom-openai-display-name" className="form-label">
+                    {t('settings.custom.displayName.label')}
+                  </label>
+                  <input
+                    id="custom-openai-display-name"
+                    data-testid="custom-openai-display-name"
+                    type="text"
+                    className={`form-input${customErrors.displayName !== undefined ? ' form-input--error' : ''}`}
+                    placeholder={t('settings.custom.displayName.placeholder')}
+                    value={customFields.displayName}
+                    onChange={(e) => {
+                      const v = e.currentTarget.value
+                      setCustomFields((f) => ({ ...f, displayName: v }))
+                      setCustomErrors((err) => {
+                        const next = { ...err }
+                        delete next.displayName
+                        return next
+                      })
+                      setCustomDirty(true)
+                      if (customOpenAISaveState === 'saved') setCustomOpenAISaveState('idle')
+                    }}
+                  />
+                  {customErrors.displayName !== undefined && (
+                    <p className="form-error">{customErrors.displayName}</p>
+                  )}
+                </div>
+
+                <KeyField
+                  idBase="custom-openai"
+                  label={t('settings.custom.key.label')}
+                  placeholder={t('settings.custom.key.placeholder')}
+                  present={customKeyPresent}
+                  editing={customKeyEditing}
+                  value={customKeyEntry}
+                  saveState={customKeySave}
+                  testIdInput="custom-openai-key"
+                  testIdSave="save-custom-key"
+                  testIdMissing="custom-key-missing"
+                  missingText={t('settings.custom.key.missing')}
+                  onChange={(v) => {
+                    setCustomKeyEntry(v)
+                    if (customKeySave === 'saved') setCustomKeySave('idle')
+                  }}
+                  onSave={() => {
+                    void handleSaveCustomKey()
+                  }}
+                  onReplace={() => {
+                    setCustomKeyEditing(true)
+                  }}
+                  onCancel={() => {
+                    setCustomKeyEditing(false)
+                    setCustomKeyEntry('')
+                  }}
+                />
+
+                <button
+                  type="button"
+                  data-testid="save-custom-openai"
+                  className="btn btn--primary"
+                  disabled={customOpenAISaveState === 'saving' || !customDirty}
+                  onClick={() => {
+                    void handleSaveCustomOpenAI()
+                  }}
+                >
+                  {customOpenAISaveState === 'saved'
+                    ? t('settings.custom.saved')
+                    : t('settings.custom.save')}
+                </button>
+
+                <ProviderKeyHelp keyRef={customFields.keyRef} testId="custom-key-help" />
+
+                <SharedKeyNotice
+                  settings={settings}
+                  keyRef={customFields.keyRef}
+                  testId="shared-key-custom"
+                />
+
+                <TestConnectionButton role="extraction" testId="test-extraction-connection" />
+              </div>
+            )
+          }
+          disclosure={
+            <p data-testid="extraction-disclosure" className="settings-disclosure">
+              <span className="settings-disclosure__label">
+                {t('settings.disclosure.notes.label')}
+              </span>{' '}
+              {disclosure.notesDisclosure}
+            </p>
+          }
+          testId="extraction-provider-select"
+        />
 
         {/* ----------------------------------------------------------------
             Primary language
@@ -705,19 +1516,17 @@ export function SettingsScreen(): React.JSX.Element {
         <div className="settings-section">
           <h2 className="settings-section__heading">{t('settings.language.heading')}</h2>
 
-          <SegmentedControl
-            name="language-mode"
-            testId="language-mode"
-            ariaLabel={t('draft.language.label')}
+          <select
+            className="settings-language-select"
             value={settings.primaryLanguage}
-            options={[
-              { value: 'nl', label: t('draft.language.nl') },
-              { value: 'en', label: t('draft.language.en') },
-            ]}
-            onChange={(v) => {
-              handleLanguageChange(v)
+            onChange={(e) => {
+              handleLanguageChange(e.currentTarget.value)
             }}
-          />
+            data-testid="language-select"
+          >
+            <option value="nl">{t('draft.language.nl')}</option>
+            <option value="en">{t('draft.language.en')}</option>
+          </select>
         </div>
       </section>
     </main>

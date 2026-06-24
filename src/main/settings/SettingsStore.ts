@@ -20,6 +20,7 @@
 
 import path from 'node:path'
 
+import { applyMigrations } from './migrationUtils'
 import { AppSettingsSchema, DEFAULT_SETTINGS, type AppSettings } from './settingsSchema'
 
 // ---------------------------------------------------------------------------
@@ -58,13 +59,18 @@ export class SettingsStore {
    * Falls back to DEFAULT_SETTINGS on any error (missing file, bad JSON,
    * schema validation failure).
    *
+   * Applies forward migrations before validation so old configs are automatically
+   * upgraded.
+   *
    * Never throws.
    */
   async load(): Promise<AppSettings> {
     try {
       const raw = await this._readFile(this._filePath)
       const parsed: unknown = JSON.parse(raw)
-      const result = AppSettingsSchema.safeParse(parsed)
+      // Apply forward migrations to support schema evolution
+      const migrated = applyMigrations(parsed as Record<string, unknown>)
+      const result = AppSettingsSchema.safeParse(migrated)
       if (!result.success) {
         this._current = DEFAULT_SETTINGS
         return DEFAULT_SETTINGS

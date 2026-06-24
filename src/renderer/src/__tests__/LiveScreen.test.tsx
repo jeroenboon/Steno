@@ -155,6 +155,7 @@ beforeEach(() => {
   useAppStore.setState({
     route: 'live',
     activeMeeting: 'active-session',
+    liveMeetingId: 'active-session',
     micPermission: 'unknown',
     transcriptSpans: [],
     captureMode: 'remote',
@@ -181,8 +182,8 @@ describe('LiveScreen — guard: no active meeting', () => {
     expect(screen.queryByTestId('end-meeting-btn')).not.toBeInTheDocument()
   })
 
-  it('does not start audio capture when activeMeeting is null', async () => {
-    useAppStore.setState({ activeMeeting: null, route: 'live' })
+  it('does not start audio capture when no live meeting is in progress', async () => {
+    useAppStore.setState({ activeMeeting: null, liveMeetingId: null, route: 'live' })
     render(<LiveScreen />)
 
     await screen.findByTestId('live-noactive')
@@ -190,12 +191,9 @@ describe('LiveScreen — guard: no active meeting', () => {
   })
 
   // Regression (item 0024): App mounts LiveScreen permanently — its audio-start
-  // effect first runs at startup with activeMeeting === null and bails. When the
-  // meeting later goes live the effect MUST re-fire and call start(). It only does
-  // so if activeMeeting is in the effect's dependency array. Before the fix the
-  // dep was missing, so start() was never called: the UI sat on "Microfoon
-  // starten..." with no logs. We assert getUserMedia (the first thing start()
-  // touches) is reached only after activation.
+  // effect first runs at startup with no live meeting and bails. When a meeting
+  // later goes live the effect MUST re-fire and call start(). It only does so if
+  // the live-meeting id is in the effect's dependency array.
   it('starts audio capture when a meeting goes live after mount', async () => {
     const getUserMedia = vi.fn().mockRejectedValue(new Error('no media device in jsdom'))
     Object.defineProperty(navigator, 'mediaDevices', {
@@ -203,20 +201,43 @@ describe('LiveScreen — guard: no active meeting', () => {
       configurable: true,
     })
 
-    // Mount with no active meeting, exactly as App does at startup.
-    useAppStore.setState({ activeMeeting: null, route: 'live' })
+    // Mount with no live meeting, exactly as App does at startup.
+    useAppStore.setState({ activeMeeting: null, liveMeetingId: null, route: 'live' })
     render(<LiveScreen />)
     await screen.findByTestId('live-noactive')
     expect(getUserMedia).not.toHaveBeenCalled()
 
-    // Meeting goes live (Draft → "Start vergadering").
+    // Meeting goes live (Draft → "Start vergadering" sets both ids).
     act(() => {
-      useAppStore.setState({ activeMeeting: 'active-session' })
+      useAppStore.setState({ activeMeeting: 'active-session', liveMeetingId: 'active-session' })
     })
 
     await waitFor(() => {
       expect(getUserMedia).toHaveBeenCalled()
     })
+  })
+
+  // Regression (import / reopen bug): loading a meeting for Review sets
+  // activeMeeting but NOT liveMeetingId. Capture must stay off — otherwise an
+  // import (or reopening a past meeting) silently starts a live mic session.
+  it('does not start audio capture when a meeting is only loaded for review', async () => {
+    const getUserMedia = vi.fn().mockRejectedValue(new Error('no media device in jsdom'))
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia },
+      configurable: true,
+    })
+
+    useAppStore.setState({
+      activeMeeting: 'imported-meeting',
+      liveMeetingId: null,
+      route: 'review',
+    })
+    render(<LiveScreen />)
+
+    // Give any (incorrect) start effect a chance to fire.
+    await Promise.resolve()
+    expect(getUserMedia).not.toHaveBeenCalled()
+    expect(mockApi.audioStart).not.toHaveBeenCalled()
   })
 })
 

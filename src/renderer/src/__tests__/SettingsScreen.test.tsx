@@ -30,6 +30,7 @@ const mockApi = {
   egressState: vi.fn<[], Promise<EgressState>>(),
   secretSet: vi.fn<[{ key: string; value: string }], Promise<{ ok: true }>>(),
   secretHas: vi.fn<[{ key: string }], Promise<{ has: boolean }>>(),
+  providerTestConnection: vi.fn(() => Promise.resolve({ ok: true })),
   modelStatus: vi.fn<
     [{ modelId: string }],
     Promise<{ modelId: string; downloaded: boolean; sizeBytes: number }>
@@ -88,42 +89,43 @@ function setup(overrides?: Partial<typeof mockApi>): void {
 // 1. Selecting ASR provider persists via settings:set
 // ---------------------------------------------------------------------------
 
-describe('SettingsScreen — ASR provider selection', () => {
+describe('SettingsScreen — ASR provider selection (Phase 0.4 role-card)', () => {
   beforeEach(() => {
     setup()
   })
 
-  it('renders the ASR mode toggle', async () => {
+  it('renders the ASR provider role card with grouped select', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      expect(screen.getByTestId('asr-mode')).toBeDefined()
+      expect(screen.getByTestId('asr-provider-select')).toBeDefined()
     })
   })
 
-  it('shows Deepgram (cloud) as the default ASR mode', async () => {
+  it('shows Deepgram (cloud) as the default ASR selection', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      const cloud = screen.getByTestId('asr-mode-deepgram')
-      expect(cloud.checked).toBe(true)
+      const select = screen.getByTestId('asr-provider-select')
+      expect((select as HTMLSelectElement).value).toBe('deepgram')
     })
   })
 
-  it('offers a local (on-device) option that is not disabled', async () => {
+  it('offers a local (on-device) option', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      const local = screen.getByTestId('asr-mode-local-parakeet')
-      expect(local).toBeDefined()
-      expect(local.disabled).toBe(false)
+      const select = screen.getByTestId('asr-provider-select')
+      const localOption = Array.from((select as HTMLSelectElement).options).find(
+        (o) => o.value === 'local-parakeet',
+      )
+      expect(localOption).toBeDefined()
     })
   })
 
-  it('persists the ASR provider via settings:set when the local mode is selected', async () => {
+  it('persists the ASR provider via settings:set when local is selected', async () => {
     render(<SettingsScreen />)
-    await waitFor(() => screen.getByTestId('asr-mode-local-parakeet'))
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
 
-    act(() => {
-      fireEvent.click(screen.getByTestId('asr-mode-local-parakeet'))
-    })
+    const select = screen.getByTestId('asr-provider-select')
+    fireEvent.change(select, { target: { value: 'local-parakeet' } })
 
     await waitFor(() => {
       const jsonCalls = mockApi.settingsSet.mock.calls.map((c) => JSON.stringify(c[0]))
@@ -243,9 +245,10 @@ describe('SettingsScreen — disclosure copy', () => {
 describe('SettingsScreen — custom OpenAI extraction', () => {
   const customSettings: AppSettings = {
     asrProvider: 'deepgram',
-    extractionProvider: 'custom-openai',
+    extractionProvider: 'openai-compatible',
     primaryLanguage: 'nl',
-    customOpenAI: {
+    openaiCompatible: {
+      preset: 'custom',
       baseUrl: 'https://api.example.com/v1',
       model: 'gpt-4o',
       keyRef: 'my-openai-key',
@@ -259,7 +262,7 @@ describe('SettingsScreen — custom OpenAI extraction', () => {
     })
   })
 
-  it('shows custom OpenAI fields when custom-openai extraction is selected', async () => {
+  it('shows custom OpenAI fields when openai-compatible extraction is selected', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
       expect(screen.getByTestId('custom-openai-base-url')).toBeDefined()
@@ -304,9 +307,43 @@ describe('SettingsScreen — custom OpenAI extraction', () => {
     const callsWithEmptyModel = mockApi.settingsSet.mock.calls.filter((call) => {
       const json = JSON.stringify(call[0])
       // Only block detection: an empty "model":"" string would appear literally
-      return json.includes('"model":""') && json.includes('custom-openai')
+      return json.includes('"model":""') && json.includes('openai-compatible')
     })
     expect(callsWithEmptyModel).toHaveLength(0)
+  })
+})
+
+describe('SettingsScreen — shared vendor key notice (Phase 5.2)', () => {
+  const sharedOpenAI: AppSettings = {
+    asrProvider: 'openai-audio',
+    extractionProvider: 'openai-compatible',
+    primaryLanguage: 'nl',
+    openaiAudio: { model: 'gpt-4o-mini-transcribe', keyRef: 'openai', displayName: 'OpenAI' },
+    openaiCompatible: {
+      preset: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5.4-mini',
+      keyRef: 'openai',
+      displayName: 'OpenAI',
+    },
+  }
+
+  it('shows the shared-key notice in the extraction panel when both roles use one key', async () => {
+    setup({ settingsGet: vi.fn().mockResolvedValue(sharedOpenAI) })
+    render(<SettingsScreen />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('shared-key-custom')).toBeDefined()
+    })
+  })
+
+  it('does not show the shared-key notice for the default (unshared) config', async () => {
+    setup()
+    render(<SettingsScreen />)
+
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+    expect(screen.queryByTestId('shared-key-audio')).toBeNull()
+    expect(screen.queryByTestId('shared-key-custom')).toBeNull()
   })
 })
 
@@ -314,33 +351,32 @@ describe('SettingsScreen — custom OpenAI extraction', () => {
 // 5. Language selector persists via settings:set
 // ---------------------------------------------------------------------------
 
-describe('SettingsScreen — language selector', () => {
+describe('SettingsScreen — language selector (Phase 0.4)', () => {
   beforeEach(() => {
     setup()
   })
 
-  it('renders the language toggle', async () => {
+  it('renders the language select dropdown', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      expect(screen.getByTestId('language-mode')).toBeDefined()
+      expect(screen.getByTestId('language-select')).toBeDefined()
     })
   })
 
   it('shows the current primary language from settings', async () => {
     render(<SettingsScreen />)
     await waitFor(() => {
-      const nl = screen.getByTestId('language-mode-nl')
-      expect(nl.checked).toBe(true)
+      const select = screen.getByTestId('language-select')
+      expect((select as HTMLSelectElement).value).toBe('nl')
     })
   })
 
   it('calls settings:set with updated language when changed', async () => {
     render(<SettingsScreen />)
-    await waitFor(() => screen.getByTestId('language-mode-en'))
+    await waitFor(() => screen.getByTestId('language-select'))
 
-    act(() => {
-      fireEvent.click(screen.getByTestId('language-mode-en'))
-    })
+    const select = screen.getByTestId('language-select')
+    fireEvent.change(select, { target: { value: 'en' } })
 
     await waitFor(() => {
       const jsonCalls = mockApi.settingsSet.mock.calls.map((c) => JSON.stringify(c[0]))
@@ -544,5 +580,596 @@ describe('SettingsScreen — local model download (item 0024)', () => {
       expect(screen.queryByTestId('model-download-section')).toBeNull()
       expect(screen.getByTestId('model-installed-section')).toBeDefined()
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Phase 1.2: Preset-driven field prefill (OpenAI / Mistral)
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — extraction provider presets (Phase 1.2)', () => {
+  beforeEach(() => {
+    setup()
+  })
+
+  it('offers OpenAI as a selection option in the extraction provider select', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      const select = screen.getByTestId('extraction-provider-select')
+      const openaiOption = Array.from((select as HTMLSelectElement).options).find(
+        (o) => o.value === 'openai',
+      )
+      expect(openaiOption).toBeDefined()
+    })
+  })
+
+  it('offers Mistral as a selection option in the extraction provider select', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      const select = screen.getByTestId('extraction-provider-select')
+      const mistralOption = Array.from((select as HTMLSelectElement).options).find(
+        (o) => o.value === 'mistral',
+      )
+      expect(mistralOption).toBeDefined()
+    })
+  })
+
+  it('prefills baseUrl and model when OpenAI is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'openai' } })
+    })
+
+    await waitFor(() => {
+      const baseUrlInput = screen.getByTestId('custom-openai-base-url')
+      const modelInput = screen.getByTestId('custom-openai-model')
+      expect((baseUrlInput as HTMLInputElement).value).toBe('https://api.openai.com/v1')
+      expect((modelInput as HTMLInputElement).value).toBe('gpt-4o-mini')
+    })
+  })
+
+  it('prefills baseUrl and model when Mistral is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'mistral' } })
+    })
+
+    await waitFor(() => {
+      const baseUrlInput = screen.getByTestId('custom-openai-base-url')
+      const modelInput = screen.getByTestId('custom-openai-model')
+      expect((baseUrlInput as HTMLInputElement).value).toBe('https://api.mistral.ai/v1')
+      expect((modelInput as HTMLInputElement).value).toBe('mistral-medium-3.5')
+    })
+  })
+
+  it('sets keyRef to "openai" when OpenAI preset is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'openai' } })
+    })
+
+    const saveBtn = screen.getByTestId('save-custom-openai')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return json.includes('"keyRef":"openai"')
+        }),
+      ).toBe(true)
+    })
+  })
+
+  it('sets keyRef to "mistral" when Mistral preset is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'mistral' } })
+    })
+
+    const saveBtn = screen.getByTestId('save-custom-openai')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return json.includes('"keyRef":"mistral"')
+        }),
+      ).toBe(true)
+    })
+  })
+
+  it('persists settings with preset tag when OpenAI is selected and saved', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'openai' } })
+    })
+
+    const saveBtn = screen.getByTestId('save-custom-openai')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return (
+            json.includes('"preset":"openai"') &&
+            json.includes('"extractionProvider":"openai-compatible"')
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+
+  it('persists settings with preset tag when Mistral is selected and saved', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'mistral' } })
+    })
+
+    const saveBtn = screen.getByTestId('save-custom-openai')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return (
+            json.includes('"preset":"mistral"') &&
+            json.includes('"extractionProvider":"openai-compatible"')
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Phase 3.4: import-only cloud ASR providers (OpenAI / Mistral / Azure Speech)
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — import-only cloud ASR (Phase 3.4)', () => {
+  beforeEach(() => {
+    setup()
+  })
+
+  it('offers OpenAI, Mistral and Azure as ASR options', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+    const select = screen.getByTestId('asr-provider-select')
+    const values = Array.from((select as HTMLSelectElement).options).map((o) => o.value)
+    expect(values).toContain('openai-audio')
+    expect(values).toContain('mistral-voxtral')
+    expect(values).toContain('azure-speech')
+  })
+
+  it('shows the audio config when OpenAI audio is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+
+    act(() => {
+      fireEvent.change(screen.getByTestId('asr-provider-select'), {
+        target: { value: 'openai-audio' },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('audio-model')).toBeDefined()
+      expect(screen.getByTestId('audio-key-input')).toBeDefined()
+    })
+    // The import-only notice is gone now that live streaming is supported.
+    expect(screen.queryByTestId('asr-import-only-notice')).toBeNull()
+  })
+
+  it('persists asrProvider openai-audio with the default model on selection', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+
+    act(() => {
+      fireEvent.change(screen.getByTestId('asr-provider-select'), {
+        target: { value: 'openai-audio' },
+      })
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return (
+            json.includes('"asrProvider":"openai-audio"') &&
+            json.includes('"model":"gpt-4o-mini-transcribe"')
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+
+  it('saves the audio key via secret:set under the vendor keyRef', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('asr-provider-select'), {
+        target: { value: 'openai-audio' },
+      })
+    })
+    await waitFor(() => screen.getByTestId('audio-key-input'))
+
+    fireEvent.change(screen.getByTestId('audio-key-input'), { target: { value: 'sk-audio-123' } })
+    act(() => {
+      fireEvent.click(screen.getByTestId('save-audio-key'))
+    })
+
+    await waitFor(() => {
+      expect(mockApi.secretSet).toHaveBeenCalledWith({ key: 'openai', value: 'sk-audio-123' })
+    })
+  })
+
+  it('shows the Azure Speech endpoint/deployment fields when selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('asr-provider-select'), {
+        target: { value: 'azure-speech' },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('azure-speech-endpoint')).toBeDefined()
+      expect(screen.getByTestId('azure-speech-deployment')).toBeDefined()
+      expect(screen.getByTestId('azure-speech-api-version')).toBeDefined()
+    })
+  })
+
+  it('persists azure-speech only once the endpoint is a valid URL', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('asr-provider-select'), {
+        target: { value: 'azure-speech' },
+      })
+    })
+    await waitFor(() => screen.getByTestId('azure-speech-endpoint'))
+
+    // Fill deployment + a valid endpoint; then a settings:set should carry them.
+    fireEvent.change(screen.getByTestId('azure-speech-deployment'), {
+      target: { value: 'whisper' },
+    })
+    fireEvent.change(screen.getByTestId('azure-speech-endpoint'), {
+      target: { value: 'https://my-resource.openai.azure.com/' },
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return (
+            json.includes('"asrProvider":"azure-speech"') && json.includes('"deployment":"whisper"')
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Phase 2.2: Azure OpenAI extraction config panel
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — Azure OpenAI extraction (Phase 2.2)', () => {
+  const azureSettings: AppSettings = {
+    asrProvider: 'deepgram',
+    extractionProvider: 'azure-openai',
+    primaryLanguage: 'nl',
+    azureOpenAI: {
+      endpoint: 'https://my-resource.openai.azure.com/',
+      deployment: 'my-deployment',
+      apiVersion: '2024-12-01-preview',
+      model: 'gpt-4o-mini',
+      keyRef: 'azure',
+      displayName: 'Azure OpenAI',
+    },
+  }
+
+  beforeEach(() => {
+    setup()
+  })
+
+  it('offers Azure as a selection option in the extraction provider select', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      const select = screen.getByTestId('extraction-provider-select')
+      const azureOption = Array.from((select as HTMLSelectElement).options).find(
+        (o) => o.value === 'azure',
+      )
+      expect(azureOption).toBeDefined()
+    })
+  })
+
+  it('shows the Azure config fields (endpoint/deployment/apiVersion) when azure-openai is selected', async () => {
+    setup({ settingsGet: vi.fn().mockResolvedValue(azureSettings) })
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('azure-openai-endpoint')).toBeDefined()
+      expect(screen.getByTestId('azure-openai-deployment')).toBeDefined()
+      expect(screen.getByTestId('azure-openai-api-version')).toBeDefined()
+    })
+  })
+
+  it('reveals the Azure endpoint field when Azure is picked from the select', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('extraction-provider-select'))
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'azure' } })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('azure-openai-endpoint')).toBeDefined()
+    })
+  })
+
+  it('persists settings as azure-openai with the deployment config when saved', async () => {
+    setup({ settingsGet: vi.fn().mockResolvedValue(azureSettings) })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('azure-openai-deployment'))
+
+    // Editing a field marks the form dirty so the save button is enabled.
+    const deploymentInput = screen.getByTestId('azure-openai-deployment')
+    fireEvent.change(deploymentInput, { target: { value: 'prod-deployment' } })
+
+    const saveBtn = screen.getByTestId('save-azure-openai')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return (
+            json.includes('"extractionProvider":"azure-openai"') &&
+            json.includes('"deployment":"prod-deployment"')
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+
+  it('saves the Azure key via secret:set under its keyRef', async () => {
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(azureSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: false }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('azure-openai-key'))
+
+    const input = screen.getByTestId('azure-openai-key')
+    fireEvent.change(input, { target: { value: 'azure-secret-789' } })
+
+    const saveBtn = screen.getByTestId('save-azure-key')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(mockApi.secretSet).toHaveBeenCalledWith({ key: 'azure', value: 'azure-secret-789' })
+    })
+  })
+
+  it('does NOT include the Azure key value in any settings:set call', async () => {
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(azureSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: false }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('azure-openai-key'))
+
+    const input = screen.getByTestId('azure-openai-key')
+    fireEvent.change(input, { target: { value: 'AZURE_SUPER_SECRET' } })
+    act(() => {
+      fireEvent.click(screen.getByTestId('save-azure-key'))
+    })
+    await waitFor(() => {
+      expect(mockApi.secretSet).toHaveBeenCalled()
+    })
+
+    for (const call of mockApi.settingsSet.mock.calls) {
+      expect(JSON.stringify(call[0])).not.toContain('AZURE_SUPER_SECRET')
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Phase 1.2 bugfix: key saved state and error handling
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — custom key saved state (Phase 1.2 bugfix)', () => {
+  beforeEach(() => {
+    setup()
+  })
+
+  it('shows saved key status when preset key is present on mount', async () => {
+    const openaiSettings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'openai-compatible',
+      primaryLanguage: 'nl',
+      openaiCompatible: {
+        preset: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        keyRef: 'openai',
+        displayName: 'OpenAI',
+      },
+    }
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(openaiSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: true }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('custom-openai-key-status')).toBeDefined()
+    })
+  })
+
+  it('shows missing key notice when preset key is absent on mount', async () => {
+    const openaiSettings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'openai-compatible',
+      primaryLanguage: 'nl',
+      openaiCompatible: {
+        preset: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        keyRef: 'openai',
+        displayName: 'OpenAI',
+      },
+    }
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(openaiSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: false }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('custom-key-missing')).toBeDefined()
+    })
+  })
+
+  it('shows saved status after saving a custom key', async () => {
+    const openaiSettings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'openai-compatible',
+      primaryLanguage: 'nl',
+      openaiCompatible: {
+        preset: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        keyRef: 'openai',
+        displayName: 'OpenAI',
+      },
+    }
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(openaiSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: false }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('custom-openai-key'))
+
+    const input = screen.getByTestId('custom-openai-key')
+    fireEvent.change(input, { target: { value: 'sk-test-key-123' } })
+
+    const saveBtn = screen.getByTestId('save-custom-key')
+    act(() => {
+      fireEvent.click(saveBtn)
+    })
+
+    await waitFor(() => {
+      expect(mockApi.secretSet).toHaveBeenCalledWith({
+        key: 'openai',
+        value: 'sk-test-key-123',
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('custom-openai-key-status')).toBeDefined()
+    })
+  })
+
+  it('does not crash when settingsSet rejects', async () => {
+    setup({
+      settingsSet: vi.fn().mockRejectedValue(new Error('Zod validation failed')),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'openai' } })
+    })
+
+    // The form should still render after the failed persist
+    await waitFor(() => {
+      const saveBtn = screen.getByTestId('save-custom-openai')
+      act(() => {
+        fireEvent.click(saveBtn)
+      })
+    })
+
+    // Screen should not be blank — the component should still be mounted
+    expect(screen.getByTestId('screen-settings')).toBeDefined()
+  })
+
+  it('does not crash when typing a dot in the model field', async () => {
+    const openaiSettings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'openai-compatible',
+      primaryLanguage: 'nl',
+      openaiCompatible: {
+        preset: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        keyRef: 'openai',
+        displayName: 'OpenAI',
+      },
+    }
+    setup({
+      settingsGet: vi.fn().mockResolvedValue(openaiSettings),
+      secretHas: vi.fn().mockResolvedValue({ has: true }),
+    })
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('custom-openai-model'))
+
+    const modelInput = screen.getByTestId('custom-openai-model')
+
+    // Type "gpt-5." — the dot must not crash
+    fireEvent.change(modelInput, { target: { value: 'gpt-5.' } })
+    expect(modelInput.value).toBe('gpt-5.')
+    expect(screen.getByTestId('screen-settings')).toBeDefined()
+
+    // Continue typing to "gpt-5.4-mini"
+    fireEvent.change(modelInput, { target: { value: 'gpt-5.4-mini' } })
+    expect(modelInput.value).toBe('gpt-5.4-mini')
+    expect(screen.getByTestId('screen-settings')).toBeDefined()
   })
 })

@@ -116,11 +116,32 @@ const nl = {
   'screen.settings.subtitle': 'Kies providers, voer API-sleutels in en stel de taal in.',
 
   'settings.asr.heading': 'Spraakherkenning (ASR)',
-  // ASR mode toggle (Lokaal / Cloud)
+  // ASR provider groups (Phase 0.4)
+  'settings.asr.group.device': 'Op dit apparaat',
+  'settings.asr.group.cloud': 'Cloud',
+  // ASR mode labels
   'settings.asr.mode.local': 'Lokaal',
   'settings.asr.mode.local.sub': 'Whisper, on-device',
-  'settings.asr.mode.cloud': 'Cloud',
+  'settings.asr.mode.cloud': 'Deepgram',
   'settings.asr.mode.cloud.sub': 'Deepgram',
+  'settings.asr.mode.openai': 'OpenAI',
+  'settings.asr.mode.openai.sub': 'Live en import',
+  'settings.asr.mode.mistral': 'Mistral Voxtral',
+  'settings.asr.mode.mistral.sub': 'Live en import',
+  'settings.asr.mode.azure': 'Azure Speech',
+  'settings.asr.mode.azure.sub': 'Live en import',
+  'settings.asr.audio.model.label': 'Model',
+  'settings.asr.audio.key.label': 'API-sleutel',
+  'settings.asr.audio.key.placeholder': '...',
+  'settings.asr.audio.key.missing': 'Geen sleutel ingesteld. Vul je API-sleutel in.',
+  'settings.asr.audio.save': 'Instellingen opslaan',
+  'settings.asr.audio.saved': 'Opgeslagen',
+  'settings.asr.azure.endpoint.label': 'Endpoint',
+  'settings.asr.azure.endpoint.placeholder': 'https://mijn-resource.openai.azure.com/',
+  'settings.asr.azure.deployment.label': 'Deployment',
+  'settings.asr.azure.deployment.placeholder': 'whisper',
+  'settings.asr.azure.apiVersion.label': 'API-versie',
+  'settings.asr.azure.apiVersion.placeholder': '2024-06-01',
   // Local model card
   'settings.asr.model.name': 'Whisper small',
   'settings.asr.model.size': '~357 MB',
@@ -135,9 +156,17 @@ const nl = {
   'settings.asr.key.missing': 'Geen sleutel ingesteld. Vul je Deepgram API-sleutel in.',
 
   'settings.extraction.heading': 'Extractieprovider (LLM)',
-  // Extraction provider toggle (Anthropic / Aangepast)
+  // Extraction provider groups (Phase 0.4)
+  'settings.extraction.group.cloud': 'Cloud',
+  // Extraction provider labels
   'settings.extraction.mode.anthropic': 'Anthropic',
   'settings.extraction.mode.anthropic.sub': 'Cloud',
+  'settings.extraction.mode.openai': 'OpenAI',
+  'settings.extraction.mode.openai.sub': 'Cloud',
+  'settings.extraction.mode.mistral': 'Mistral',
+  'settings.extraction.mode.mistral.sub': 'Cloud',
+  'settings.extraction.mode.azure': 'Azure OpenAI',
+  'settings.extraction.mode.azure.sub': 'Cloud',
   'settings.extraction.mode.custom': 'Aangepast',
   'settings.extraction.mode.custom.sub': 'OpenAI-compatibel',
   'settings.extraction.anthropic.key.label': 'Anthropic API-sleutel',
@@ -152,6 +181,22 @@ const nl = {
   'settings.key.replace': 'Vervangen',
   'settings.key.cancel': 'Annuleren',
 
+  // Test connection affordance (Phase 5.1)
+  'settings.test.button': 'Verbinding testen',
+  'settings.test.testing': 'Bezig met testen...',
+  'settings.test.ok': 'Verbinding gelukt',
+  'settings.test.noKey': 'Sla eerst de API-sleutel op',
+  'settings.test.network': 'Geen verbinding. Controleer de URL en je internet.',
+  'settings.test.unavailable': 'Testen is hier niet beschikbaar',
+  'settings.test.failed': 'Afgewezen',
+
+  // Shared vendor key notice (Phase 5.2)
+  'settings.sharedKey.notice':
+    'Deze API-sleutel geldt voor zowel audio als notulen. Vervangen werkt voor beide rollen.',
+
+  // Where to get a vendor key/endpoint (Phase 5.3)
+  'settings.keyHelp.label': 'Sleutel ophalen:',
+
   'settings.custom.baseUrl.label': 'Basis-URL',
   'settings.custom.baseUrl.placeholder': 'https://api.openai.com/v1',
   'settings.custom.model.label': 'Model',
@@ -162,7 +207,26 @@ const nl = {
   'settings.custom.key.placeholder': 'sk-...',
   'settings.custom.key.save': 'Opslaan',
   'settings.custom.key.saved': 'Opgeslagen',
+  'settings.custom.key.missing': 'Geen sleutel ingesteld. Vul je API-sleutel in.',
   'settings.custom.save': 'Instellingen opslaan',
+  'settings.custom.saved': 'Opgeslagen',
+
+  // Azure OpenAI extraction config (Phase 2.2)
+  'settings.azure.endpoint.label': 'Endpoint',
+  'settings.azure.endpoint.placeholder': 'https://mijn-resource.openai.azure.com/',
+  'settings.azure.deployment.label': 'Deployment',
+  'settings.azure.deployment.placeholder': 'mijn-gpt-deployment',
+  'settings.azure.apiVersion.label': 'API-versie',
+  'settings.azure.apiVersion.placeholder': '2024-12-01-preview',
+  'settings.azure.model.label': 'Model',
+  'settings.azure.model.placeholder': 'gpt-4o-mini',
+  'settings.azure.displayName.label': 'Weergavenaam',
+  'settings.azure.displayName.placeholder': 'Azure OpenAI',
+  'settings.azure.key.label': 'API-sleutel',
+  'settings.azure.key.placeholder': '...',
+  'settings.azure.key.missing': 'Geen sleutel ingesteld. Vul je Azure API-sleutel in.',
+  'settings.azure.save': 'Instellingen opslaan',
+  'settings.azure.saved': 'Opgeslagen',
 
   'settings.language.heading': 'Vergadertaal',
 
@@ -172,6 +236,10 @@ const nl = {
   'settings.validation.baseUrl': 'Voer een geldige URL in (bijv. https://api.example.com/v1)',
   'settings.validation.model': 'Voer een modelnaam in',
   'settings.validation.displayName': 'Voer een weergavenaam in',
+  'settings.validation.endpoint':
+    'Voer een geldige endpoint-URL in (bijv. https://mijn-resource.openai.azure.com/)',
+  'settings.validation.deployment': 'Voer een deployment-naam in',
+  'settings.validation.apiVersion': 'Voer een API-versie in',
 
   // No-key banner (item 0016)
   'nokey.banner.title': 'API-sleutels niet ingesteld',

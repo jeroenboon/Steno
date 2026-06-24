@@ -35,7 +35,7 @@ export interface UseLiveSessionResult {
   audioLevel: number
 }
 
-export function useLiveSession(activeMeeting: string | null): UseLiveSessionResult {
+export function useLiveSession(liveMeetingId: string | null): UseLiveSessionResult {
   // Capture mode is read here but intentionally excluded from the effect deps:
   // the mode is locked once capture begins, so a re-run on mode change would
   // never be desirable (see the eslint-disable note below).
@@ -56,13 +56,16 @@ export function useLiveSession(activeMeeting: string | null): UseLiveSessionResu
   const audioLevelRef = useRef(0)
 
   useEffect(() => {
-    // Guard: do not start audio if no meeting is active. App mounts LiveScreen
-    // permanently (it is always in the DOM, only hidden via CSS) so audio capture
-    // survives tab switches. That means this effect first runs at app startup with
-    // no meeting — bail until one is active. `activeMeeting` IS in the dependency
-    // array below precisely so the effect re-fires (and starts capture) the moment
-    // a meeting goes live; without it, start() would never be called.
-    if (activeMeeting === null) return
+    // Guard: only capture when a live recording session is in progress. App
+    // mounts LiveScreen permanently (always in the DOM, only hidden via CSS) so
+    // audio capture survives tab switches. That means this effect first runs at
+    // app startup with no live meeting — bail until one starts. `liveMeetingId`
+    // IS in the dependency array below precisely so the effect re-fires (and
+    // starts capture) the moment a meeting goes live; without it, start() would
+    // never be called. Crucially this keys off `liveMeetingId`, NOT the loaded
+    // `activeMeeting`, so loading a meeting for Review (import / reopen) never
+    // starts the microphone.
+    if (liveMeetingId === null) return
 
     const service = new AudioCaptureService()
     serviceRef.current = service
@@ -110,11 +113,11 @@ export function useLiveSession(activeMeeting: string | null): UseLiveSessionResu
       setRoute('review')
     })
 
-    // Start audio capture. activeMeeting is non-null here (guarded above), so the
+    // Start audio capture. liveMeetingId is non-null here (guarded above), so the
     // real Meeting id is threaded through to main — spans persist under that row.
     let lastLevelTick = 0
     void service
-      .start(activeMeeting, captureMode, (level) => {
+      .start(liveMeetingId, captureMode, (level) => {
         const now = Date.now()
         if (now - lastLevelTick >= 80) {
           lastLevelTick = now
@@ -147,11 +150,11 @@ export function useLiveSession(activeMeeting: string | null): UseLiveSessionResu
     }
     // captureMode is intentionally omitted: the mode is locked once capture
     // begins (the selector is disabled while micPermission !== 'unknown'), so a
-    // re-run on mode change would never be desirable. activeMeeting IS included
+    // re-run on mode change would never be desirable. liveMeetingId IS included
     // so capture starts when the meeting goes live and stops when it clears.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    activeMeeting,
+    liveMeetingId,
     addTranscriptSpan,
     setMicPermission,
     setLoopbackState,
