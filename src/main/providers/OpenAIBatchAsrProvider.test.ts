@@ -130,7 +130,7 @@ describe('OpenAIBatchAsrProvider streaming methods (import-only)', () => {
   it('throws "not yet implemented" for the live streaming methods', () => {
     const provider = makeProvider(vi.fn())
     expect(() => provider.start()).toThrow(/not yet implemented/i)
-    expect(() => provider.pushAudioFrame(pcm)).toThrow(/not yet implemented/i)
+    expect(() => provider.pushAudioFrame()).toThrow(/not yet implemented/i)
     expect(() => provider.spans()).toThrow(/not yet implemented/i)
   })
 })
