@@ -169,7 +169,13 @@ Commit: `feat(extraction): support text source, title and grounding in Anthropic
 
 ---
 
-### Step 1.4 — OpenAI-compatible + Azure `inferContext`: parity
+### Step 1.4 — OpenAI-compatible + Azure `inferContext`: parity ✅ done
+
+> Note: behaviour lives in the shared `ChatExtractionEngine`, so OpenAI, Mistral
+> and Azure get parity at once. The grounding filter was promoted to the shared
+> `excludeCoveredAgendaItems` (in `agendaTitle.ts`) and the Anthropic adapter was
+> refactored onto it too, so all three adapters enforce append-only identically.
+> **Slice 1 complete.**
 
 **Context:** same generalisation for the OpenAI-compatible family and Azure OpenAI
 (Azure extends the OpenAI-compatible path).

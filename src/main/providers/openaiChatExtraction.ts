@@ -16,6 +16,7 @@
  * `[Azure]`) so vendors are distinguishable without exposing content or keys.
  */
 
+import { excludeCoveredAgendaItems } from '@shared/agenda/agendaTitle'
 import {
   ExtractionResponseSchema,
   InferredContextSchema,
@@ -84,12 +85,14 @@ export class ChatExtractionEngine {
     const content = inferSourceToText(input.source)
     if (content.trim() === '') return { agendaItems: [], participants: [] }
 
-    const first = await this._callAndValidateInfer(content)
-    if (first !== null) return first
+    const known = input.knownAgendaItems ?? []
+
+    const first = await this._callAndValidateInfer(content, known)
+    if (first !== null) return excludeCoveredAgendaItems(first, known)
 
     console.error(`${this._logTag} Context inference failed, retrying`)
-    const retry = await this._callAndValidateInfer(content)
-    if (retry !== null) return retry
+    const retry = await this._callAndValidateInfer(content, known)
+    if (retry !== null) return excludeCoveredAgendaItems(retry, known)
 
     console.error(`${this._logTag} Context inference retry failed, returning empty`)
     return { agendaItems: [], participants: [] }
@@ -111,8 +114,14 @@ export class ChatExtractionEngine {
     return validated.data
   }
 
-  private async _callAndValidateInfer(sourceText: string): Promise<InferredContext | null> {
-    const content = await this._post(buildInferSystemPrompt(), `Transcript:\n${sourceText}`)
+  private async _callAndValidateInfer(
+    sourceText: string,
+    knownAgendaItems: readonly { title: string; topic: string }[],
+  ): Promise<InferredContext | null> {
+    const content = await this._post(
+      buildInferSystemPrompt(knownAgendaItems),
+      `Transcript:\n${sourceText}`,
+    )
     if (content === null) return null
 
     let parsed: unknown
@@ -226,13 +235,24 @@ Schema voor proposedDecisions items: { "rationale": string, "sourceSpanId": stri
 Schema voor proposedActions items: { "description": string, "sourceSpanId": string, "ownerHint"?: string, "agendaItemHint"?: string }`
 }
 
-function buildInferSystemPrompt(): string {
-  return `Je leidt de agenda en de deelnemers af uit een vergadertranscript. Stuur je antwoord als JSON-object met de velden "agendaItems" (array) en "participants" (array).
+function buildInferSystemPrompt(
+  knownAgendaItems: readonly { title: string; topic: string }[],
+): string {
+  const grounding =
+    knownAgendaItems.length === 0
+      ? ''
+      : `\n\nDe agenda bevat al deze punten:\n${knownAgendaItems
+          .map((a) => `- ${a.title}: ${a.topic}`)
+          .join(
+            '\n',
+          )}\nGeef alleen NIEUWE agendapunten terug die hier nog niet in staan; herhaal niets.`
+
+  return `Je leidt de agenda, de deelnemers en een korte vergadertitel af uit de bron. Stuur je antwoord als JSON-object met de velden "agendaItems" (array), "participants" (array) en optioneel "title" (string).
 
 Schema voor agendaItems items: { "title": string, "topic": string }
 Schema voor participants items: { "name": string }
 
-Geef alleen namen van deelnemers die echt in het transcript voorkomen; verzin niemand. Bij twijfel laat je de lijst leeg.`
+Geef alleen namen van deelnemers die echt in de bron voorkomen; verzin niemand. Bij twijfel laat je de lijst leeg.${grounding}`
 }
 
 function buildUserMessage(request: ExtractionRequest): string {

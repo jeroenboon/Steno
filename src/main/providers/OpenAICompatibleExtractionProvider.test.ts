@@ -236,6 +236,46 @@ describe('OpenAICompatibleExtractionProvider.inferContext', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('infers from a text source and returns a title', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        okResponse(JSON.stringify({ ...validInferred, title: 'Begrotingsoverleg' })),
+      )
+    const provider = makeProvider(fetchMock)
+
+    const result = await provider.inferContext({
+      source: { text: 'Agenda: de Q3-begroting bespreken' },
+    })
+
+    expect(result.title).toBe('Begrotingsoverleg')
+    expect(result.agendaItems[0]?.title).toBe('Begroting')
+  })
+
+  it('passes known agenda items as grounding and excludes topics already covered', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse(
+        JSON.stringify({
+          agendaItems: [
+            { title: 'Begroting', topic: 'Q3-begroting' },
+            { title: 'Planning', topic: 'Nieuw onderwerp' },
+          ],
+          participants: [],
+        }),
+      ),
+    )
+    const provider = makeProvider(fetchMock)
+
+    const result = await provider.inferContext({
+      source: { spans },
+      knownAgendaItems: [{ title: 'Begroting', topic: 'Reeds geagendeerd' }],
+    })
+
+    const serialised = JSON.stringify(fetchMock.mock.calls[0])
+    expect(serialised).toContain('Reeds geagendeerd')
+    expect(result.agendaItems.map((a) => a.title)).toEqual(['Planning'])
+  })
+
   it('retries once on invalid JSON, then degrades to an empty context', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify({ agendaItems: 'bad' })))
     const provider = makeProvider(fetchMock)

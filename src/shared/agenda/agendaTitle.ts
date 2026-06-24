@@ -21,3 +21,19 @@ export function isTitleCovered(title: string, known: readonly { title: string }[
   const target = normaliseAgendaTitle(title)
   return known.some((k) => normaliseAgendaTitle(k.title) === target)
 }
+
+/**
+ * Enforce append-only grounding: drop any inferred agenda item whose title is
+ * already covered by `known`, leaving every other field untouched. Returns the
+ * same object reference when `known` is empty (nothing to filter).
+ */
+export function excludeCoveredAgendaItems<T extends { agendaItems: { title: string }[] }>(
+  ctx: T,
+  known: readonly { title: string }[],
+): T {
+  if (known.length === 0) return ctx
+  return {
+    ...ctx,
+    agendaItems: ctx.agendaItems.filter((a) => !isTitleCovered(a.title, known)),
+  }
+}

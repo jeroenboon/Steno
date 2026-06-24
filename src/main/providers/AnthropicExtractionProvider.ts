@@ -26,7 +26,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
-import { isTitleCovered } from '@shared/agenda/agendaTitle'
+import { excludeCoveredAgendaItems } from '@shared/agenda/agendaTitle'
 import {
   ExtractionResponseSchema,
   InferredContextSchema,
@@ -144,21 +144,6 @@ function buildGroundingInstruction(
     `${lines}\n` +
     'Geef alleen NIEUWE agendapunten terug die hier nog niet in staan; herhaal niets. '
   )
-}
-
-/**
- * Enforce append-only grounding regardless of what the model returned: drop any
- * inferred agenda item whose title already matches a known one (ADR 0029).
- */
-function groundInferred(
-  ctx: InferredContext,
-  knownAgendaItems: readonly { title: string }[],
-): InferredContext {
-  if (knownAgendaItems.length === 0) return ctx
-  return {
-    ...ctx,
-    agendaItems: ctx.agendaItems.filter((a) => !isTitleCovered(a.title, knownAgendaItems)),
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -296,11 +281,11 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
     const known = input.knownAgendaItems ?? []
 
     const first = await this._callAndValidateInfer(content, known)
-    if (first !== null) return groundInferred(first, known)
+    if (first !== null) return excludeCoveredAgendaItems(first, known)
 
     console.error('[AnthropicExtractionProvider] Context inference validation failed, retrying')
     const retry = await this._callAndValidateInfer(content, known)
-    if (retry !== null) return groundInferred(retry, known)
+    if (retry !== null) return excludeCoveredAgendaItems(retry, known)
 
     console.error('[AnthropicExtractionProvider] Context inference retry failed, returning empty')
     return { agendaItems: [], participants: [] }
