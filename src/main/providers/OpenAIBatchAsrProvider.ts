@@ -16,13 +16,15 @@
  * never logged. Audio and transcript text are never logged.
  */
 
-import { randomUUID } from 'node:crypto'
-
 import { z } from 'zod'
 
-import { TranscriptSpanSchema, type TranscriptSpan } from '@shared/domain/types'
+import type { TranscriptSpan } from '@shared/domain/types'
 
-import { ImportOnlyAsrProvider, postAudioTranscription } from './batchAsrSupport'
+import {
+  ImportOnlyAsrProvider,
+  postAudioTranscription,
+  transcriptionResultToSpans,
+} from './batchAsrSupport'
 
 // ---------------------------------------------------------------------------
 // Response schema (Zod at the boundary — principle #8)
@@ -101,42 +103,6 @@ export class OpenAIBatchAsrProvider extends ImportOnlyAsrProvider {
       throw new Error('OpenAI transcription response did not match the expected shape')
     }
 
-    return transcriptionToSpans(parsed.data)
+    return transcriptionResultToSpans(parsed.data)
   }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function transcriptionToSpans(data: z.infer<typeof OpenAITranscriptionSchema>): TranscriptSpan[] {
-  const segments = data.segments
-  if (segments !== undefined && segments.length > 0) {
-    const spans: TranscriptSpan[] = []
-    for (const seg of segments) {
-      const text = seg.text.trim()
-      if (text.length === 0) continue
-      const parsed = TranscriptSpanSchema.safeParse({
-        id: randomUUID(),
-        text,
-        startMs: Math.round(seg.start * 1000),
-        endMs: Math.round(seg.end * 1000),
-        isFinal: true,
-      })
-      if (parsed.success) spans.push(parsed.data)
-    }
-    return spans
-  }
-
-  // No segments — degrade to a single span over the whole transcript.
-  const text = data.text?.trim() ?? ''
-  if (text.length === 0) return []
-  const parsed = TranscriptSpanSchema.safeParse({
-    id: randomUUID(),
-    text,
-    startMs: 0,
-    endMs: 0,
-    isFinal: true,
-  })
-  return parsed.success ? [parsed.data] : []
 }

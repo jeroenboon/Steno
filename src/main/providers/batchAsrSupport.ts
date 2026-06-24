@@ -17,7 +17,9 @@
  * text are never logged — only the non-sensitive log tag and HTTP status.
  */
 
-import type { TranscriptSpan } from '@shared/domain/types'
+import { randomUUID } from 'node:crypto'
+
+import { TranscriptSpanSchema, type TranscriptSpan } from '@shared/domain/types'
 import type { ASRProvider } from '@shared/providers'
 
 import { encodeWav } from './wavEncoder'
@@ -72,6 +74,63 @@ export async function postAudioTranscription(
   }
 
   return response.json()
+}
+
+/**
+ * A transcription segment in vendor-neutral form: seconds-based timing, text,
+ * and an optional diarization speaker (Voxtral provides it; Whisper does not).
+ */
+export interface TranscriptionSegment {
+  start: number
+  end: number
+  text: string
+  speaker?: number | string | undefined
+}
+
+/** The shared shape of an /audio/transcriptions response across vendors. */
+export interface TranscriptionResult {
+  text?: string | undefined
+  segments?: TranscriptionSegment[] | undefined
+}
+
+/**
+ * Map a parsed transcription response to time-ordered final spans. Segments win
+ * when present (one span each, seconds→ms, diarization → `Speaker N`); otherwise
+ * the whole `text` degrades to a single span. Each adapter validates the raw
+ * response with its own Zod schema first (principle #8) and passes the result
+ * here, so this stays a pure mapping.
+ */
+export function transcriptionResultToSpans(data: TranscriptionResult): TranscriptSpan[] {
+  const segments = data.segments
+  if (segments !== undefined && segments.length > 0) {
+    const spans: TranscriptSpan[] = []
+    for (const seg of segments) {
+      const text = seg.text.trim()
+      if (text.length === 0) continue
+      const raw: Record<string, unknown> = {
+        id: randomUUID(),
+        text,
+        startMs: Math.round(seg.start * 1000),
+        endMs: Math.round(seg.end * 1000),
+        isFinal: true,
+      }
+      if (seg.speaker !== undefined) raw.speakerLabel = `Speaker ${String(seg.speaker)}`
+      const parsed = TranscriptSpanSchema.safeParse(raw)
+      if (parsed.success) spans.push(parsed.data)
+    }
+    return spans
+  }
+
+  const text = data.text?.trim() ?? ''
+  if (text.length === 0) return []
+  const parsed = TranscriptSpanSchema.safeParse({
+    id: randomUUID(),
+    text,
+    startMs: 0,
+    endMs: 0,
+    isFinal: true,
+  })
+  return parsed.success ? [parsed.data] : []
 }
 
 /**
