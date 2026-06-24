@@ -33,13 +33,18 @@
 
 import { PcmFramer } from '@shared/audio/pcmFramer'
 import { mixPcm } from '@shared/audio/pcmMixer'
+import { CAPTURE_SAMPLE_RATE } from '@shared/audio/pcmResampler'
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Deepgram expects 16 kHz, mono, 16-bit LE PCM. */
-const TARGET_SAMPLE_RATE = 16_000
+/**
+ * The pipeline emits mono 16-bit LE PCM at this rate (the IPC contract). Deepgram
+ * and the local/batch providers consume it directly; the realtime adapters that
+ * need another rate (OpenAI/Azure → 24 kHz) resample from it in main.
+ */
+const TARGET_SAMPLE_RATE = CAPTURE_SAMPLE_RATE
 
 /**
  * Number of Int16 samples per emitted frame.

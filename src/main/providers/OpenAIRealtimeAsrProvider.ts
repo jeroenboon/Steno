@@ -42,6 +42,7 @@ import { randomUUID } from 'node:crypto'
 import WebSocketImpl from 'ws'
 import { z } from 'zod'
 
+import { CAPTURE_SAMPLE_RATE, resamplePcm16 } from '@shared/audio/pcmResampler'
 import { TranscriptSpanSchema, type TranscriptSpan } from '@shared/domain/types'
 import { RealClock, type ASRProvider, type Clock } from '@shared/providers'
 
@@ -84,6 +85,13 @@ const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime?intent=transcripti
 
 const DEFAULT_MODEL = 'gpt-4o-transcribe'
 
+/**
+ * OpenAI Realtime expects `pcm16` at 24 kHz, mono, little-endian. The renderer
+ * captures at CAPTURE_SAMPLE_RATE (16 kHz), so frames are resampled before send;
+ * otherwise 16 kHz audio is read as 24 kHz (sped up, pitch-shifted, poor WER).
+ */
+const OPENAI_REALTIME_SAMPLE_RATE = 24_000
+
 // ---------------------------------------------------------------------------
 // Event schemas (Zod at the boundary — principle #8)
 // ---------------------------------------------------------------------------
@@ -118,6 +126,12 @@ export interface OpenAIRealtimeAsrProviderOptions {
   /** WebSocket factory. Injected for tests; defaults to the Node `ws` package. */
   webSocketFactory?: RealtimeWebSocketFactory
   /**
+   * Sample rate (Hz) the endpoint expects. Capture audio (16 kHz) is resampled
+   * to this before sending. Defaults to OpenAI Realtime's 24 kHz; Azure reuses
+   * the same wire and rate.
+   */
+  inputSampleRate?: number
+  /**
    * Connection builder (URL + auth). Defaults to OpenAI's public endpoint with
    * Bearer auth. Azure OpenAI (Phase 4.2) injects its own deployment URL and
    * `api-key` header here, reusing all the frame handling below.
@@ -145,6 +159,7 @@ export class OpenAIRealtimeAsrProvider implements ASRProvider {
   private readonly _clock: Clock
   private readonly _wsFactory: RealtimeWebSocketFactory
   private readonly _buildConnection: (apiKey: string) => RealtimeConnection
+  private readonly _inputSampleRate: number
 
   private _socket: WebSocketLike | null = null
   private _stopped = false
@@ -170,6 +185,7 @@ export class OpenAIRealtimeAsrProvider implements ASRProvider {
           opts?.headers ? { headers: opts.headers } : undefined,
         ) as unknown as WebSocketLike)
     this._buildConnection = options.buildConnection ?? defaultOpenAIConnection
+    this._inputSampleRate = options.inputSampleRate ?? OPENAI_REALTIME_SAMPLE_RATE
   }
 
   // -------------------------------------------------------------------------
@@ -196,7 +212,8 @@ export class OpenAIRealtimeAsrProvider implements ASRProvider {
 
   pushAudioFrame(chunk: Uint8Array): void {
     if (this._socket?.readyState === WS_OPEN) {
-      const audio = Buffer.from(chunk).toString('base64')
+      const resampled = resamplePcm16(chunk, CAPTURE_SAMPLE_RATE, this._inputSampleRate)
+      const audio = Buffer.from(resampled).toString('base64')
       this._socket.send(JSON.stringify({ type: 'input_audio_buffer.append', audio }))
     }
   }

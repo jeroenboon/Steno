@@ -32,6 +32,7 @@ import { randomUUID } from 'node:crypto'
 import WebSocketImpl from 'ws'
 import { z } from 'zod'
 
+import { CAPTURE_SAMPLE_RATE, resamplePcm16 } from '@shared/audio/pcmResampler'
 import { TranscriptSpanSchema, type TranscriptSpan } from '@shared/domain/types'
 import { RealClock, type ASRProvider, type Clock } from '@shared/providers'
 
@@ -54,6 +55,13 @@ const WS_OPEN = 1
 
 const VOXTRAL_REALTIME_URL = 'wss://api.mistral.ai/v1/audio/transcriptions/realtime'
 const DEFAULT_MODEL = 'voxtral-mini-2507'
+
+/**
+ * Voxtral Realtime consumes 16 kHz mono pcm16 — the renderer's capture rate — so
+ * this is a passthrough today. It is routed through the resampler so a future API
+ * revision that wants a different rate is a one-line change to this constant.
+ */
+const VOXTRAL_REALTIME_SAMPLE_RATE = 16_000
 
 // ---------------------------------------------------------------------------
 // Event schemas (Zod at the boundary — principle #8)
@@ -158,7 +166,7 @@ export class MistralVoxtralRealtimeAsrProvider implements ASRProvider {
 
   pushAudioFrame(chunk: Uint8Array): void {
     if (this._socket?.readyState === WS_OPEN) {
-      this._socket.send(chunk)
+      this._socket.send(resamplePcm16(chunk, CAPTURE_SAMPLE_RATE, VOXTRAL_REALTIME_SAMPLE_RATE))
     }
   }
 

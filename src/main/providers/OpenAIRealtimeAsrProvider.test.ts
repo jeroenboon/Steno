@@ -215,16 +215,18 @@ describe('OpenAIRealtimeAsrProvider', () => {
     expect(spans[1]?.text).toBe('Hallo')
   })
 
-  it('sends audio frames as base64 input_audio_buffer.append after start()', () => {
+  it('resamples 16 kHz capture audio to 24 kHz and sends it as base64 input_audio_buffer.append', () => {
     const provider = makeProvider()
     provider.start()
     currentSocket.simulateOpen()
 
-    provider.pushAudioFrame(new Uint8Array([0x01, 0x02, 0x03]))
+    // 4 Int16 samples (8 bytes) at 16 kHz → 6 samples (12 bytes) at 24 kHz.
+    provider.pushAudioFrame(new Uint8Array(8))
 
     const append = currentSocket.sentObjects().find((o) => o.type === 'input_audio_buffer.append')
     expect(append).toBeDefined()
-    expect(append?.audio).toBe(Buffer.from([0x01, 0x02, 0x03]).toString('base64'))
+    const decoded = Buffer.from(append?.audio as string, 'base64')
+    expect(decoded.byteLength).toBe(12)
   })
 
   it('reconnects after a socket drop and continues emitting spans', async () => {
