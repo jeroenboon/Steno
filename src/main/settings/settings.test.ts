@@ -792,7 +792,7 @@ describe('buildProviders', () => {
     expect(() => buildProviders(settings, storage)).toThrow(/gedownload/i)
   })
 
-  it('throws "not yet implemented" when openai-audio ASR is selected', () => {
+  it('gates openai-audio ASR for a live meeting with an import-only error', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('anthropic', 'ant-key')
     storage.setSecret('openai-key', 'sk-openai')
@@ -808,10 +808,33 @@ describe('buildProviders', () => {
       },
     }
 
-    expect(() => buildProviders(settings, storage)).toThrow(/not yet implemented/i)
+    // buildProviders builds for live by default.
+    expect(() => buildProviders(settings, storage)).toThrow(/import/i)
   })
 
-  it('throws "not yet implemented" when mistral-voxtral ASR is selected', () => {
+  it('builds an OpenAI batch ASR provider for import', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('openai-key', 'sk-openai')
+
+    const settings: AppSettings = {
+      asrProvider: 'openai-audio',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      openaiAudio: {
+        model: 'gpt-4o-mini-transcribe',
+        keyRef: 'openai-key',
+        displayName: 'OpenAI Audio',
+      },
+    }
+
+    const result = tryBuildAsrProvider(settings, storage, 'import')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(typeof result.provider.transcribeBatch).toBe('function')
+    }
+  })
+
+  it('gates mistral-voxtral ASR for a live meeting with an import-only error', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('anthropic', 'ant-key')
     storage.setSecret('mistral-key', 'sk-mistral')
@@ -827,10 +850,32 @@ describe('buildProviders', () => {
       },
     }
 
-    expect(() => buildProviders(settings, storage)).toThrow(/not yet implemented/i)
+    expect(() => buildProviders(settings, storage)).toThrow(/import/i)
   })
 
-  it('throws "not yet implemented" when azure-speech ASR is selected', () => {
+  it('builds a Mistral Voxtral batch ASR provider for import', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('mistral-key', 'sk-mistral')
+
+    const settings: AppSettings = {
+      asrProvider: 'mistral-voxtral',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      mistralVoxtral: {
+        model: 'voxtral-mini-2507',
+        keyRef: 'mistral-key',
+        displayName: 'Mistral Voxtral',
+      },
+    }
+
+    const result = tryBuildAsrProvider(settings, storage, 'import')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(typeof result.provider.transcribeBatch).toBe('function')
+    }
+  })
+
+  it('gates azure-speech ASR for a live meeting with an import-only error', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('anthropic', 'ant-key')
     storage.setSecret('azure-speech-key', 'azure-key')
@@ -849,7 +894,34 @@ describe('buildProviders', () => {
       },
     }
 
-    expect(() => buildProviders(settings, storage)).toThrow(/not yet implemented/i)
+    expect(() => buildProviders(settings, storage)).toThrow(/import/i)
+  })
+
+  it('builds an Azure Whisper batch ASR provider for import', () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('azure-speech-key', 'azure-key')
+
+    const settings: AppSettings = {
+      asrProvider: 'azure-speech',
+      extractionProvider: 'anthropic',
+      primaryLanguage: 'en',
+      azureSpeech: {
+        endpoint: 'https://my-resource.openai.azure.com/',
+        deployment: 'whisper',
+        apiVersion: '2024-06-01',
+        model: 'whisper',
+        keyRef: 'azure-speech-key',
+        displayName: 'Azure Speech',
+      },
+    }
+
+    const result = tryBuildAsrProvider(settings, storage, 'import')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(typeof result.provider.transcribeBatch).toBe('function')
+    }
+    // Sanity: the old throw is gone for the import path.
+    expect(true).toBe(true)
   })
 
   it('throws when local-parakeet model is not downloaded', () => {

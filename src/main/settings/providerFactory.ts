@@ -35,8 +35,11 @@ import {
   type AnthropicExtractionProviderOptions,
 } from '../providers/AnthropicExtractionProvider'
 import { AzureOpenAIExtractionProvider } from '../providers/AzureOpenAIExtractionProvider'
+import { AzureWhisperBatchAsrProvider } from '../providers/AzureWhisperBatchAsrProvider'
 import { DeepgramAsrProvider } from '../providers/DeepgramAsrProvider'
 import { LocalAsrProvider } from '../providers/LocalAsrProvider'
+import { MistralVoxtralBatchAsrProvider } from '../providers/MistralVoxtralBatchAsrProvider'
+import { OpenAIBatchAsrProvider } from '../providers/OpenAIBatchAsrProvider'
 import { OpenAICompatibleExtractionProvider } from '../providers/OpenAICompatibleExtractionProvider'
 import { ModelDownloader } from '../providers/sherpa/ModelDownloader'
 
@@ -69,6 +72,19 @@ export type BuildProvidersResult =
  * genuinely need both at once.
  */
 export type BuildAsrResult = { ok: true; provider: ASRProvider } | { ok: false; error: string }
+
+/**
+ * Whether the ASR provider is being built for a live meeting or a file import.
+ * The OpenAI/Mistral/Azure adapters are batch-only (file import); selecting one
+ * for a live meeting is gated with a descriptive error until realtime streaming
+ * ships (multi-provider plan, Phase 4). Deepgram/Local serve both.
+ */
+export type AsrUsage = 'live' | 'import'
+
+// Default endpoints for the batch ASR providers whose settings carry no baseUrl.
+const OPENAI_AUDIO_BASE_URL = 'https://api.openai.com/v1'
+const MISTRAL_AUDIO_BASE_URL = 'https://api.mistral.ai/v1'
+const DEFAULT_AZURE_WHISPER_API_VERSION = '2024-06-01'
 export type BuildExtractionResult =
   | { ok: true; provider: ExtractionProvider }
   | { ok: false; error: string }
@@ -122,9 +138,13 @@ export function tryBuildProviders(
  * indifferent to whether an extraction key is configured. This is what the
  * audio pipeline uses so transcription works as soon as the Deepgram key is set.
  */
-export function tryBuildAsrProvider(settings: AppSettings, storage: SecretStorage): BuildAsrResult {
+export function tryBuildAsrProvider(
+  settings: AppSettings,
+  storage: SecretStorage,
+  usage: AsrUsage = 'live',
+): BuildAsrResult {
   try {
-    return { ok: true, provider: buildAsrProvider(settings, storage) }
+    return { ok: true, provider: buildAsrProvider(settings, storage, usage) }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
@@ -149,7 +169,11 @@ export function tryBuildExtractionProvider(
 // ASR provider construction
 // ---------------------------------------------------------------------------
 
-function buildAsrProvider(settings: AppSettings, storage: SecretStorage): ASRProvider {
+function buildAsrProvider(
+  settings: AppSettings,
+  storage: SecretStorage,
+  usage: AsrUsage = 'live',
+): ASRProvider {
   switch (settings.asrProvider) {
     case 'local-parakeet': {
       const modelDir = join(app.getPath('userData'), 'models', 'whisper-small-sherpa')
@@ -176,26 +200,73 @@ function buildAsrProvider(settings: AppSettings, storage: SecretStorage): ASRPro
     }
 
     case 'openai-audio': {
-      throw new Error(
-        'OpenAI audio ASR provider is not yet implemented. ' +
-          'Please use Deepgram or local Whisper for now.',
-      )
+      assertImportOnly(usage, 'OpenAI audio')
+      const cfg = settings.openaiAudio
+      const apiKey = requireKey(storage, cfg.keyRef)
+      const opts: ConstructorParameters<typeof OpenAIBatchAsrProvider>[0] = {
+        apiKey,
+        baseUrl: OPENAI_AUDIO_BASE_URL,
+        model: cfg.model,
+        displayName: cfg.displayName,
+        language: cfg.language ?? settings.primaryLanguage,
+      }
+      return new OpenAIBatchAsrProvider(opts)
     }
 
     case 'mistral-voxtral': {
-      throw new Error(
-        'Mistral Voxtral ASR provider is not yet implemented. ' +
-          'Please use Deepgram or local Whisper for now.',
-      )
+      assertImportOnly(usage, 'Mistral Voxtral')
+      const cfg = settings.mistralVoxtral
+      const apiKey = requireKey(storage, cfg.keyRef)
+      return new MistralVoxtralBatchAsrProvider({
+        apiKey,
+        baseUrl: MISTRAL_AUDIO_BASE_URL,
+        model: cfg.model,
+        displayName: cfg.displayName,
+        language: cfg.language ?? settings.primaryLanguage,
+      })
     }
 
     case 'azure-speech': {
-      throw new Error(
-        'Azure Speech Services ASR provider is not yet implemented. ' +
-          'Please use Deepgram or local Whisper for now.',
-      )
+      assertImportOnly(usage, 'Azure Speech')
+      const cfg = settings.azureSpeech
+      const apiKey = requireKey(storage, cfg.keyRef)
+      return new AzureWhisperBatchAsrProvider({
+        apiKey,
+        endpoint: cfg.endpoint,
+        deployment: cfg.deployment,
+        apiVersion: cfg.apiVersion ?? DEFAULT_AZURE_WHISPER_API_VERSION,
+        model: cfg.model,
+        displayName: cfg.displayName,
+        language: cfg.language ?? settings.primaryLanguage,
+      })
     }
   }
+}
+
+/**
+ * Throw a descriptive, Dutch error when a batch-only ASR provider is selected
+ * for a live meeting. These providers have no realtime wire yet (Phase 4); the
+ * caller (live runtime) surfaces this and falls back. Import builds skip this.
+ */
+function assertImportOnly(usage: AsrUsage, providerLabel: string): void {
+  if (usage === 'import') return
+  throw new Error(
+    `${providerLabel} kan alleen voor import worden gebruikt; ` +
+      'live-transcriptie via deze provider is nog niet beschikbaar. ' +
+      'Kies Deepgram of Lokaal voor live.',
+  )
+}
+
+/** Look up a required secret by keyRef, throwing a clear error when absent. */
+function requireKey(storage: SecretStorage, keyRef: string): string {
+  const apiKey = storage.getSecret(keyRef)
+  if (apiKey === null) {
+    throw new Error(
+      `API key is not set for keyRef "${keyRef}". ` +
+        `Store the key via SecretStorage with the key name "${keyRef}" before building providers.`,
+    )
+  }
+  return apiKey
 }
 
 // ---------------------------------------------------------------------------
