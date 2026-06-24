@@ -313,6 +313,40 @@ describe('SettingsScreen — custom OpenAI extraction', () => {
   })
 })
 
+describe('SettingsScreen — shared vendor key notice (Phase 5.2)', () => {
+  const sharedOpenAI: AppSettings = {
+    asrProvider: 'openai-audio',
+    extractionProvider: 'openai-compatible',
+    primaryLanguage: 'nl',
+    openaiAudio: { model: 'gpt-4o-mini-transcribe', keyRef: 'openai', displayName: 'OpenAI' },
+    openaiCompatible: {
+      preset: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5.4-mini',
+      keyRef: 'openai',
+      displayName: 'OpenAI',
+    },
+  }
+
+  it('shows the shared-key notice in the extraction panel when both roles use one key', async () => {
+    setup({ settingsGet: vi.fn().mockResolvedValue(sharedOpenAI) })
+    render(<SettingsScreen />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('shared-key-custom')).toBeDefined()
+    })
+  })
+
+  it('does not show the shared-key notice for the default (unshared) config', async () => {
+    setup()
+    render(<SettingsScreen />)
+
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+    expect(screen.queryByTestId('shared-key-audio')).toBeNull()
+    expect(screen.queryByTestId('shared-key-custom')).toBeNull()
+  })
+})
+
 // ---------------------------------------------------------------------------
 // 5. Language selector persists via settings:set
 // ---------------------------------------------------------------------------

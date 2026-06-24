@@ -190,6 +190,10 @@ const nl = {
   'settings.test.unavailable': 'Testen is hier niet beschikbaar',
   'settings.test.failed': 'Afgewezen',
 
+  // Shared vendor key notice (Phase 5.2)
+  'settings.sharedKey.notice':
+    'Deze API-sleutel geldt voor zowel audio als notulen. Vervangen werkt voor beide rollen.',
+
   'settings.custom.baseUrl.label': 'Basis-URL',
   'settings.custom.baseUrl.placeholder': 'https://api.openai.com/v1',
   'settings.custom.model.label': 'Model',

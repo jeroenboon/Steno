@@ -1633,6 +1633,12 @@ body::before {
   color: var(--color-danger, #c0392b);
 }
 
+.settings-shared-key-notice {
+  font-size: 12px;
+  color: var(--color-text-muted, #6b7280);
+  margin: var(--space-2) 0 0;
+}
+
 /* ---------------------------------------------------------------------------
  * Local model card — identity + size + download/installed state
  * --------------------------------------------------------------------------- */

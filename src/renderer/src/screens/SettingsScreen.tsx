@@ -26,6 +26,7 @@ import { extractionPresets } from '../../../shared/providers'
 import { buildDisclosureCopy, computeEgressState } from '../../../shared/settings/egressState'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
 import { ProviderRoleCard, type ProviderGroup } from '../components/ProviderRoleCard'
+import { SharedKeyNotice } from '../components/SharedKeyNotice'
 import { TestConnectionButton } from '../components/TestConnectionButton'
 import { t } from '../i18n'
 
@@ -1022,6 +1023,12 @@ export function SettingsScreen(): React.JSX.Element {
                   }}
                 />
 
+                <SharedKeyNotice
+                  settings={settings}
+                  keyRef={audioFields.keyRef}
+                  testId="shared-key-audio"
+                />
+
                 <TestConnectionButton role="asr" testId="test-asr-connection" />
               </div>
             ) : (
@@ -1301,6 +1308,12 @@ export function SettingsScreen(): React.JSX.Element {
                     : t('settings.azure.save')}
                 </button>
 
+                <SharedKeyNotice
+                  settings={settings}
+                  keyRef={azureFields.keyRef}
+                  testId="shared-key-azure"
+                />
+
                 <TestConnectionButton role="extraction" testId="test-extraction-connection" />
               </div>
             ) : !isCustomOpenAI ? (
@@ -1464,6 +1477,12 @@ export function SettingsScreen(): React.JSX.Element {
                     ? t('settings.custom.saved')
                     : t('settings.custom.save')}
                 </button>
+
+                <SharedKeyNotice
+                  settings={settings}
+                  keyRef={customFields.keyRef}
+                  testId="shared-key-custom"
+                />
 
                 <TestConnectionButton role="extraction" testId="test-extraction-connection" />
               </div>
