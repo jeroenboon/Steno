@@ -62,7 +62,9 @@ const MEETING: Meeting = {
   primaryLanguage: 'nl',
 }
 
-const AGENDA: AgendaItem[] = [{ id: 'ai-1', title: 'Q3 review', topic: 'Review Q3 results' }]
+const AGENDA: AgendaItem[] = [
+  { id: 'ai-1', title: 'Q3 review', topic: 'Review Q3 results', state: 'confirmed' },
+]
 
 const PARTICIPANTS: Participant[] = [{ id: 'p-1', name: 'Jeroen' }]
 

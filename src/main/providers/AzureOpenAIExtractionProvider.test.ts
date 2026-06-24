@@ -30,7 +30,7 @@ const extractionRequest: ExtractionRequest = {
   spans: [
     { id: 'span-1', text: 'We besluiten de begroting goed te keuren.', startMs: 0, endMs: 4000 },
   ],
-  agendaItems: [{ id: 'agenda-1', title: 'Begroting', topic: 'Q3-begroting' }],
+  agendaItems: [{ id: 'agenda-1', title: 'Begroting', topic: 'Q3-begroting', state: 'confirmed' }],
   participants: [{ id: 'p-1', name: 'Jeroen' }],
   primaryLanguage: 'nl',
   isFinalPass: false,

@@ -376,6 +376,36 @@ describe('AgendaItem', () => {
       }),
     ).toThrow()
   })
+
+  it('defaults state to confirmed when absent', () => {
+    const item = AgendaItemSchema.parse({
+      id: 'agenda-4',
+      title: 'Some title',
+      topic: 'Some topic',
+    })
+    expect(item.state).toBe('confirmed')
+  })
+
+  it('accepts a proposed state', () => {
+    const item = AgendaItemSchema.parse({
+      id: 'agenda-5',
+      title: 'Some title',
+      topic: 'Some topic',
+      state: 'proposed',
+    })
+    expect(item.state).toBe('proposed')
+  })
+
+  it('rejects an unknown state', () => {
+    expect(() =>
+      AgendaItemSchema.parse({
+        id: 'agenda-6',
+        title: 'Some title',
+        topic: 'Some topic',
+        state: 'archived',
+      }),
+    ).toThrow()
+  })
 })
 
 // ============================================================================

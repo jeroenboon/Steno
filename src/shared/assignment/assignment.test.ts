@@ -36,9 +36,24 @@ const JEROEN: Participant = { id: 'p-jeroen', name: 'Jeroen Boon' }
 const ANIKA: Participant = { id: 'p-anika', name: 'Anika de Vries' }
 const JEROEN2: Participant = { id: 'p-jeroen2', name: 'Jeroen Smit' }
 
-const AI_Q3: AgendaItem = { id: 'ai-q3', title: 'Q3 review', topic: 'Review Q3 results' }
-const AI_BUDGET: AgendaItem = { id: 'ai-budget', title: 'Budget', topic: 'Budget discussion' }
-const AI_BUDGET2: AgendaItem = { id: 'ai-budget2', title: 'Budget', topic: 'Budget overview' }
+const AI_Q3: AgendaItem = {
+  id: 'ai-q3',
+  title: 'Q3 review',
+  topic: 'Review Q3 results',
+  state: 'confirmed',
+}
+const AI_BUDGET: AgendaItem = {
+  id: 'ai-budget',
+  title: 'Budget',
+  topic: 'Budget discussion',
+  state: 'confirmed',
+}
+const AI_BUDGET2: AgendaItem = {
+  id: 'ai-budget2',
+  title: 'Budget',
+  topic: 'Budget overview',
+  state: 'confirmed',
+}
 
 // ---------------------------------------------------------------------------
 // resolveOwner

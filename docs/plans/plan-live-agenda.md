@@ -65,7 +65,7 @@ next free numbers at build time (the feature branch may land migrations first):
 
 Foundational; Slices 2-4 depend on it. Fully unit-testable, no Electron.
 
-### Step 1.1 — `AgendaItem.state` field + migration + repo mapping
+### Step 1.1 — `AgendaItem.state` field + migration + repo mapping ✅ done
 
 **Context:** `AgendaItem` is currently `{ id, title, topic }` with no lifecycle.
 Adding `state` is the spine of the whole feature. Default `confirmed` so existing

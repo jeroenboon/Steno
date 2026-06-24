@@ -322,6 +322,7 @@ function makeHandleAgendaItemAdd(): (raw: unknown) => AgendaItemAddResponse {
       id: randomUUID(),
       title: req.title,
       topic: req.topic,
+      state: 'confirmed',
     }
 
     return AgendaItemAddResponseSchema.parse(agendaItem)

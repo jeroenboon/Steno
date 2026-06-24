@@ -118,6 +118,14 @@ export const AgendaItemSchema = z.object({
   title: z.string().min(1, 'AgendaItem title cannot be empty'),
   /** The topic/description, e.g., "Performance review". */
   topic: z.string().min(1, 'AgendaItem topic cannot be empty'),
+  /**
+   * Lifecycle state. Items the user typed or pasted in Draft are 'confirmed';
+   * items the agent infers (live or on the final pass) are 'proposed' until the
+   * note-taker confirms them. Defaults to 'confirmed' so existing rows and
+   * manually entered items are unaffected. The Off-agenda sentinel stays
+   * outside this lifecycle. See ADR 0029.
+   */
+  state: ItemStateSchema.default('confirmed'),
 })
 
 export type AgendaItem = z.infer<typeof AgendaItemSchema>

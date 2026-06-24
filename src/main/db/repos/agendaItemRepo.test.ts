@@ -32,6 +32,7 @@ const sampleItem: AgendaItem = {
   id: 'ai-1',
   title: 'Review results',
   topic: 'Q3 performance',
+  state: 'confirmed',
 }
 
 describe('agendaItemRepo', () => {
@@ -55,9 +56,23 @@ describe('agendaItemRepo', () => {
   it('lists agenda items for a meeting', () => {
     const repo = agendaItemRepo(db)
     repo.insert(sampleItem, 'mtg-1')
-    repo.insert({ id: 'ai-2', title: 'Risks', topic: 'Known risks' }, 'mtg-1')
+    repo.insert({ id: 'ai-2', title: 'Risks', topic: 'Known risks', state: 'confirmed' }, 'mtg-1')
     const items = repo.listByMeeting('mtg-1')
     expect(items).toHaveLength(2)
+  })
+
+  it('defaults a retrieved item to confirmed state', () => {
+    const repo = agendaItemRepo(db)
+    repo.insert(sampleItem, 'mtg-1')
+    expect(repo.findById('ai-1')?.state).toBe('confirmed')
+  })
+
+  it('round-trips a proposed agenda item', () => {
+    const repo = agendaItemRepo(db)
+    repo.insert({ ...sampleItem, id: 'ai-prop', state: 'proposed' }, 'mtg-1')
+    expect(repo.findById('ai-prop')?.state).toBe('proposed')
+    const listed = repo.listByMeeting('mtg-1').find((i) => i.id === 'ai-prop')
+    expect(listed?.state).toBe('proposed')
   })
 
   it('cascades delete when meeting is deleted', () => {

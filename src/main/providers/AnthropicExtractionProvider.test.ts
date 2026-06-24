@@ -32,7 +32,14 @@ vi.mock('@anthropic-ai/sdk', () => ({
 
 const rollingRequest: ExtractionRequest = {
   spans: [{ id: 'span-1', text: 'We decided to launch in Q3.', startMs: 0, endMs: 3000 }],
-  agendaItems: [{ id: 'agenda-1', title: 'Launch planning', topic: 'Planning the product launch' }],
+  agendaItems: [
+    {
+      id: 'agenda-1',
+      title: 'Launch planning',
+      topic: 'Planning the product launch',
+      state: 'confirmed',
+    },
+  ],
   participants: [{ id: 'p-1', name: 'Jeroen' }],
   primaryLanguage: 'nl',
   isFinalPass: false,

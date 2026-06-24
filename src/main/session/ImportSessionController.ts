@@ -145,7 +145,7 @@ export class ImportSessionController {
     // Persist any user-supplied agenda items + participants (assign IDs).
     for (const item of opts.agendaItems) {
       this._agendaRepo.insert(
-        { id: randomUUID(), title: item.title, topic: item.topic },
+        { id: randomUUID(), title: item.title, topic: item.topic, state: 'confirmed' },
         opts.meetingId,
       )
     }
@@ -260,7 +260,10 @@ export class ImportSessionController {
 
     const inferred = await provider.inferContext(spans)
     for (const item of inferred.agendaItems) {
-      this._agendaRepo.insert({ id: randomUUID(), title: item.title, topic: item.topic }, meetingId)
+      this._agendaRepo.insert(
+        { id: randomUUID(), title: item.title, topic: item.topic, state: 'confirmed' },
+        meetingId,
+      )
     }
     for (const p of inferred.participants) {
       this._participantRepo.insert({ id: randomUUID(), name: p.name }, meetingId)
