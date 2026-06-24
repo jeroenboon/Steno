@@ -26,6 +26,7 @@ import { extractionPresets } from '../../../shared/providers'
 import { buildDisclosureCopy, computeEgressState } from '../../../shared/settings/egressState'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
 import { ProviderRoleCard, type ProviderGroup } from '../components/ProviderRoleCard'
+import { TestConnectionButton } from '../components/TestConnectionButton'
 import { t } from '../i18n'
 
 // ---------------------------------------------------------------------------
@@ -1020,36 +1021,42 @@ export function SettingsScreen(): React.JSX.Element {
                     setAudioKeyEntry('')
                   }}
                 />
+
+                <TestConnectionButton role="asr" testId="test-asr-connection" />
               </div>
             ) : (
               /* Deepgram key entry */
-              <KeyField
-                idBase="deepgram"
-                label={t('settings.asr.key.label')}
-                placeholder={t('settings.asr.key.placeholder')}
-                present={deepgramKeyPresent}
-                editing={deepgramKeyEditing}
-                value={deepgramKeyEntry}
-                saveState={deepgramKeySave}
-                testIdInput="deepgram-key-input"
-                testIdSave="save-deepgram-key"
-                testIdMissing="deepgram-key-missing"
-                missingText={t('settings.asr.key.missing')}
-                onChange={(v) => {
-                  setDeepgramKeyEntry(v)
-                  if (deepgramKeySave === 'saved') setDeepgramKeySave('idle')
-                }}
-                onSave={() => {
-                  void handleSaveDeepgramKey()
-                }}
-                onReplace={() => {
-                  setDeepgramKeyEditing(true)
-                }}
-                onCancel={() => {
-                  setDeepgramKeyEditing(false)
-                  setDeepgramKeyEntry('')
-                }}
-              />
+              <>
+                <KeyField
+                  idBase="deepgram"
+                  label={t('settings.asr.key.label')}
+                  placeholder={t('settings.asr.key.placeholder')}
+                  present={deepgramKeyPresent}
+                  editing={deepgramKeyEditing}
+                  value={deepgramKeyEntry}
+                  saveState={deepgramKeySave}
+                  testIdInput="deepgram-key-input"
+                  testIdSave="save-deepgram-key"
+                  testIdMissing="deepgram-key-missing"
+                  missingText={t('settings.asr.key.missing')}
+                  onChange={(v) => {
+                    setDeepgramKeyEntry(v)
+                    if (deepgramKeySave === 'saved') setDeepgramKeySave('idle')
+                  }}
+                  onSave={() => {
+                    void handleSaveDeepgramKey()
+                  }}
+                  onReplace={() => {
+                    setDeepgramKeyEditing(true)
+                  }}
+                  onCancel={() => {
+                    setDeepgramKeyEditing(false)
+                    setDeepgramKeyEntry('')
+                  }}
+                />
+
+                <TestConnectionButton role="asr" testId="test-asr-connection" />
+              </>
             )
           }
           disclosure={
@@ -1293,36 +1300,42 @@ export function SettingsScreen(): React.JSX.Element {
                     ? t('settings.azure.saved')
                     : t('settings.azure.save')}
                 </button>
+
+                <TestConnectionButton role="extraction" testId="test-extraction-connection" />
               </div>
             ) : !isCustomOpenAI ? (
               /* Anthropic key entry */
-              <KeyField
-                idBase="anthropic"
-                label={t('settings.extraction.anthropic.key.label')}
-                placeholder={t('settings.extraction.anthropic.key.placeholder')}
-                present={anthropicKeyPresent}
-                editing={anthropicKeyEditing}
-                value={anthropicKeyEntry}
-                saveState={anthropicKeySave}
-                testIdInput="anthropic-key-input"
-                testIdSave="save-anthropic-key"
-                testIdMissing="anthropic-key-missing"
-                missingText={t('settings.extraction.anthropic.key.missing')}
-                onChange={(v) => {
-                  setAnthropicKeyEntry(v)
-                  if (anthropicKeySave === 'saved') setAnthropicKeySave('idle')
-                }}
-                onSave={() => {
-                  void handleSaveAnthropicKey()
-                }}
-                onReplace={() => {
-                  setAnthropicKeyEditing(true)
-                }}
-                onCancel={() => {
-                  setAnthropicKeyEditing(false)
-                  setAnthropicKeyEntry('')
-                }}
-              />
+              <>
+                <KeyField
+                  idBase="anthropic"
+                  label={t('settings.extraction.anthropic.key.label')}
+                  placeholder={t('settings.extraction.anthropic.key.placeholder')}
+                  present={anthropicKeyPresent}
+                  editing={anthropicKeyEditing}
+                  value={anthropicKeyEntry}
+                  saveState={anthropicKeySave}
+                  testIdInput="anthropic-key-input"
+                  testIdSave="save-anthropic-key"
+                  testIdMissing="anthropic-key-missing"
+                  missingText={t('settings.extraction.anthropic.key.missing')}
+                  onChange={(v) => {
+                    setAnthropicKeyEntry(v)
+                    if (anthropicKeySave === 'saved') setAnthropicKeySave('idle')
+                  }}
+                  onSave={() => {
+                    void handleSaveAnthropicKey()
+                  }}
+                  onReplace={() => {
+                    setAnthropicKeyEditing(true)
+                  }}
+                  onCancel={() => {
+                    setAnthropicKeyEditing(false)
+                    setAnthropicKeyEntry('')
+                  }}
+                />
+
+                <TestConnectionButton role="extraction" testId="test-extraction-connection" />
+              </>
             ) : (
               /* Custom OpenAI fields */
               <div className="settings-custom-openai">
@@ -1451,6 +1464,8 @@ export function SettingsScreen(): React.JSX.Element {
                     ? t('settings.custom.saved')
                     : t('settings.custom.save')}
                 </button>
+
+                <TestConnectionButton role="extraction" testId="test-extraction-connection" />
               </div>
             )
           }

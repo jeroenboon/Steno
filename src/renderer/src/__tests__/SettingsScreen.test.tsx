@@ -30,6 +30,7 @@ const mockApi = {
   egressState: vi.fn<[], Promise<EgressState>>(),
   secretSet: vi.fn<[{ key: string; value: string }], Promise<{ ok: true }>>(),
   secretHas: vi.fn<[{ key: string }], Promise<{ has: boolean }>>(),
+  providerTestConnection: vi.fn(() => Promise.resolve({ ok: true })),
   modelStatus: vi.fn<
     [{ modelId: string }],
     Promise<{ modelId: string; downloaded: boolean; sizeBytes: number }>

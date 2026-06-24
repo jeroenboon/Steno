@@ -29,6 +29,8 @@ import {
   SecretSetResponseSchema,
   SecretHasRequestSchema,
   SecretHasResponseSchema,
+  ProviderTestConnectionRequestSchema,
+  ProviderTestConnectionResponseSchema,
   MeetingCreateRequestSchema,
   MeetingCreateResponseSchema,
   AgendaItemAddRequestSchema,
@@ -81,6 +83,7 @@ import type {
   EgressState,
   SecretSetResponse,
   SecretHasResponse,
+  ProviderTestConnectionResponse,
   MeetingCreateResponse,
   AgendaItemAddResponse,
   AgendaItemRemoveResponse,
@@ -113,6 +116,7 @@ import type { Clock } from '@shared/providers'
 import type { AudioCaptureBridge } from './audio/AudioCaptureBridge'
 import type { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import type { ItemLifecycleService } from './services/itemLifecycleService'
+import type { ConnectionTestResult } from './settings/connectionTest'
 import { computeEgressState } from './settings/egressState'
 import type { SecretStorage } from './settings/SecretStorage'
 import type { SettingsStore } from './settings/SettingsStore'
@@ -138,6 +142,14 @@ export interface IpcRegistryDependencies {
   db?: unknown
   /** Clock for generating timestamps. */
   clock?: Clock
+  /**
+   * Probe the configured provider's credentials (Phase 5.1).
+   * Resolves with a cheap auth/reachability check for the given role. When
+   * absent, provider:testConnection returns { ok: false, error: 'unavailable' }.
+   * Wired in main/index.ts to testProviderConnection over the live settings +
+   * secrets; the key is never returned.
+   */
+  testConnection?: (role: 'asr' | 'extraction') => Promise<ConnectionTestResult>
   /**
    * Audio capture bridge (item 0015).
    * Optional: when absent, audio:start / audio:stop return ok but are no-ops.
@@ -388,6 +400,19 @@ function makeHandleSecretHas(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleProviderTestConnection(deps: IpcRegistryDependencies) {
+  return async function handleProviderTestConnection(
+    raw: unknown,
+  ): Promise<ProviderTestConnectionResponse> {
+    const req = ProviderTestConnectionRequestSchema.parse(raw)
+    if (deps.testConnection === undefined) {
+      return ProviderTestConnectionResponseSchema.parse({ ok: false, error: 'unavailable' })
+    }
+    const result = await deps.testConnection(req.role)
+    return ProviderTestConnectionResponseSchema.parse(result)
+  }
+}
+
 function makeHandleAudioStart(deps: IpcRegistryDependencies) {
   return function handleAudioStart(raw: unknown): AudioStartResponse {
     const req = AudioStartRequestSchema.parse(raw)
@@ -621,6 +646,7 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'egress:state': makeHandleEgressState(deps),
     'secret:set': makeHandleSecretSet(deps),
     'secret:has': makeHandleSecretHas(deps),
+    'provider:testConnection': makeHandleProviderTestConnection(deps),
     'meeting:create': makeHandleMeetingCreate(deps),
     'agendaItem:add': makeHandleAgendaItemAdd(),
     'agendaItem:remove': makeHandleAgendaItemRemove(),

@@ -1608,6 +1608,32 @@ body::before {
 }
 
 /* ---------------------------------------------------------------------------
+ * Test connection affordance (Phase 5.1)
+ * --------------------------------------------------------------------------- */
+
+.settings-test-conn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.settings-test-conn__result {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.settings-test-conn__result--ok {
+  color: var(--color-confirmed);
+}
+
+.settings-test-conn__result--error {
+  color: var(--color-danger, #c0392b);
+}
+
+/* ---------------------------------------------------------------------------
  * Local model card — identity + size + download/installed state
  * --------------------------------------------------------------------------- */
 

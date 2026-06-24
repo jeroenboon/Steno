@@ -181,6 +181,15 @@ const nl = {
   'settings.key.replace': 'Vervangen',
   'settings.key.cancel': 'Annuleren',
 
+  // Test connection affordance (Phase 5.1)
+  'settings.test.button': 'Verbinding testen',
+  'settings.test.testing': 'Bezig met testen...',
+  'settings.test.ok': 'Verbinding gelukt',
+  'settings.test.noKey': 'Sla eerst de API-sleutel op',
+  'settings.test.network': 'Geen verbinding. Controleer de URL en je internet.',
+  'settings.test.unavailable': 'Testen is hier niet beschikbaar',
+  'settings.test.failed': 'Afgewezen',
+
   'settings.custom.baseUrl.label': 'Basis-URL',
   'settings.custom.baseUrl.placeholder': 'https://api.openai.com/v1',
   'settings.custom.model.label': 'Model',

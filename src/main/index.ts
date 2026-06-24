@@ -36,6 +36,7 @@ import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
 import { ImportSessionController } from './session/ImportSessionController'
 import { LiveSessionController } from './session/LiveSessionController'
+import { testProviderConnection } from './settings/connectionTest'
 import { tryBuildExtractionProvider } from './settings/providerFactory'
 import { ElectronSecretStorage } from './settings/SecretStorage'
 import { SettingsStore } from './settings/SettingsStore'
@@ -173,6 +174,7 @@ const IPC_CHANNELS: IpcChannel[] = [
   'egress:state',
   'secret:set',
   'secret:has',
+  'provider:testConnection',
   'meeting:create',
   'agendaItem:add',
   'agendaItem:remove',
@@ -329,6 +331,8 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   const registry = createIpcRegistry({
     settingsStore,
     secretStorage,
+    testConnection: (role) =>
+      testProviderConnection({ role, settings: settingsStore.current, storage: secretStorage }),
     itemLifecycleService: itemService,
     onAudioStart: (meetingId) => {
       liveSession.start(meetingId)

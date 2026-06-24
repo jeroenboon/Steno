@@ -22,6 +22,8 @@ import type {
   SecretSetResponse,
   SecretHasRequest,
   SecretHasResponse,
+  ProviderTestConnectionRequest,
+  ProviderTestConnectionResponse,
   MeetingCreateRequest,
   MeetingCreateResponse,
   AgendaItemAddRequest,
@@ -105,6 +107,9 @@ const api: RendererApi = {
     ipcRenderer.invoke('secret:set', req) as Promise<SecretSetResponse>,
   secretHas: (req: SecretHasRequest) =>
     ipcRenderer.invoke('secret:has', req) as Promise<SecretHasResponse>,
+
+  providerTestConnection: (req: ProviderTestConnectionRequest) =>
+    ipcRenderer.invoke('provider:testConnection', req) as Promise<ProviderTestConnectionResponse>,
 
   // ---------------------------------------------------------------------------
   // Audio capture (item 0015)
