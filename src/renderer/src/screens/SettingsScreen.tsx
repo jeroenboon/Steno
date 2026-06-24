@@ -25,6 +25,7 @@ import React, { useEffect, useState } from 'react'
 import { extractionPresets } from '../../../shared/providers'
 import { buildDisclosureCopy, computeEgressState } from '../../../shared/settings/egressState'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
+import { ProviderKeyHelp } from '../components/ProviderKeyHelp'
 import { ProviderRoleCard, type ProviderGroup } from '../components/ProviderRoleCard'
 import { SharedKeyNotice } from '../components/SharedKeyNotice'
 import { TestConnectionButton } from '../components/TestConnectionButton'
@@ -1023,6 +1024,8 @@ export function SettingsScreen(): React.JSX.Element {
                   }}
                 />
 
+                <ProviderKeyHelp keyRef={audioFields.keyRef} testId="audio-key-help" />
+
                 <SharedKeyNotice
                   settings={settings}
                   keyRef={audioFields.keyRef}
@@ -1061,6 +1064,8 @@ export function SettingsScreen(): React.JSX.Element {
                     setDeepgramKeyEntry('')
                   }}
                 />
+
+                <ProviderKeyHelp keyRef="deepgram" testId="deepgram-key-help" />
 
                 <TestConnectionButton role="asr" testId="test-asr-connection" />
               </>
@@ -1308,6 +1313,8 @@ export function SettingsScreen(): React.JSX.Element {
                     : t('settings.azure.save')}
                 </button>
 
+                <ProviderKeyHelp keyRef={azureFields.keyRef} testId="azure-key-help" />
+
                 <SharedKeyNotice
                   settings={settings}
                   keyRef={azureFields.keyRef}
@@ -1346,6 +1353,8 @@ export function SettingsScreen(): React.JSX.Element {
                     setAnthropicKeyEntry('')
                   }}
                 />
+
+                <ProviderKeyHelp keyRef="anthropic" testId="anthropic-key-help" />
 
                 <TestConnectionButton role="extraction" testId="test-extraction-connection" />
               </>
@@ -1477,6 +1486,8 @@ export function SettingsScreen(): React.JSX.Element {
                     ? t('settings.custom.saved')
                     : t('settings.custom.save')}
                 </button>
+
+                <ProviderKeyHelp keyRef={customFields.keyRef} testId="custom-key-help" />
 
                 <SharedKeyNotice
                   settings={settings}

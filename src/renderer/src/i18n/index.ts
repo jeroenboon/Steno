@@ -194,6 +194,9 @@ const nl = {
   'settings.sharedKey.notice':
     'Deze API-sleutel geldt voor zowel audio als notulen. Vervangen werkt voor beide rollen.',
 
+  // Where to get a vendor key/endpoint (Phase 5.3)
+  'settings.keyHelp.label': 'Sleutel ophalen:',
+
   'settings.custom.baseUrl.label': 'Basis-URL',
   'settings.custom.baseUrl.placeholder': 'https://api.openai.com/v1',
   'settings.custom.model.label': 'Model',

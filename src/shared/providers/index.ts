@@ -32,3 +32,5 @@ export type {
   ProposedDiscussionSummary,
 } from './dtos'
 export { extractionPresets } from './extractionPresets'
+export { PROVIDER_KEY_HELP } from './providerKeyHelp'
+export type { ProviderKeyHelpEntry } from './providerKeyHelp'
