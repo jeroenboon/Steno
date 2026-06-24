@@ -26,11 +26,11 @@
  * - `fetch`       — Injected for testability. Defaults to global fetch.
  */
 
-import type { TranscriptSpan } from '@shared/domain/types'
 import type {
   ExtractionProvider,
   ExtractionRequest,
   ExtractionResponse,
+  InferContextInput,
   InferredContext,
 } from '@shared/providers'
 
@@ -82,7 +82,7 @@ export class OpenAICompatibleExtractionProvider implements ExtractionProvider {
    * extract()'s one-retry-then-empty strategy so a bad response degrades to an
    * empty context rather than throwing into the import.
    */
-  async inferContext(spans: TranscriptSpan[]): Promise<InferredContext> {
-    return this._engine.inferContext(spans)
+  async inferContext(input: InferContextInput): Promise<InferredContext> {
+    return this._engine.inferContext(input)
   }
 }

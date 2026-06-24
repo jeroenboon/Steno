@@ -326,7 +326,7 @@ describe('AnthropicExtractionProvider', () => {
       mockCreate.mockResolvedValueOnce(makeInferToolUseResponse(validInferred))
 
       const provider = makeProvider()
-      const result = await provider.inferContext(spans)
+      const result = await provider.inferContext({ source: { spans } })
 
       expect(result.agendaItems).toHaveLength(1)
       expect(result.agendaItems[0]?.title).toBe('Begroting')
@@ -337,7 +337,7 @@ describe('AnthropicExtractionProvider', () => {
       mockCreate.mockResolvedValueOnce(makeInferToolUseResponse(validInferred))
 
       const provider = makeProvider()
-      await provider.inferContext(spans)
+      await provider.inferContext({ source: { spans } })
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({ model: 'claude-sonnet-4-6' }),
@@ -349,7 +349,7 @@ describe('AnthropicExtractionProvider', () => {
       mockCreate.mockResolvedValueOnce(bad).mockResolvedValueOnce(bad)
 
       const provider = makeProvider()
-      const result = await provider.inferContext(spans)
+      const result = await provider.inferContext({ source: { spans } })
 
       expect(mockCreate).toHaveBeenCalledTimes(2)
       expect(result).toEqual({ agendaItems: [], participants: [] })
@@ -363,7 +363,7 @@ describe('AnthropicExtractionProvider', () => {
       mockCreate.mockResolvedValue(makeInferToolUseResponse({ agendaItems: 'bad' }))
 
       const provider = makeProvider()
-      await provider.inferContext(spans)
+      await provider.inferContext({ source: { spans } })
 
       const allLogs = logged.join('\n')
       expect(allLogs).not.toContain('begroting')

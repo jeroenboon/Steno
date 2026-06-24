@@ -26,13 +26,14 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
-import type { TranscriptSpan } from '@shared/domain/types'
 import {
   ExtractionResponseSchema,
   InferredContextSchema,
+  inferSourceToText,
   type ExtractionProvider,
   type ExtractionRequest,
   type ExtractionResponse,
+  type InferContextInput,
   type InferredContext,
 } from '@shared/providers'
 
@@ -254,14 +255,15 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
    *
    * Never logs transcript content or the API key (principle #12).
    */
-  async inferContext(spans: TranscriptSpan[]): Promise<InferredContext> {
-    if (spans.length === 0) return { agendaItems: [], participants: [] }
+  async inferContext(input: InferContextInput): Promise<InferredContext> {
+    const content = inferSourceToText(input.source)
+    if (content.trim() === '') return { agendaItems: [], participants: [] }
 
-    const first = await this._callAndValidateInfer(spans)
+    const first = await this._callAndValidateInfer(content)
     if (first !== null) return first
 
     console.error('[AnthropicExtractionProvider] Context inference validation failed, retrying')
-    const retry = await this._callAndValidateInfer(spans)
+    const retry = await this._callAndValidateInfer(content)
     if (retry !== null) return retry
 
     console.error('[AnthropicExtractionProvider] Context inference retry failed, returning empty')
@@ -276,11 +278,7 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
    * Call the API for context inference and validate with Zod. Returns a valid
    * InferredContext or null on validation failure. Never logs content.
    */
-  private async _callAndValidateInfer(spans: TranscriptSpan[]): Promise<InferredContext | null> {
-    const spanLines = spans
-      .map((s) => `[${s.id}] ${s.speakerLabel ? `${s.speakerLabel}: ` : ''}${s.text}`)
-      .join('\n')
-
+  private async _callAndValidateInfer(content: string): Promise<InferredContext | null> {
     const response = await this._client.messages.create({
       model: this._finalPassModel,
       max_tokens: 2048,
@@ -289,7 +287,7 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
         'Geef per agendapunt een korte title en topic. Geef alleen namen van deelnemers ' +
         'die echt in het transcript voorkomen; verzin niemand. Bij twijfel laat je de lijst leeg. ' +
         'Gebruik de infer_meeting_context tool om het resultaat terug te geven.',
-      messages: [{ role: 'user', content: `Transcript:\n${spanLines}` }],
+      messages: [{ role: 'user', content: `Transcript:\n${content}` }],
       tools: [
         {
           name: INFER_TOOL_NAME,

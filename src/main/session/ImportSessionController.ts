@@ -258,10 +258,12 @@ export class ImportSessionController {
     const spans = this._spanRepo.listByMeeting(meetingId)
     if (spans.length === 0) return
 
-    const inferred = await provider.inferContext(spans)
+    const inferred = await provider.inferContext({ source: { spans } })
     for (const item of inferred.agendaItems) {
+      // Import-inferred agenda items are Proposed: the user never confirmed them
+      // (ADR 0029). User-supplied import items stay Confirmed (see start()).
       this._agendaRepo.insert(
-        { id: randomUUID(), title: item.title, topic: item.topic, state: 'confirmed' },
+        { id: randomUUID(), title: item.title, topic: item.topic, state: 'proposed' },
         meetingId,
       )
     }

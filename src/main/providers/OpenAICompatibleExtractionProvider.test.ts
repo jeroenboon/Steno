@@ -229,7 +229,7 @@ describe('OpenAICompatibleExtractionProvider.inferContext', () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(validInferred)))
     const provider = makeProvider(fetchMock)
 
-    const result = await provider.inferContext(spans)
+    const result = await provider.inferContext({ source: { spans } })
 
     expect(result.agendaItems[0]?.title).toBe('Begroting')
     expect(result.participants[0]?.name).toBe('Jeroen')
@@ -240,7 +240,7 @@ describe('OpenAICompatibleExtractionProvider.inferContext', () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify({ agendaItems: 'bad' })))
     const provider = makeProvider(fetchMock)
 
-    const result = await provider.inferContext(spans)
+    const result = await provider.inferContext({ source: { spans } })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(result).toEqual({ agendaItems: [], participants: [] })
@@ -254,7 +254,7 @@ describe('OpenAICompatibleExtractionProvider.inferContext', () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse('not json'))
     const provider = makeProvider(fetchMock)
 
-    await provider.inferContext(spans)
+    await provider.inferContext({ source: { spans } })
 
     const allLogs = logged.join('\n')
     expect(allLogs).not.toContain('begroting')

@@ -16,12 +16,13 @@
  * `[Azure]`) so vendors are distinguishable without exposing content or keys.
  */
 
-import type { TranscriptSpan } from '@shared/domain/types'
 import {
   ExtractionResponseSchema,
   InferredContextSchema,
+  inferSourceToText,
   type ExtractionRequest,
   type ExtractionResponse,
+  type InferContextInput,
   type InferredContext,
 } from '@shared/providers'
 
@@ -79,14 +80,15 @@ export class ChatExtractionEngine {
     return { proposedDecisions: [], proposedActions: [] }
   }
 
-  async inferContext(spans: TranscriptSpan[]): Promise<InferredContext> {
-    if (spans.length === 0) return { agendaItems: [], participants: [] }
+  async inferContext(input: InferContextInput): Promise<InferredContext> {
+    const content = inferSourceToText(input.source)
+    if (content.trim() === '') return { agendaItems: [], participants: [] }
 
-    const first = await this._callAndValidateInfer(spans)
+    const first = await this._callAndValidateInfer(content)
     if (first !== null) return first
 
     console.error(`${this._logTag} Context inference failed, retrying`)
-    const retry = await this._callAndValidateInfer(spans)
+    const retry = await this._callAndValidateInfer(content)
     if (retry !== null) return retry
 
     console.error(`${this._logTag} Context inference retry failed, returning empty`)
@@ -109,12 +111,8 @@ export class ChatExtractionEngine {
     return validated.data
   }
 
-  private async _callAndValidateInfer(spans: TranscriptSpan[]): Promise<InferredContext | null> {
-    const spanLines = spans
-      .map((s) => `[${s.id}] ${s.speakerLabel ? `${s.speakerLabel}: ` : ''}${s.text}`)
-      .join('\n')
-
-    const content = await this._post(buildInferSystemPrompt(), `Transcript:\n${spanLines}`)
+  private async _callAndValidateInfer(sourceText: string): Promise<InferredContext | null> {
+    const content = await this._post(buildInferSystemPrompt(), `Transcript:\n${sourceText}`)
     if (content === null) return null
 
     let parsed: unknown

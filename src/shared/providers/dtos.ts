@@ -136,6 +136,12 @@ export const InferredContextSchema = z.object({
   agendaItems: z.array(z.object({ title: z.string().min(1), topic: z.string().min(1) })),
   /** Participants inferred from the transcript. */
   participants: z.array(z.object({ name: z.string().min(1) })),
+  /**
+   * A meeting title inferred from the source. Only produced when inferring over
+   * a whole transcript or pasted text (paste-time / final pass); the live tick
+   * ignores it. Optional — absent when no title could be inferred.
+   */
+  title: z.string().min(1).optional(),
 })
 
 export type InferredContext = z.infer<typeof InferredContextSchema>

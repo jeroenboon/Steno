@@ -199,6 +199,8 @@ describe('ImportSessionController', () => {
     const participants = repos.participantRepo.listByMeeting('imp-infer')
     expect(agenda.map((a) => a.title)).toContain('Begroting')
     expect(participants.map((p) => p.name)).toContain('Anika')
+    // Inferred agenda items are Proposed, not Confirmed (ADR 0029).
+    expect(agenda.find((a) => a.title === 'Begroting')?.state).toBe('proposed')
 
     // The inferred context reached the final pass.
     const finalCall = fakeExtraction.calls().find((c) => c.isFinalPass)

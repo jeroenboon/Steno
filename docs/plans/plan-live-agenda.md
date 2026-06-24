@@ -98,7 +98,13 @@ Commit: `feat(agenda): add Proposed/Confirmed lifecycle state to AgendaItem`
 
 ---
 
-### Step 1.2 — Generalise `inferContext` (source + grounding) + `InferredContext.title`
+### Step 1.2 — Generalise `inferContext` (source + grounding) + `InferredContext.title` ✅ done
+
+> Note: keeping each commit green (DoD is per-commit) meant the breaking port
+> change also had to adapt the three real adapters' `inferContext` signatures in
+> this step. They now accept `InferContextInput` via a shared `inferSourceToText`
+> helper, behaviour-preserving on the spans path; the text/title/grounding
+> behaviour and its tests land in Steps 1.3/1.4 as planned.
 
 **Context:** today `inferContext(spans)` returns `{ agendaItems, participants }`. We
 generalise the input to a source (text or spans) plus optional grounding, and add an
