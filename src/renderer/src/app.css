@@ -1546,6 +1546,30 @@ body::before {
   margin: 0;
 }
 
+/* API-key input-group: the key field and its Save/Cancel buttons read as one
+ * joined control instead of a wide input with a lonely button far to the right. */
+.settings-key-row {
+  display: flex;
+  align-items: stretch;
+  max-width: 480px;
+}
+
+.settings-key-row .form-input {
+  flex: 1;
+  min-width: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.settings-key-row .btn {
+  border-radius: 0;
+  border-left-width: 0;
+  white-space: nowrap;
+}
+
+.settings-key-row .btn:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
 .settings-custom-openai {
   display: flex;
   flex-direction: column;
