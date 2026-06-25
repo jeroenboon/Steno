@@ -455,6 +455,64 @@ describe('IPC registry — import:start and import:finish (item 0026)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// context:inferFromText (paste an agenda, ADR 0029)
+// ---------------------------------------------------------------------------
+
+describe('IPC registry — context:inferFromText (ADR 0029)', () => {
+  const mockSettingsStore = {
+    current: { asrProvider: 'deepgram', extractionProvider: 'anthropic', primaryLanguage: 'nl' },
+    save: async () => {
+      // no-op
+    },
+    load: async () => {
+      // no-op
+    },
+  }
+
+  const validReq = { text: 'Agenda: begroting bespreken', primaryLanguage: 'nl' }
+
+  it('dispatches to the injected inferContextFromText handler and returns its result', async () => {
+    const inferred = {
+      agendaItems: [{ title: 'Begroting', topic: 'Q3' }],
+      participants: [{ name: 'Jeroen' }],
+      title: 'Begrotingsoverleg',
+    }
+    const registry = createIpcRegistry({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+      settingsStore: mockSettingsStore as any,
+      inferContextFromText: () => Promise.resolve(inferred),
+    })
+
+    const response = await registry.dispatch('context:inferFromText', validReq)
+
+    expect(response).toEqual(inferred)
+  })
+
+  it('returns an empty context when the dep is absent (manual entry still works)', async () => {
+    const registry = createIpcRegistry({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+      settingsStore: mockSettingsStore as any,
+    })
+
+    const response = await registry.dispatch('context:inferFromText', validReq)
+
+    expect(response).toEqual({ agendaItems: [], participants: [] })
+  })
+
+  it('rejects an invalid payload (empty text)', async () => {
+    const registry = createIpcRegistry({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+      settingsStore: mockSettingsStore as any,
+      inferContextFromText: () => Promise.resolve({ agendaItems: [], participants: [] }),
+    })
+
+    await expect(
+      registry.dispatch('context:inferFromText', { text: '', primaryLanguage: 'nl' }),
+    ).rejects.toThrow()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // transcript:copy (item 0026)
 // ---------------------------------------------------------------------------
 

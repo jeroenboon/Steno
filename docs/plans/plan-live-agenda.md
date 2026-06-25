@@ -220,7 +220,14 @@ Commit: `feat(draft): add context:inferFromText IPC channel`
 
 ---
 
-### Step 2.2 — Wire the handler in main + ipc-registry
+### Step 2.2 — Wire the handler in main + ipc-registry ✅ done
+
+> Note: kept the registry pure — the handler dispatches to an injected
+> `inferContextFromText` dependency (the established pattern, like `onImportStart`
+> / `summaryQuery`) rather than importing the provider factory. The real
+> `tryBuildExtractionProvider` wiring lives in `main/index.ts`, rebuilt per call
+> so a key set in Settings takes effect without restart. Absent dep ⇒ empty
+> context.
 
 `/tdd`:
 

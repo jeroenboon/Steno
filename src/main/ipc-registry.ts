@@ -74,6 +74,8 @@ import {
   ImportStartRequestSchema,
   ImportStartResponseSchema,
   ImportFinishRequestSchema,
+  ContextInferFromTextRequestSchema,
+  ContextInferFromTextResponseSchema,
 } from '@shared/ipc'
 import type {
   IpcChannel,
@@ -110,6 +112,8 @@ import type {
   ImportStartRequest,
   ImportStartResponse,
   ImportFinishResponse,
+  ContextInferFromTextRequest,
+  ContextInferFromTextResponse,
 } from '@shared/ipc'
 import type { Clock } from '@shared/providers'
 
@@ -251,6 +255,14 @@ export interface IpcRegistryDependencies {
    * When absent, import:finish throws "not available".
    */
   onImportFinish?: (meetingId: string) => Promise<ImportFinishResponse>
+  /**
+   * Structure a pasted agenda into title + agenda items + participants
+   * (paste-an-agenda, ADR 0029). Wired in main/index.ts to build the configured
+   * extraction provider (tryBuildExtractionProvider) and call
+   * inferContext({ source: { text } }). When absent, context:inferFromText
+   * returns an empty context so manual entry keeps working.
+   */
+  inferContextFromText?: (req: ContextInferFromTextRequest) => Promise<ContextInferFromTextResponse>
 }
 
 // ---------------------------------------------------------------------------
@@ -634,6 +646,21 @@ function makeHandleImportFinish(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleInferContextFromText(deps: IpcRegistryDependencies) {
+  return async function handleInferContextFromText(
+    raw: unknown,
+  ): Promise<ContextInferFromTextResponse> {
+    const req = ContextInferFromTextRequestSchema.parse(raw)
+    // Degrade gracefully: no extraction provider wired ⇒ empty context, so the
+    // Draft screen keeps manual entry working (ADR 0029).
+    if (deps.inferContextFromText === undefined) {
+      return ContextInferFromTextResponseSchema.parse({ agendaItems: [], participants: [] })
+    }
+    const result = await deps.inferContextFromText(req)
+    return ContextInferFromTextResponseSchema.parse(result)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -672,6 +699,7 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'model:download': makeHandleModelDownload(deps),
     'import:start': makeHandleImportStart(deps),
     'import:finish': makeHandleImportFinish(deps),
+    'context:inferFromText': makeHandleInferContextFromText(deps),
   }
 
   return {

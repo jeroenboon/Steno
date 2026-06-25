@@ -199,6 +199,7 @@ const IPC_CHANNELS: IpcChannel[] = [
   'model:download',
   'import:start',
   'import:finish',
+  'context:inferFromText',
 ]
 
 async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
@@ -395,6 +396,16 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
       return meetingId
     },
     onImportFinish: (meetingId) => importSession.finish(meetingId),
+    inferContextFromText: async (req) => {
+      // Rebuild the provider each call so a key set in Settings takes effect
+      // without restart. Degrade to an empty context when extraction is not
+      // configured or the provider can't infer (manual Draft entry still works).
+      const built = tryBuildExtractionProvider(settingsStore.current, secretStorage)
+      if (!built.ok || built.provider.inferContext === undefined) {
+        return { agendaItems: [], participants: [] }
+      }
+      return built.provider.inferContext({ source: { text: req.text } })
+    },
   })
 
   for (const channel of IPC_CHANNELS) {
