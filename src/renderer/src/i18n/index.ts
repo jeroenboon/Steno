@@ -58,6 +58,9 @@ const nl = {
   'draft.language.en': 'English',
   'draft.start.button': 'Starten',
   'draft.start.disabled.reason': 'Voeg een titel in om te kunnen starten',
+  'draft.quickstart.button': 'Direct starten',
+  'draft.quickstart.hint': 'Begin meteen; titel en agenda vullen we later automatisch aan.',
+  'draft.quickstart.autotitle': 'Vergadering',
 
   // Live screen — audio capture (item 0015)
   'live.mic.starting': 'Microfoon starten...',
