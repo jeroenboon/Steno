@@ -944,4 +944,11 @@ export interface RendererApi {
    * 'error' carries a reason. Returns an unsubscribe function.
    */
   onImportProgress: (cb: (evt: ImportProgressEvent) => void) => UnsubscribeFn
+  /**
+   * Structure a pasted agenda into title + agenda items + participants
+   * (paste-an-agenda, ADR 0029). Main calls inferContext over the text; the
+   * Draft fields fill with the result as Confirmed items. Returns an empty
+   * context when no extraction provider is configured.
+   */
+  inferContextFromText: (req: ContextInferFromTextRequest) => Promise<ContextInferFromTextResponse>
 }

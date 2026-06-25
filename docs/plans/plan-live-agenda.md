@@ -247,7 +247,12 @@ Commit: `feat(draft): wire context:inferFromText handler into main`
 
 ---
 
-### Step 2.3 — Preload bridge for `inferContextFromText`
+### Step 2.3 — Preload bridge for `inferContextFromText` ✅ done
+
+> Note: there was no preload test before; added `src/preload/index.test.ts`
+> (mocks `electron`, captures the exposed api, asserts the forward). The
+> `RendererApi.inferContextFromText` method (deferred from Step 2.1) lands here
+> together with its preload implementation.
 
 `/tdd`:
 

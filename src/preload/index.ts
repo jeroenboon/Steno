@@ -78,6 +78,8 @@ import type {
   ImportFinishRequest,
   ImportFinishResponse,
   ImportProgressEvent,
+  ContextInferFromTextRequest,
+  ContextInferFromTextResponse,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -283,6 +285,13 @@ const api: RendererApi = {
       ipcRenderer.removeListener('import:progress', listener)
     }
   },
+
+  // ---------------------------------------------------------------------------
+  // Paste an agenda (ADR 0029)
+  // ---------------------------------------------------------------------------
+
+  inferContextFromText: (req: ContextInferFromTextRequest) =>
+    ipcRenderer.invoke('context:inferFromText', req) as Promise<ContextInferFromTextResponse>,
 }
 
 contextBridge.exposeInMainWorld('api', api)
