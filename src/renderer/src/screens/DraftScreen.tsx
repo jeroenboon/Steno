@@ -20,21 +20,6 @@ import { t } from '../i18n'
 import { useAppStore } from '../store/appStore'
 
 // ---------------------------------------------------------------------------
-// Types for local state
-// ---------------------------------------------------------------------------
-
-interface AgendaItem {
-  id: string
-  title: string
-  topic: string
-}
-
-interface Participant {
-  id: string
-  name: string
-}
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -76,20 +61,27 @@ export function DraftScreen(): React.JSX.Element {
   const setStoreAgendaItems = useAppStore((s) => s.setAgendaItems)
   const setStoreParticipants = useAppStore((s) => s.setParticipants)
 
-  // Meeting state
-  const [meetingTitle, setMeetingTitle] = useState('')
-  const [primaryLanguage, setPrimaryLanguage] = useState('nl')
+  // Meeting state — persisted in the store so it survives navigating away and
+  // back (the Draft screen unmounts on tab switch).
+  const meetingTitle = useAppStore((s) => s.draftTitle)
+  const setMeetingTitle = useAppStore((s) => s.setDraftTitle)
+  const primaryLanguage = useAppStore((s) => s.draftPrimaryLanguage)
+  const setPrimaryLanguage = useAppStore((s) => s.setDraftPrimaryLanguage)
 
   // Agenda items
-  const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([])
+  const agendaItems = useAppStore((s) => s.draftAgendaItems)
+  const setAgendaItems = useAppStore((s) => s.setDraftAgendaItems)
   const [agendaInput, setAgendaInput] = useState('')
 
   // Participants
-  const [participants, setParticipants] = useState<Participant[]>([])
+  const participants = useAppStore((s) => s.draftParticipants)
+  const setParticipants = useAppStore((s) => s.setDraftParticipants)
   const [participantInput, setParticipantInput] = useState('')
 
   // Paste-an-agenda (ADR 0029)
-  const [pasteText, setPasteText] = useState('')
+  const pasteText = useAppStore((s) => s.draftPasteText)
+  const setPasteText = useAppStore((s) => s.setDraftPasteText)
+  const resetDraft = useAppStore((s) => s.resetDraft)
   const [isReading, setIsReading] = useState(false)
   const [showPasteHint, setShowPasteHint] = useState(false)
 
@@ -245,8 +237,11 @@ export function DraftScreen(): React.JSX.Element {
       setActiveMeeting(meeting.id)
       setLiveMeetingId(meeting.id)
       setStoreMeetingTitle(meeting.title)
-      setStoreAgendaItems(agendaItems)
+      setStoreAgendaItems(agendaItems.map((a) => ({ ...a, state: 'confirmed' as const })))
       setStoreParticipants(participants)
+      // The draft has been consumed into a live meeting; clear it so the next
+      // visit to the Draft screen starts fresh.
+      resetDraft()
       setRoute('live')
     } catch (err) {
       console.error('Failed to start meeting:', err)
@@ -267,6 +262,20 @@ export function DraftScreen(): React.JSX.Element {
     const hasTitle = typed.length > 0
     await createAndStart(hasTitle ? typed : buildAutoTitle(), !hasTitle)
   }
+
+  // Clear everything the user entered and start over.
+  const handleReset = (): void => {
+    resetDraft()
+    setAgendaInput('')
+    setParticipantInput('')
+    setShowPasteHint(false)
+  }
+
+  const hasDraftInput =
+    meetingTitle.length > 0 ||
+    agendaItems.length > 0 ||
+    participants.length > 0 ||
+    pasteText.length > 0
 
   // ---------------------------------------------------------------------------
   // Render
@@ -464,6 +473,14 @@ export function DraftScreen(): React.JSX.Element {
               }}
             >
               {t('draft.quickstart.button')}
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled={isCreating || !hasDraftInput}
+              onClick={handleReset}
+            >
+              {t('draft.reset.button')}
             </button>
           </div>
         </form>

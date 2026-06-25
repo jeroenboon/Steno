@@ -36,8 +36,17 @@ Object.assign(window, {
 describe('DraftScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // Reset the Zustand store to initial state for each test
-    useAppStore.setState({ route: 'draft', activeMeeting: null })
+    // Reset the Zustand store to initial state for each test, including the
+    // persisted draft fields so tests don't leak entered data into one another.
+    useAppStore.setState({
+      route: 'draft',
+      activeMeeting: null,
+      draftTitle: '',
+      draftPrimaryLanguage: 'nl',
+      draftAgendaItems: [],
+      draftParticipants: [],
+      draftPasteText: '',
+    })
   })
 
   it('renders the draft screen with title, agenda, participants, language, and start button', () => {
@@ -246,6 +255,54 @@ describe('DraftScreen', () => {
     expect(await screen.findByText(/geen agenda herkend/i)).toBeInTheDocument()
     const titleInput = screen.getByRole('textbox', { name: /vergaderingtitel/i })
     expect((titleInput as HTMLInputElement).value).toBe('')
+  })
+
+  // ---------------------------------------------------------------------------
+  // Draft persistence + reset
+  // ---------------------------------------------------------------------------
+
+  it('persists entered data across unmount/remount (navigate away and back)', async () => {
+    const user = userEvent.setup()
+    mockApi.agendaItemAdd.mockResolvedValue({
+      id: 'item-1',
+      title: 'Roadmap',
+      topic: 'Roadmap',
+      state: 'confirmed',
+    })
+
+    const { unmount } = render(<DraftScreen />)
+    await user.type(screen.getByRole('textbox', { name: /vergaderingtitel/i }), 'Mijn overleg')
+    await user.type(screen.getByRole('textbox', { name: /agenda item toevoegen/i }), 'Roadmap')
+    await user.keyboard('{Enter}')
+    await screen.findByText('Roadmap')
+
+    // Simulate navigating away (DraftScreen unmounts) and back.
+    unmount()
+    render(<DraftScreen />)
+
+    expect(screen.getByRole('textbox', { name: /vergaderingtitel/i })).toHaveValue('Mijn overleg')
+    expect(screen.getByText('Roadmap')).toBeInTheDocument()
+  })
+
+  it('clears all entered data when the reset button is clicked', async () => {
+    const user = userEvent.setup()
+    mockApi.agendaItemAdd.mockResolvedValue({
+      id: 'item-1',
+      title: 'Roadmap',
+      topic: 'Roadmap',
+      state: 'confirmed',
+    })
+
+    render(<DraftScreen />)
+    await user.type(screen.getByRole('textbox', { name: /vergaderingtitel/i }), 'Mijn overleg')
+    await user.type(screen.getByRole('textbox', { name: /agenda item toevoegen/i }), 'Roadmap')
+    await user.keyboard('{Enter}')
+    await screen.findByText('Roadmap')
+
+    await user.click(screen.getByRole('button', { name: /opnieuw beginnen/i }))
+
+    expect(screen.getByRole('textbox', { name: /vergaderingtitel/i })).toHaveValue('')
+    expect(screen.queryByText('Roadmap')).not.toBeInTheDocument()
   })
 
   // ---------------------------------------------------------------------------
