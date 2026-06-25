@@ -34,8 +34,14 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
+
+      # Match the npm that generated package-lock.json (npm 11). Node 22 ships
+      # npm 10, whose optional-dependency resolution (the @emnapi wasm deps)
+      # differs enough that `npm ci` rejects an npm-11 lockfile as out of sync.
+      - name: Pin npm to the lockfile's version
+        run: npm install --global npm@11
 
       # The Electron binary is a large download; cache it across runs so only
       # the first run (or a lockfile change) pays for it. Cache misses are
