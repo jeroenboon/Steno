@@ -7,6 +7,9 @@ dist/
 # TypeScript composite build info
 *.tsbuildinfo
 
+# Stray test-run logs (e.g. `npm test > test-output.txt`)
+test-output.txt
+
 # Editor
 .vscode/
 .idea/
