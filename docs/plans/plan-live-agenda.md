@@ -433,7 +433,13 @@ Commit: `feat(live): add agenda proposal service with normalised-title dedup`
 
 ---
 
-### Step 4.2 — Slow-cadence agenda scheduler
+### Step 4.2 — Slow-cadence agenda scheduler ✅ done
+
+> Note: default cadence 90 s (constructor param). On each tick past the boundary
+> it reads all spans + the current agenda (Confirmed + Proposed) from the repos,
+> calls `inferContext({ source: { spans }, knownAgendaItems })`, and feeds the
+> result to the proposal service. pause()/resume() halt/restart the cadence,
+> mirroring the extraction loop. Reads the shared span store — no second buffer.
 
 **Context:** a scheduler analogous to `ExtractionLoopScheduler` but on a slower
 interval, driven by the injected `Clock` (deterministic, no real timers). On each
