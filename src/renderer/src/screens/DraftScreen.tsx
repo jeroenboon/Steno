@@ -20,18 +20,33 @@ import { t } from '../i18n'
 import { useAppStore } from '../store/appStore'
 
 // ---------------------------------------------------------------------------
-// Types for local state
+// Helpers
 // ---------------------------------------------------------------------------
 
-interface AgendaItem {
-  id: string
-  title: string
-  topic: string
-}
-
-interface Participant {
-  id: string
-  name: string
+/**
+ * A date/time placeholder title for quick-start, e.g. "Vergadering 25 jun 2026
+ * 09:00". Dutch month abbreviations, no em-dash (house style). The final pass
+ * may replace it with an inferred title (ADR 0029).
+ */
+function buildAutoTitle(now: Date = new Date()): string {
+  const months = [
+    'jan',
+    'feb',
+    'mrt',
+    'apr',
+    'mei',
+    'jun',
+    'jul',
+    'aug',
+    'sep',
+    'okt',
+    'nov',
+    'dec',
+  ]
+  const mon = months[now.getMonth()] ?? ''
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  return `${t('draft.quickstart.autotitle')} ${String(now.getDate())} ${mon} ${String(now.getFullYear())} ${hh}:${mm}`
 }
 
 // ---------------------------------------------------------------------------
@@ -46,17 +61,29 @@ export function DraftScreen(): React.JSX.Element {
   const setStoreAgendaItems = useAppStore((s) => s.setAgendaItems)
   const setStoreParticipants = useAppStore((s) => s.setParticipants)
 
-  // Meeting state
-  const [meetingTitle, setMeetingTitle] = useState('')
-  const [primaryLanguage, setPrimaryLanguage] = useState('nl')
+  // Meeting state — persisted in the store so it survives navigating away and
+  // back (the Draft screen unmounts on tab switch).
+  const meetingTitle = useAppStore((s) => s.draftTitle)
+  const setMeetingTitle = useAppStore((s) => s.setDraftTitle)
+  const primaryLanguage = useAppStore((s) => s.draftPrimaryLanguage)
+  const setPrimaryLanguage = useAppStore((s) => s.setDraftPrimaryLanguage)
 
   // Agenda items
-  const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([])
+  const agendaItems = useAppStore((s) => s.draftAgendaItems)
+  const setAgendaItems = useAppStore((s) => s.setDraftAgendaItems)
   const [agendaInput, setAgendaInput] = useState('')
 
   // Participants
-  const [participants, setParticipants] = useState<Participant[]>([])
+  const participants = useAppStore((s) => s.draftParticipants)
+  const setParticipants = useAppStore((s) => s.setDraftParticipants)
   const [participantInput, setParticipantInput] = useState('')
+
+  // Paste-an-agenda (ADR 0029)
+  const pasteText = useAppStore((s) => s.draftPasteText)
+  const setPasteText = useAppStore((s) => s.setDraftPasteText)
+  const resetDraft = useAppStore((s) => s.resetDraft)
+  const [isReading, setIsReading] = useState(false)
+  const [showPasteHint, setShowPasteHint] = useState(false)
 
   // Loading state
   const [isCreating, setIsCreating] = useState(false)
@@ -66,6 +93,55 @@ export function DraftScreen(): React.JSX.Element {
   // ---------------------------------------------------------------------------
 
   const isValid = meetingTitle.trim().length > 0
+
+  // ---------------------------------------------------------------------------
+  // Paste-an-agenda handler (ADR 0029)
+  //
+  // Structure pasted free text into the editable Draft fields. Pasting is an
+  // input method, so the resulting items are Confirmed Draft items (exactly the
+  // manual add/remove flow). Degrades gracefully: an empty result (e.g. no
+  // extraction key) keeps manual entry working and shows a gentle hint.
+  // ---------------------------------------------------------------------------
+
+  const handleReadPaste = async (): Promise<void> => {
+    const text = pasteText.trim()
+    if (text.length === 0 || isReading) return
+
+    setIsReading(true)
+    setShowPasteHint(false)
+    try {
+      const ctx = await window.api.inferContextFromText({ text, primaryLanguage })
+      const titleText = ctx.title?.trim() ?? ''
+      const isEmpty =
+        titleText.length === 0 && ctx.agendaItems.length === 0 && ctx.participants.length === 0
+      if (isEmpty) {
+        setShowPasteHint(true)
+        return
+      }
+      if (titleText.length > 0) setMeetingTitle(titleText)
+      if (ctx.agendaItems.length > 0) {
+        setAgendaItems(
+          ctx.agendaItems.map((a, i) => ({
+            id: `paste-agenda-${String(Date.now())}-${String(i)}`,
+            title: a.title,
+            topic: a.topic,
+          })),
+        )
+      }
+      if (ctx.participants.length > 0) {
+        setParticipants(
+          ctx.participants.map((p, i) => ({
+            id: `paste-participant-${String(Date.now())}-${String(i)}`,
+            name: p.name,
+          })),
+        )
+      }
+    } catch (err) {
+      console.error('Failed to read pasted agenda:', err)
+    } finally {
+      setIsReading(false)
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Agenda item handlers
@@ -144,17 +220,14 @@ export function DraftScreen(): React.JSX.Element {
   // Start meeting handler
   // ---------------------------------------------------------------------------
 
-  const handleStart = async (): Promise<void> => {
-    if (!isValid || isCreating) return
+  const createAndStart = async (title: string, titleAutoGenerated: boolean): Promise<void> => {
+    if (isCreating) return
 
     setIsCreating(true)
 
     try {
       // Create the meeting
-      const meeting = await window.api.meetingCreate({
-        title: meetingTitle.trim(),
-        primaryLanguage,
-      })
+      const meeting = await window.api.meetingCreate({ title, primaryLanguage, titleAutoGenerated })
 
       // Start the meeting (Draft → Live)
       await window.api.meetingStart({ meetingId: meeting.id })
@@ -164,14 +237,45 @@ export function DraftScreen(): React.JSX.Element {
       setActiveMeeting(meeting.id)
       setLiveMeetingId(meeting.id)
       setStoreMeetingTitle(meeting.title)
-      setStoreAgendaItems(agendaItems)
+      setStoreAgendaItems(agendaItems.map((a) => ({ ...a, state: 'confirmed' as const })))
       setStoreParticipants(participants)
+      // The draft has been consumed into a live meeting; clear it so the next
+      // visit to the Draft screen starts fresh.
+      resetDraft()
       setRoute('live')
     } catch (err) {
       console.error('Failed to start meeting:', err)
       setIsCreating(false)
     }
   }
+
+  const handleStart = async (): Promise<void> => {
+    if (!isValid) return
+    await createAndStart(meetingTitle.trim(), false)
+  }
+
+  // Quick-start "Direct starten" (ADR 0029): begin immediately with no prep. A
+  // typed title is used as-is (Confirmed, not auto-generated); an empty title
+  // gets a date/time placeholder the final pass may replace later.
+  const handleQuickStart = async (): Promise<void> => {
+    const typed = meetingTitle.trim()
+    const hasTitle = typed.length > 0
+    await createAndStart(hasTitle ? typed : buildAutoTitle(), !hasTitle)
+  }
+
+  // Clear everything the user entered and start over.
+  const handleReset = (): void => {
+    resetDraft()
+    setAgendaInput('')
+    setParticipantInput('')
+    setShowPasteHint(false)
+  }
+
+  const hasDraftInput =
+    meetingTitle.length > 0 ||
+    agendaItems.length > 0 ||
+    participants.length > 0 ||
+    pasteText.length > 0
 
   // ---------------------------------------------------------------------------
   // Render
@@ -192,6 +296,35 @@ export function DraftScreen(): React.JSX.Element {
             void handleStart()
           }}
         >
+          {/* Paste an agenda (ADR 0029) */}
+          <div className="form-group">
+            <h2 className="form-section-title">{t('draft.paste.heading')}</h2>
+            <textarea
+              className="form-input form-textarea"
+              rows={5}
+              placeholder={t('draft.paste.placeholder')}
+              aria-label={t('draft.paste.heading')}
+              value={pasteText}
+              onChange={(e) => {
+                setPasteText(e.currentTarget.value)
+              }}
+              disabled={isReading || isCreating}
+            />
+            <div className="form-row">
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={isReading || isCreating || pasteText.trim().length === 0}
+                onClick={() => {
+                  void handleReadPaste()
+                }}
+              >
+                {isReading ? t('draft.paste.loading') : t('draft.paste.button')}
+              </button>
+            </div>
+            {showPasteHint && <p className="form-hint">{t('draft.paste.hint')}</p>}
+          </div>
+
           {/* Meeting Title */}
           <div className="form-group">
             <label htmlFor="meeting-title" className="form-label">
@@ -320,7 +453,7 @@ export function DraftScreen(): React.JSX.Element {
             />
           </div>
 
-          {/* Start Button */}
+          {/* Start Buttons */}
           <div className="form-group form-group--actions">
             <button
               type="submit"
@@ -329,6 +462,25 @@ export function DraftScreen(): React.JSX.Element {
               title={isValid ? '' : t('draft.start.disabled.reason')}
             >
               {isCreating ? 'Starting...' : t('draft.start.button')}
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary"
+              disabled={isCreating}
+              title={t('draft.quickstart.hint')}
+              onClick={() => {
+                void handleQuickStart()
+              }}
+            >
+              {t('draft.quickstart.button')}
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled={isCreating || !hasDraftInput}
+              onClick={handleReset}
+            >
+              {t('draft.reset.button')}
             </button>
           </div>
         </form>

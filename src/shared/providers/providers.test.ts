@@ -278,6 +278,25 @@ describe('InferredContextSchema', () => {
       }),
     ).toThrow()
   })
+
+  it('parses an optional inferred title', () => {
+    const result = InferredContextSchema.parse({
+      agendaItems: [],
+      participants: [],
+      title: 'Wekelijkse standup',
+    })
+    expect(result.title).toBe('Wekelijkse standup')
+  })
+
+  it('rejects an empty inferred title', () => {
+    expect(() =>
+      InferredContextSchema.parse({
+        agendaItems: [],
+        participants: [],
+        title: '',
+      }),
+    ).toThrow()
+  })
 })
 
 // ============================================================================
@@ -460,11 +479,25 @@ describe('FakeExtractionProvider', () => {
 
   it('infers an empty context by default', async () => {
     const provider = new FakeExtractionProvider()
-    const result = await provider.inferContext([])
+    const result = await provider.inferContext({ source: { spans: [] } })
     expect(result).toEqual({ agendaItems: [], participants: [] })
   })
 
-  it('returns the scripted inferred context and records the spans it was given', async () => {
+  it('infers from a text source', async () => {
+    const provider = new FakeExtractionProvider()
+    provider.scriptInferContextResponse({
+      agendaItems: [{ title: 'Roadmap', topic: 'Next quarter' }],
+      participants: [],
+      title: 'Productoverleg',
+    })
+
+    const result = await provider.inferContext({ source: { text: 'Agenda: roadmap bespreken' } })
+
+    expect(result.title).toBe('Productoverleg')
+    expect(result.agendaItems[0]?.title).toBe('Roadmap')
+  })
+
+  it('returns the scripted inferred context and records the input it was given', async () => {
     const provider = new FakeExtractionProvider()
     provider.scriptInferContextResponse({
       agendaItems: [{ title: 'Roadmap', topic: 'Next quarter' }],
@@ -472,11 +505,16 @@ describe('FakeExtractionProvider', () => {
     })
 
     const spans = [{ id: 'span-1', text: 'Anika opent de roadmap', startMs: 0, endMs: 1000 }]
-    const result = await provider.inferContext(spans)
+    const result = await provider.inferContext({
+      source: { spans },
+      knownAgendaItems: [{ title: 'Roadmap', topic: 'Next quarter' }],
+    })
 
     expect(result.agendaItems[0]?.title).toBe('Roadmap')
     expect(result.participants[0]?.name).toBe('Anika')
     expect(provider.inferContextCalls()).toHaveLength(1)
-    expect(provider.inferContextCalls()[0]?.[0]?.id).toBe('span-1')
+    const call = provider.inferContextCalls()[0]
+    expect(call?.source).toEqual({ spans })
+    expect(call?.knownAgendaItems?.[0]?.title).toBe('Roadmap')
   })
 })

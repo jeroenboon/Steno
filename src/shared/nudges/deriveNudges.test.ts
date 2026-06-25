@@ -18,8 +18,18 @@ import type { DeriveNudgesState } from './deriveNudges'
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const agendaItem1: AgendaItem = { id: 'ag1', title: 'Q3 Review', topic: 'Review Q3 results' }
-const agendaItem2: AgendaItem = { id: 'ag2', title: 'Planning', topic: 'Next quarter plan' }
+const agendaItem1: AgendaItem = {
+  id: 'ag1',
+  title: 'Q3 Review',
+  topic: 'Review Q3 results',
+  state: 'confirmed',
+}
+const agendaItem2: AgendaItem = {
+  id: 'ag2',
+  title: 'Planning',
+  topic: 'Next quarter plan',
+  state: 'confirmed',
+}
 
 const participant1: Participant = { id: 'p1', name: 'Jeroen' }
 const participant2: Participant = { id: 'p2', name: 'Anouk' }
@@ -322,7 +332,7 @@ describe('EmptyAgendaItem nudge', () => {
       ...baseState,
       decisions: [],
       actions: [],
-      agendaItems: [{ id: 'ag-test', title: 'Test', topic: 'Test topic' }],
+      agendaItems: [{ id: 'ag-test', title: 'Test', topic: 'Test topic', state: 'confirmed' }],
     }
     const nudges1 = deriveNudges(state, nowAfter5Min)
     const nudges2 = deriveNudges(state, nowAfter5Min)

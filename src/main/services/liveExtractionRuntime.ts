@@ -40,6 +40,8 @@
  * These channels are documented in src/shared/ipc.ts (event-only, no invoke).
  */
 
+import { randomUUID } from 'crypto'
+
 import type {
   Action,
   Decision,
@@ -48,16 +50,21 @@ import type {
   MeetingId,
   TranscriptSpan,
 } from '@shared/domain'
-import type { NudgesChangedPayload, SummaryChangedPayload } from '@shared/ipc'
+import type { AgendaChangedPayload, NudgesChangedPayload, SummaryChangedPayload } from '@shared/ipc'
 import { deriveNudges } from '@shared/nudges/deriveNudges'
 import type { ExtractionProvider } from '@shared/providers'
 
 import type { IpcSender } from '../audio/AudioCaptureBridge'
 import type { actionRepo } from '../db/repos/actionRepo'
+import type { agendaItemRepo } from '../db/repos/agendaItemRepo'
 import type { decisionRepo } from '../db/repos/decisionRepo'
 import type { discussionSummaryRepo } from '../db/repos/discussionSummaryRepo'
+import type { meetingRepo } from '../db/repos/meetingRepo'
+import type { participantRepo } from '../db/repos/participantRepo'
 import type { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
 
+import { AgendaInferenceScheduler } from './agendaInferenceScheduler'
+import { AgendaProposalService } from './agendaProposalService'
 import {
   ExtractionLoopScheduler,
   type MeetingContext,
@@ -151,6 +158,20 @@ export interface LiveExtractionRuntimeOptions {
   actionsRepo: ReturnType<typeof actionRepo>
   spanRepo: ReturnType<typeof transcriptSpanRepo>
   dsRepo: ReturnType<typeof discussionSummaryRepo>
+  /**
+   * Repos used by the final pass to infer + persist the agenda, participants
+   * and title for an un-prepared live meeting (ADR 0029). Optional: when absent
+   * the final pass skips inference (e.g. the import path, which infers itself).
+   */
+  agendaItemRepo?: ReturnType<typeof agendaItemRepo>
+  participantRepo?: ReturnType<typeof participantRepo>
+  meetingRepo?: ReturnType<typeof meetingRepo>
+  /**
+   * Cadence (ms) for the slow live agenda inference scheduler (ADR 0029).
+   * Defaults to the scheduler's own default. Only armed when an extraction
+   * provider and an agendaItemRepo are both present.
+   */
+  agendaCadenceMs?: number
   sender: IpcSender
   /**
    * When the meeting started (used for the EmptyAgendaItem nudge heuristic).
@@ -165,19 +186,26 @@ export interface LiveExtractionRuntimeOptions {
 
 export class LiveExtractionRuntime {
   private readonly _meetingId: MeetingId
-  private readonly _context: MeetingContext
+  /** Mutable: the final pass may enrich it with an inferred agenda (ADR 0029). */
+  private _context: MeetingContext
   /** Null when no extraction provider configured (degraded path). */
   private readonly _scheduler: ExtractionLoopScheduler | null
+  /** Slow live agenda inference scheduler; null when not armed (ADR 0029). */
+  private readonly _agendaScheduler: AgendaInferenceScheduler | null
   /** The extraction provider, or null when degraded. Used for summarise/query. */
   private readonly _provider: ExtractionProvider | null
   private readonly _spanRepo: ReturnType<typeof transcriptSpanRepo>
   private readonly _dsRepo: ReturnType<typeof discussionSummaryRepo>
   private readonly _decisionsRepo: ReturnType<typeof decisionRepo>
   private readonly _actionsRepo: ReturnType<typeof actionRepo>
+  private readonly _agendaItemRepo: ReturnType<typeof agendaItemRepo> | undefined
+  private readonly _participantRepo: ReturnType<typeof participantRepo> | undefined
+  private readonly _meetingRepo: ReturnType<typeof meetingRepo> | undefined
   private readonly _sender: IpcSender
   private readonly _meetingStartedAt: Date
 
   private _stopped = false
+  private _paused = false
   private _endMeetingCalled = false
   /** Latest running summary — in-memory only, not persisted. */
   private _runningSummary = ''
@@ -189,6 +217,9 @@ export class LiveExtractionRuntime {
     this._dsRepo = opts.dsRepo
     this._decisionsRepo = opts.decisionsRepo
     this._actionsRepo = opts.actionsRepo
+    this._agendaItemRepo = opts.agendaItemRepo
+    this._participantRepo = opts.participantRepo
+    this._meetingRepo = opts.meetingRepo
     this._sender = opts.sender
     this._meetingStartedAt = opts.meetingStartedAt ?? new Date()
 
@@ -213,10 +244,34 @@ export class LiveExtractionRuntime {
         ...opts.schedulerDeps,
         itemLifecycleService: wrappedService,
       })
+
+      // Arm the slow live agenda inference scheduler when an agenda repo is
+      // wired (ADR 0029). It shares the runtime's span store and clock — no
+      // second source of truth. Absent repo ⇒ no live agenda inference.
+      if (opts.agendaItemRepo !== undefined) {
+        const agendaRepo = opts.agendaItemRepo
+        this._agendaScheduler = new AgendaInferenceScheduler({
+          provider: opts.schedulerDeps.provider,
+          proposalService: new AgendaProposalService({ agendaItemRepo: agendaRepo }),
+          spanRepo: opts.spanRepo,
+          agendaItemRepo: agendaRepo,
+          clock: opts.schedulerDeps.clock,
+          ...(opts.agendaCadenceMs !== undefined ? { cadenceMs: opts.agendaCadenceMs } : {}),
+          // Push the full current agenda to the renderer when new items appear.
+          onProposed: () => {
+            this._sender.send('agenda:changed', {
+              agendaItems: agendaRepo.listByMeeting(this._meetingId),
+            } satisfies AgendaChangedPayload)
+          },
+        })
+      } else {
+        this._agendaScheduler = null
+      }
     } else {
       // Degraded path: no extraction provider — keep transcription + persistence
       this._provider = null
       this._scheduler = null
+      this._agendaScheduler = null
       console.warn(
         '[LiveExtractionRuntime] No extraction provider configured. ' +
           'Transcript spans will be persisted but live extraction is disabled. ' +
@@ -289,11 +344,44 @@ export class LiveExtractionRuntime {
    * Also triggers the running summary update when the scheduler fired a turn.
    */
   async tick(): Promise<void> {
-    if (this._stopped) return
+    if (this._stopped || this._paused) return
     if (this._scheduler === null) return
 
-    await this._scheduler.tick(this._meetingId, this._context)
+    await this._scheduler.tick(this._meetingId, this._liveRoutingContext())
+    await this._agendaScheduler?.tick(this._meetingId)
     await this._runSummary()
+  }
+
+  /**
+   * Pause the live cadence (the meeting pause halts audio and the cadence,
+   * CONTEXT.md). tick() becomes a no-op and the slow agenda scheduler halts
+   * until resume().
+   */
+  pause(): void {
+    this._paused = true
+    this._agendaScheduler?.pause()
+  }
+
+  /** Resume the live cadence after a pause. */
+  resume(): void {
+    this._paused = false
+    this._agendaScheduler?.resume()
+  }
+
+  /**
+   * Context for a live rolling turn. Decisions/Actions may route only to
+   * Confirmed agenda items + the Off-agenda bucket during Live, so the candidate
+   * agenda is the Confirmed items from the repo; Proposed items the agent has
+   * inferred are not yet routing targets (ADR 0029). The final pass keeps using
+   * the full agenda (it does not call this). Falls back to the static context
+   * when no agenda repo is wired.
+   */
+  private _liveRoutingContext(): MeetingContext {
+    if (this._agendaItemRepo === undefined) return this._context
+    const confirmed = this._agendaItemRepo
+      .listByMeeting(this._meetingId)
+      .filter((a) => a.state === 'confirmed')
+    return { ...this._context, agendaItems: confirmed }
   }
 
   // -------------------------------------------------------------------------
@@ -360,6 +448,16 @@ export class LiveExtractionRuntime {
 
     if (this._scheduler === null) return
 
+    // Stop the slow agenda scheduler before the final pass so it can't fire a
+    // late inference turn concurrently with (or after) finalisation.
+    this._agendaScheduler?.pause()
+
+    // Un-prepared live meeting (quick-start / agenda spoken at the top): infer
+    // the agenda, participants and title over the whole transcript before the
+    // final pass, so the notes still get a structured, agenda-grouped result
+    // (ADR 0029). Import meetings infer themselves, so this is live-only.
+    await this._inferContextOnEnd(meeting)
+
     // The scheduler's runFinalPass persists Discussion Summaries to dsRepo
     // and calls proposeItems (which triggers items:changed via the interceptor
     // if items were proposed).
@@ -371,6 +469,73 @@ export class LiveExtractionRuntime {
 
     // Re-derive nudges after the final pass (items may have changed).
     this._emitNudges()
+  }
+
+  /**
+   * Infer the agenda, participants and (optional) title for an un-prepared live
+   * meeting, persist the agenda items as Proposed and the participants, enrich
+   * the in-memory context so the final pass routes into the inferred agenda, and
+   * replace an auto-generated title (clearing the flag). No-op unless the meeting
+   * is live, its agenda is empty, the provider can infer, and the repos are
+   * wired (the import path infers itself). See ADR 0029.
+   */
+  private async _inferContextOnEnd(meeting: Meeting): Promise<void> {
+    if (meeting.source !== 'live') return
+    if (this._context.agendaItems.length > 0) return
+    if (
+      this._provider?.inferContext === undefined ||
+      this._agendaItemRepo === undefined ||
+      this._participantRepo === undefined
+    ) {
+      return
+    }
+
+    const spans = this._spanRepo.listByMeeting(this._meetingId)
+    if (spans.length === 0) return
+
+    const inferred = await this._provider.inferContext({ source: { spans } })
+
+    const newAgenda = inferred.agendaItems.map((a) => ({
+      id: randomUUID(),
+      title: a.title,
+      topic: a.topic,
+      state: 'proposed' as const,
+    }))
+    for (const item of newAgenda) {
+      this._agendaItemRepo.insert(item, this._meetingId)
+    }
+
+    const newParticipants = inferred.participants.map((p) => ({
+      id: randomUUID(),
+      name: p.name,
+    }))
+    for (const p of newParticipants) {
+      this._participantRepo.insert(p, this._meetingId)
+    }
+
+    // Enrich the context so the final pass routes into the inferred agenda and
+    // nudges reflect it.
+    this._context = {
+      ...this._context,
+      agendaItems: newAgenda,
+      participants: newParticipants,
+    }
+
+    // Replace an auto-generated placeholder title with the inferred one, then
+    // clear the flag so it is never overwritten again. A user-set title (flag
+    // false) is left untouched.
+    if (
+      meeting.titleAutoGenerated &&
+      inferred.title !== undefined &&
+      inferred.title.length > 0 &&
+      this._meetingRepo !== undefined
+    ) {
+      this._meetingRepo.update({
+        ...meeting,
+        title: inferred.title,
+        titleAutoGenerated: false,
+      })
+    }
   }
 
   // -------------------------------------------------------------------------

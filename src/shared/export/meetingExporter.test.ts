@@ -28,8 +28,18 @@ import { toMarkdown, toTranscriptText } from './meetingExporter'
 const ALICE: Participant = { id: 'p-alice', name: 'Alice' }
 const BOB: Participant = { id: 'p-bob', name: 'Bob' }
 
-const AGENDA_Q3: AgendaItem = { id: 'ai-q3', title: 'Q3 Planning', topic: 'Budget review' }
-const AGENDA_RETRO: AgendaItem = { id: 'ai-retro', title: 'Retrospectief', topic: 'Team feedback' }
+const AGENDA_Q3: AgendaItem = {
+  id: 'ai-q3',
+  title: 'Q3 Planning',
+  topic: 'Budget review',
+  state: 'confirmed',
+}
+const AGENDA_RETRO: AgendaItem = {
+  id: 'ai-retro',
+  title: 'Retrospectief',
+  topic: 'Team feedback',
+  state: 'confirmed',
+}
 
 const DECISION_A: Decision = {
   id: 'd-a',

@@ -26,13 +26,15 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
-import type { TranscriptSpan } from '@shared/domain/types'
+import { excludeCoveredAgendaItems } from '@shared/agenda/agendaTitle'
 import {
   ExtractionResponseSchema,
   InferredContextSchema,
+  inferSourceToText,
   type ExtractionProvider,
   type ExtractionRequest,
   type ExtractionResponse,
+  type InferContextInput,
   type InferredContext,
 } from '@shared/providers'
 
@@ -54,6 +56,7 @@ const INFER_TOOL_NAME = 'infer_meeting_context'
 const INFER_CONTEXT_TOOL_INPUT_SCHEMA = {
   type: 'object' as const,
   properties: {
+    title: { type: 'string' },
     agendaItems: {
       type: 'array',
       items: {
@@ -124,6 +127,23 @@ const EXTRACTION_TOOL_INPUT_SCHEMA = {
     },
   },
   required: ['proposedDecisions', 'proposedActions'],
+}
+
+/**
+ * Grounding clause for the infer prompt. When the caller already has agenda
+ * items (the live tick), instruct the model to return only NEW topics. Empty
+ * when there is no known agenda (paste / final pass over a thin meeting).
+ */
+function buildGroundingInstruction(
+  knownAgendaItems: readonly { title: string; topic: string }[],
+): string {
+  if (knownAgendaItems.length === 0) return ''
+  const lines = knownAgendaItems.map((a) => `- ${a.title}: ${a.topic}`).join('\n')
+  return (
+    'De agenda bevat al deze punten:\n' +
+    `${lines}\n` +
+    'Geef alleen NIEUWE agendapunten terug die hier nog niet in staan; herhaal niets. '
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -254,15 +274,18 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
    *
    * Never logs transcript content or the API key (principle #12).
    */
-  async inferContext(spans: TranscriptSpan[]): Promise<InferredContext> {
-    if (spans.length === 0) return { agendaItems: [], participants: [] }
+  async inferContext(input: InferContextInput): Promise<InferredContext> {
+    const content = inferSourceToText(input.source)
+    if (content.trim() === '') return { agendaItems: [], participants: [] }
 
-    const first = await this._callAndValidateInfer(spans)
-    if (first !== null) return first
+    const known = input.knownAgendaItems ?? []
+
+    const first = await this._callAndValidateInfer(content, known)
+    if (first !== null) return excludeCoveredAgendaItems(first, known)
 
     console.error('[AnthropicExtractionProvider] Context inference validation failed, retrying')
-    const retry = await this._callAndValidateInfer(spans)
-    if (retry !== null) return retry
+    const retry = await this._callAndValidateInfer(content, known)
+    if (retry !== null) return excludeCoveredAgendaItems(retry, known)
 
     console.error('[AnthropicExtractionProvider] Context inference retry failed, returning empty')
     return { agendaItems: [], participants: [] }
@@ -276,20 +299,20 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
    * Call the API for context inference and validate with Zod. Returns a valid
    * InferredContext or null on validation failure. Never logs content.
    */
-  private async _callAndValidateInfer(spans: TranscriptSpan[]): Promise<InferredContext | null> {
-    const spanLines = spans
-      .map((s) => `[${s.id}] ${s.speakerLabel ? `${s.speakerLabel}: ` : ''}${s.text}`)
-      .join('\n')
-
+  private async _callAndValidateInfer(
+    content: string,
+    knownAgendaItems: readonly { title: string; topic: string }[],
+  ): Promise<InferredContext | null> {
     const response = await this._client.messages.create({
       model: this._finalPassModel,
       max_tokens: 2048,
       system:
-        'Je leidt de agenda en de deelnemers af uit een vergadertranscript. ' +
+        'Je leidt de agenda, de deelnemers en een korte vergadertitel af uit de bron. ' +
         'Geef per agendapunt een korte title en topic. Geef alleen namen van deelnemers ' +
-        'die echt in het transcript voorkomen; verzin niemand. Bij twijfel laat je de lijst leeg. ' +
+        'die echt in de bron voorkomen; verzin niemand. Bij twijfel laat je de lijst leeg. ' +
+        buildGroundingInstruction(knownAgendaItems) +
         'Gebruik de infer_meeting_context tool om het resultaat terug te geven.',
-      messages: [{ role: 'user', content: `Transcript:\n${spanLines}` }],
+      messages: [{ role: 'user', content: `Transcript:\n${content}` }],
       tools: [
         {
           name: INFER_TOOL_NAME,

@@ -24,6 +24,31 @@ import type { TranscriptSpan } from '../domain/types'
 
 import type { ExtractionRequest, ExtractionResponse, InferredContext } from './dtos'
 
+/**
+ * Input to {@link ExtractionProvider.inferContext}.
+ *
+ * `source` is either free text (a pasted agenda in Draft) or transcript spans
+ * (live tick or final pass). `knownAgendaItems` grounds the inference: when
+ * present, the provider returns only topics the known agenda does not already
+ * cover (append-only, used by the live agenda scheduler). See ADR 0029.
+ */
+export interface InferContextInput {
+  source: { text: string } | { spans: TranscriptSpan[] }
+  knownAgendaItems?: { title: string; topic: string }[]
+}
+
+/**
+ * Flatten an {@link InferContextInput.source} to the plain text an extraction
+ * adapter feeds the model. Free text passes through; spans render one line each
+ * as `[id] Speaker: text` (the format both adapter families already used).
+ */
+export function inferSourceToText(source: InferContextInput['source']): string {
+  if ('text' in source) return source.text
+  return source.spans
+    .map((s) => `[${s.id}] ${s.speakerLabel ? `${s.speakerLabel}: ` : ''}${s.text}`)
+    .join('\n')
+}
+
 export interface ExtractionProvider {
   /**
    * Run one extraction turn.
@@ -55,15 +80,16 @@ export interface ExtractionProvider {
   query?(spans: TranscriptSpan[], question: string): Promise<string>
 
   /**
-   * Infer Agenda Items and Participants from a whole transcript, for an
-   * Imported Meeting where the user chose not to supply them (item 0026).
-   * Returns vendor-neutral InferredContext; both lists may be empty when
-   * nothing could be inferred.
+   * Infer Agenda Items, Participants and optionally a title from a source.
+   *
+   * Runs at three moments (ADR 0029): paste-time (text source, Draft), the live
+   * agenda tick (spans + knownAgendaItems grounding, append-only), and the final
+   * pass (spans over the whole transcript). With `knownAgendaItems` the provider
+   * returns only uncovered topics. The live tick ignores `title` and
+   * `participants`. Both lists may be empty when nothing could be inferred.
    *
    * Optional — callers must guard with `provider.inferContext !== undefined`
-   * (same pattern as summarise/query). See ADR 0026.
-   *
-   * @param spans — All final transcript spans for the meeting.
+   * (same pattern as summarise/query). See ADR 0026 and ADR 0029.
    */
-  inferContext?(spans: TranscriptSpan[]): Promise<InferredContext>
+  inferContext?(input: InferContextInput): Promise<InferredContext>
 }

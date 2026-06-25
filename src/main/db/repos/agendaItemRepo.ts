@@ -8,6 +8,7 @@ interface AgendaItemRow {
   meeting_id: string
   title: string
   topic: string
+  state: string
 }
 
 function rowToDomain(row: AgendaItemRow): AgendaItem {
@@ -15,6 +16,7 @@ function rowToDomain(row: AgendaItemRow): AgendaItem {
     id: row.id,
     title: row.title,
     topic: row.topic,
+    state: row.state,
   })
 }
 
@@ -22,8 +24,14 @@ export function agendaItemRepo(db: Database.Database) {
   return {
     insert(item: AgendaItem, meetingId: string): void {
       db.prepare(
-        `INSERT INTO agenda_items (id, meeting_id, title, topic) VALUES (@id, @meetingId, @title, @topic)`,
-      ).run({ id: item.id, meetingId, title: item.title, topic: item.topic })
+        `INSERT INTO agenda_items (id, meeting_id, title, topic, state) VALUES (@id, @meetingId, @title, @topic, @state)`,
+      ).run({ id: item.id, meetingId, title: item.title, topic: item.topic, state: item.state })
+    },
+
+    update(item: AgendaItem): void {
+      db.prepare(
+        `UPDATE agenda_items SET title = @title, topic = @topic, state = @state WHERE id = @id`,
+      ).run({ id: item.id, title: item.title, topic: item.topic, state: item.state })
     },
 
     findById(id: string): AgendaItem | null {

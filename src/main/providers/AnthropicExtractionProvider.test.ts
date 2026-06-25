@@ -32,7 +32,14 @@ vi.mock('@anthropic-ai/sdk', () => ({
 
 const rollingRequest: ExtractionRequest = {
   spans: [{ id: 'span-1', text: 'We decided to launch in Q3.', startMs: 0, endMs: 3000 }],
-  agendaItems: [{ id: 'agenda-1', title: 'Launch planning', topic: 'Planning the product launch' }],
+  agendaItems: [
+    {
+      id: 'agenda-1',
+      title: 'Launch planning',
+      topic: 'Planning the product launch',
+      state: 'confirmed',
+    },
+  ],
   participants: [{ id: 'p-1', name: 'Jeroen' }],
   primaryLanguage: 'nl',
   isFinalPass: false,
@@ -315,11 +322,49 @@ describe('AnthropicExtractionProvider', () => {
       participants: [{ name: 'Jeroen' }],
     }
 
+    it('infers from a text source and returns a title', async () => {
+      mockCreate.mockResolvedValueOnce(
+        makeInferToolUseResponse({ ...validInferred, title: 'Begrotingsoverleg' }),
+      )
+
+      const provider = makeProvider()
+      const result = await provider.inferContext({
+        source: { text: 'Agenda: de Q3-begroting bespreken' },
+      })
+
+      expect(result.title).toBe('Begrotingsoverleg')
+      expect(result.agendaItems[0]?.title).toBe('Begroting')
+    })
+
+    it('passes known agenda items as grounding and excludes topics already covered', async () => {
+      mockCreate.mockResolvedValueOnce(
+        makeInferToolUseResponse({
+          agendaItems: [
+            { title: 'Begroting', topic: 'Q3-begroting' },
+            { title: 'Planning', topic: 'Nieuw onderwerp' },
+          ],
+          participants: [],
+        }),
+      )
+
+      const provider = makeProvider()
+      const result = await provider.inferContext({
+        source: { spans },
+        knownAgendaItems: [{ title: 'Begroting', topic: 'Reeds geagendeerd' }],
+      })
+
+      // The known agenda is carried into the request for grounding.
+      const serialised = JSON.stringify(mockCreate.mock.calls[0]?.[0])
+      expect(serialised).toContain('Reeds geagendeerd')
+      // A returned topic that repeats a known title is dropped (append-only).
+      expect(result.agendaItems.map((a) => a.title)).toEqual(['Planning'])
+    })
+
     it('returns inferred agenda items and participants from the transcript', async () => {
       mockCreate.mockResolvedValueOnce(makeInferToolUseResponse(validInferred))
 
       const provider = makeProvider()
-      const result = await provider.inferContext(spans)
+      const result = await provider.inferContext({ source: { spans } })
 
       expect(result.agendaItems).toHaveLength(1)
       expect(result.agendaItems[0]?.title).toBe('Begroting')
@@ -330,7 +375,7 @@ describe('AnthropicExtractionProvider', () => {
       mockCreate.mockResolvedValueOnce(makeInferToolUseResponse(validInferred))
 
       const provider = makeProvider()
-      await provider.inferContext(spans)
+      await provider.inferContext({ source: { spans } })
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({ model: 'claude-sonnet-4-6' }),
@@ -342,7 +387,7 @@ describe('AnthropicExtractionProvider', () => {
       mockCreate.mockResolvedValueOnce(bad).mockResolvedValueOnce(bad)
 
       const provider = makeProvider()
-      const result = await provider.inferContext(spans)
+      const result = await provider.inferContext({ source: { spans } })
 
       expect(mockCreate).toHaveBeenCalledTimes(2)
       expect(result).toEqual({ agendaItems: [], participants: [] })
@@ -356,7 +401,7 @@ describe('AnthropicExtractionProvider', () => {
       mockCreate.mockResolvedValue(makeInferToolUseResponse({ agendaItems: 'bad' }))
 
       const provider = makeProvider()
-      await provider.inferContext(spans)
+      await provider.inferContext({ source: { spans } })
 
       const allLogs = logged.join('\n')
       expect(allLogs).not.toContain('begroting')

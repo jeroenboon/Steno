@@ -244,6 +244,25 @@ export interface AppState {
   /** Set the agenda items for the current meeting. */
   setAgendaItems: (items: AgendaItem[]) => void
 
+  // --- Draft form state (persists across navigation; cleared on reset/start) ---
+  /** Working title typed in the Draft screen. */
+  draftTitle: string
+  /** Primary language selected in the Draft screen. */
+  draftPrimaryLanguage: string
+  /** Agenda items added in the Draft screen. */
+  draftAgendaItems: { id: string; title: string; topic: string }[]
+  /** Participants added in the Draft screen. */
+  draftParticipants: { id: string; name: string }[]
+  /** Pasted agenda text in the Draft screen. */
+  draftPasteText: string
+  setDraftTitle: (title: string) => void
+  setDraftPrimaryLanguage: (language: string) => void
+  setDraftAgendaItems: (items: { id: string; title: string; topic: string }[]) => void
+  setDraftParticipants: (participants: { id: string; name: string }[]) => void
+  setDraftPasteText: (text: string) => void
+  /** Clear all Draft form fields ("opnieuw beginnen"). */
+  resetDraft: () => void
+
   /** Set the participants for the current meeting. */
   setParticipants: (participants: Participant[]) => void
 
@@ -289,6 +308,11 @@ export const useAppStore = create<AppState>()((set) => ({
   confirmedActions: [],
   agendaItems: [],
   participants: [],
+  draftTitle: '',
+  draftPrimaryLanguage: 'nl',
+  draftAgendaItems: [],
+  draftParticipants: [],
+  draftPasteText: '',
   nudges: [],
   dismissedNudgeIds: new Set<NudgeId>(),
   runningSummary: '',
@@ -402,6 +426,31 @@ export const useAppStore = create<AppState>()((set) => ({
 
   setParticipants: (participants) => {
     set({ participants })
+  },
+
+  setDraftTitle: (draftTitle) => {
+    set({ draftTitle })
+  },
+  setDraftPrimaryLanguage: (draftPrimaryLanguage) => {
+    set({ draftPrimaryLanguage })
+  },
+  setDraftAgendaItems: (draftAgendaItems) => {
+    set({ draftAgendaItems })
+  },
+  setDraftParticipants: (draftParticipants) => {
+    set({ draftParticipants })
+  },
+  setDraftPasteText: (draftPasteText) => {
+    set({ draftPasteText })
+  },
+  resetDraft: () => {
+    set({
+      draftTitle: '',
+      draftPrimaryLanguage: 'nl',
+      draftAgendaItems: [],
+      draftParticipants: [],
+      draftPasteText: '',
+    })
   },
 
   setRunningSummary: (summary) => {

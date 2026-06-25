@@ -43,9 +43,15 @@ const mockApi = {
   itemEditAndConfirm: vi.fn().mockResolvedValue({ state: 'confirmed' }),
   itemDismiss: vi.fn().mockResolvedValue({ ok: true }),
   itemCreateConfirmed: vi.fn().mockResolvedValue({ state: 'confirmed' }),
+  onAgendaChanged: vi.fn().mockReturnValue(mockUnsub),
+  agendaItemConfirm: vi.fn(),
+  agendaItemEditAndConfirm: vi.fn(),
+  meetingEnd: vi.fn().mockResolvedValue({ ok: true }),
+  meetingPause: vi.fn().mockResolvedValue({ id: 'active-session', paused: true }),
+  meetingResume: vi.fn().mockResolvedValue({ id: 'active-session', paused: false }),
   meetingCreate: vi.fn(),
   agendaItemAdd: vi.fn(),
-  agendaItemRemove: vi.fn(),
+  agendaItemRemove: vi.fn().mockResolvedValue({ ok: true }),
   participantAdd: vi.fn(),
   participantRemove: vi.fn(),
   meetingStart: vi.fn(),
@@ -63,7 +69,13 @@ Object.assign(window, { api: mockApi })
 // Test data
 // ---------------------------------------------------------------------------
 
-const AGENDA_1 = { id: 'agenda-1', title: 'Q3 Review', topic: 'Q3' }
+const AGENDA_1 = { id: 'agenda-1', title: 'Q3 Review', topic: 'Q3', state: 'confirmed' as const }
+const PROPOSED_AGENDA = {
+  id: 'agenda-prop',
+  title: 'Begroting',
+  topic: 'Q3-begroting',
+  state: 'proposed' as const,
+}
 const PARTICIPANT_1 = { id: 'p-1', name: 'Alice' }
 
 const SPAN_1: TranscriptSpan = {
@@ -493,6 +505,74 @@ describe('LiveScreen — item 0018 items UI', () => {
     // findBy* re-evaluates after re-render
     await waitFor(() => {
       expect(screen.getByTestId('screen-live')).toHaveClass('screen--live--recording')
+    })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Pause / resume
+// ---------------------------------------------------------------------------
+
+describe('LiveScreen — pause/resume', () => {
+  it('pauses the meeting and toggles to a resume control', async () => {
+    const user = userEvent.setup()
+    render(<LiveScreen />)
+
+    await user.click(screen.getByRole('button', { name: /pauzeren/i }))
+    expect(mockApi.meetingPause).toHaveBeenCalledWith({ meetingId: 'active-session' })
+
+    // The control flips to resume.
+    const resumeBtn = await screen.findByRole('button', { name: /hervatten/i })
+    await user.click(resumeBtn)
+    expect(mockApi.meetingResume).toHaveBeenCalledWith({ meetingId: 'active-session' })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Live agenda grooming (ADR 0029)
+// ---------------------------------------------------------------------------
+
+describe('LiveScreen — live agenda grooming (ADR 0029)', () => {
+  beforeEach(() => {
+    mockApi.agendaItemConfirm.mockResolvedValue({ ...PROPOSED_AGENDA, state: 'confirmed' })
+    mockApi.agendaItemEditAndConfirm.mockResolvedValue({
+      ...PROPOSED_AGENDA,
+      title: 'Bijgewerkt',
+      state: 'confirmed',
+    })
+    useAppStore.setState({ agendaItems: [AGENDA_1, PROPOSED_AGENDA] })
+  })
+
+  it('renders a Proposed agenda item distinctly with confirm, edit and dismiss controls', () => {
+    render(<LiveScreen />)
+
+    const group = screen.getByTestId('proposed-agenda-agenda-prop')
+    expect(group).toBeInTheDocument()
+    expect(group).toHaveTextContent('Begroting')
+    // All three controls are present and keyboard-reachable (real buttons).
+    expect(screen.getByRole('button', { name: /agendapunt bevestigen/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /agendapunt bewerken/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /agendapunt verwijderen/i })).toBeInTheDocument()
+  })
+
+  it('confirms a Proposed agenda item via the agenda-confirm IPC', async () => {
+    const user = userEvent.setup()
+    render(<LiveScreen />)
+
+    await user.click(screen.getByRole('button', { name: /agendapunt bevestigen/i }))
+
+    expect(mockApi.agendaItemConfirm).toHaveBeenCalledWith({ agendaItemId: 'agenda-prop' })
+  })
+
+  it('dismisses a Proposed agenda item, removing it from the list', async () => {
+    const user = userEvent.setup()
+    render(<LiveScreen />)
+
+    await user.click(screen.getByRole('button', { name: /agendapunt verwijderen/i }))
+
+    expect(mockApi.agendaItemRemove).toHaveBeenCalledWith({ agendaItemId: 'agenda-prop' })
+    await waitFor(() => {
+      expect(screen.queryByTestId('proposed-agenda-agenda-prop')).not.toBeInTheDocument()
     })
   })
 })

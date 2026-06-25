@@ -23,11 +23,11 @@
  * - `fetch`       — Injected for testability. Defaults to global fetch.
  */
 
-import type { TranscriptSpan } from '@shared/domain/types'
 import type {
   ExtractionProvider,
   ExtractionRequest,
   ExtractionResponse,
+  InferContextInput,
   InferredContext,
 } from '@shared/providers'
 
@@ -83,7 +83,7 @@ export class AzureOpenAIExtractionProvider implements ExtractionProvider {
    * Meeting where the user did not supply them (item 0026). Degrades to an empty
    * context rather than throwing into the import.
    */
-  async inferContext(spans: TranscriptSpan[]): Promise<InferredContext> {
-    return this._engine.inferContext(spans)
+  async inferContext(input: InferContextInput): Promise<InferredContext> {
+    return this._engine.inferContext(input)
   }
 }

@@ -78,6 +78,17 @@ import type {
   ImportFinishRequest,
   ImportFinishResponse,
   ImportProgressEvent,
+  ContextInferFromTextRequest,
+  ContextInferFromTextResponse,
+  AgendaChangedPayload,
+  AgendaItemConfirmRequest,
+  AgendaItemConfirmResponse,
+  AgendaItemEditAndConfirmRequest,
+  AgendaItemEditAndConfirmResponse,
+  MeetingPauseRequest,
+  MeetingPauseResponse,
+  MeetingResumeRequest,
+  MeetingResumeResponse,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -283,6 +294,41 @@ const api: RendererApi = {
       ipcRenderer.removeListener('import:progress', listener)
     }
   },
+
+  // ---------------------------------------------------------------------------
+  // Paste an agenda (ADR 0029)
+  // ---------------------------------------------------------------------------
+
+  inferContextFromText: (req: ContextInferFromTextRequest) =>
+    ipcRenderer.invoke('context:inferFromText', req) as Promise<ContextInferFromTextResponse>,
+
+  // ---------------------------------------------------------------------------
+  // Live agenda grooming (ADR 0029)
+  // ---------------------------------------------------------------------------
+
+  onAgendaChanged: (cb: (payload: AgendaChangedPayload) => void): UnsubscribeFn => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: AgendaChangedPayload) => {
+      cb(payload)
+    }
+    ipcRenderer.on('agenda:changed', listener)
+    return () => {
+      ipcRenderer.removeListener('agenda:changed', listener)
+    }
+  },
+
+  agendaItemConfirm: (req: AgendaItemConfirmRequest) =>
+    ipcRenderer.invoke('agendaItem:confirm', req) as Promise<AgendaItemConfirmResponse>,
+
+  agendaItemEditAndConfirm: (req: AgendaItemEditAndConfirmRequest) =>
+    ipcRenderer.invoke(
+      'agendaItem:editAndConfirm',
+      req,
+    ) as Promise<AgendaItemEditAndConfirmResponse>,
+
+  meetingPause: (req: MeetingPauseRequest) =>
+    ipcRenderer.invoke('meeting:pause', req) as Promise<MeetingPauseResponse>,
+  meetingResume: (req: MeetingResumeRequest) =>
+    ipcRenderer.invoke('meeting:resume', req) as Promise<MeetingResumeResponse>,
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -38,6 +38,12 @@ const nl = {
   'egress.indicator.label': 'Gegevensverwerking',
 
   // Draft screen (item 0014)
+  'draft.paste.heading': 'Agenda plakken',
+  'draft.paste.placeholder':
+    'Plak hier een agenda uit Word, Outlook of e-mail. We lezen de titel, agendapunten en deelnemers eruit.',
+  'draft.paste.button': 'Uitlezen',
+  'draft.paste.loading': 'Bezig met uitlezen...',
+  'draft.paste.hint': 'Geen agenda herkend. Vul de velden hieronder handmatig in.',
   'draft.meeting.title.label': 'Vergaderingtitel',
   'draft.meeting.title.placeholder': 'Bijv. Q3 Planning',
   'draft.agenda.heading': 'Agenda items',
@@ -52,6 +58,10 @@ const nl = {
   'draft.language.en': 'English',
   'draft.start.button': 'Starten',
   'draft.start.disabled.reason': 'Voeg een titel in om te kunnen starten',
+  'draft.reset.button': 'Opnieuw beginnen',
+  'draft.quickstart.button': 'Direct starten',
+  'draft.quickstart.hint': 'Begin meteen; titel en agenda vullen we later automatisch aan.',
+  'draft.quickstart.autotitle': 'Vergadering',
 
   // Live screen — audio capture (item 0015)
   'live.mic.starting': 'Microfoon starten...',
@@ -253,6 +263,13 @@ const nl = {
   'live.items.offagenda.heading': 'Buiten agenda',
   'live.items.confirm': 'Bevestigen',
   'live.items.dismiss': 'Verwerpen',
+  'live.agenda.proposed.label': '(voorgesteld)',
+  'live.agenda.confirm': 'Agendapunt bevestigen',
+  'live.agenda.edit': 'Agendapunt bewerken',
+  'live.agenda.dismiss': 'Agendapunt verwijderen',
+  'live.agenda.edit.save': 'Opslaan',
+  'live.agenda.edit.cancel': 'Annuleren',
+  'live.agenda.edit.titleLabel': 'Titel agendapunt',
   'live.items.edit': 'Bewerken',
   'live.items.save': 'Opslaan',
   'live.items.cancel': 'Annuleren',
@@ -294,6 +311,8 @@ const nl = {
 
   // Live screen — end meeting (item 0021)
   'live.end.button': 'Vergadering beëindigen',
+  'live.pause.button': 'Pauzeren',
+  'live.resume.button': 'Hervatten',
   'live.noactive.message': 'Ga naar Voorbereiding om een vergadering te starten.',
   'live.noactive.action': 'Naar voorbereiding',
 

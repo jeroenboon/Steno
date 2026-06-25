@@ -15,7 +15,7 @@
 import type { TranscriptSpan } from '../domain/types'
 
 import type { ExtractionRequest, ExtractionResponse, InferredContext } from './dtos'
-import type { ExtractionProvider } from './ExtractionProvider'
+import type { ExtractionProvider, InferContextInput } from './ExtractionProvider'
 
 export class FakeExtractionProvider implements ExtractionProvider {
   private _rollingScripts: ExtractionResponse[] = []
@@ -26,7 +26,7 @@ export class FakeExtractionProvider implements ExtractionProvider {
   private _summariseCalls: TranscriptSpan[][] = []
   private _queryCalls: { spans: TranscriptSpan[]; question: string }[] = []
   private _inferContextResponse: InferredContext | null = null
-  private _inferContextCalls: TranscriptSpan[][] = []
+  private _inferContextCalls: InferContextInput[] = []
 
   /**
    * Enqueue a scripted response for the next rolling (non-final-pass) call.
@@ -60,7 +60,7 @@ export class FakeExtractionProvider implements ExtractionProvider {
   }
 
   /** Returns all recorded inferContext() calls in order. */
-  inferContextCalls(): readonly TranscriptSpan[][] {
+  inferContextCalls(): readonly InferContextInput[] {
     return this._inferContextCalls
   }
 
@@ -124,8 +124,8 @@ export class FakeExtractionProvider implements ExtractionProvider {
     )
   }
 
-  inferContext(spans: TranscriptSpan[]): Promise<InferredContext> {
-    this._inferContextCalls.push(spans)
+  inferContext(input: InferContextInput): Promise<InferredContext> {
+    this._inferContextCalls.push(input)
     return Promise.resolve(this._inferContextResponse ?? { agendaItems: [], participants: [] })
   }
 }

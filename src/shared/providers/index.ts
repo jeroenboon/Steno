@@ -10,7 +10,8 @@
  */
 
 export type { ASRProvider } from './ASRProvider'
-export type { ExtractionProvider } from './ExtractionProvider'
+export { inferSourceToText } from './ExtractionProvider'
+export type { ExtractionProvider, InferContextInput } from './ExtractionProvider'
 export { FakeASRProvider } from './FakeASRProvider'
 export { FakeExtractionProvider } from './FakeExtractionProvider'
 export { FakeClock, RealClock } from './clock'
