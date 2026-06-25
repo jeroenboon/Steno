@@ -565,7 +565,7 @@ Commit: `feat(live): surface and groom Proposed agenda items in the Live screen`
 
 ---
 
-### Step 4.6 — Reflect
+### Step 4.6 — Reflect ✅ done **Slice 4 complete — plan fully built.**
 
 **Context:** close the docs loop (principle #4).
 

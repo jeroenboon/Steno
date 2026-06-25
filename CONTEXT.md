@@ -66,7 +66,7 @@ Pause is modeled as a `paused: boolean` flag on the Meeting, not as a fourth top
 An Action's completion state, independent of the Meeting lifecycle. Can be flipped long after the Meeting ends; this is part of why Actions are first-class and outlive the Transcript.
 
 **Proposed / Confirmed**:
-The lifecycle states of a Decision, Action, or (when inferred live) an Agenda Item. The Extraction Provider only ever creates items as **Proposed** (suggestions). The note-taker confirms, dismisses, or edits-then-confirms. The agent may revise or retract its own **Proposed** items as context arrives but never silently alters a **Confirmed** item. Extraction runs on a rolling ~15-30s cadence, not per-utterance.
+The lifecycle states of a Decision, Action, or (when inferred live) an Agenda Item. The Extraction Provider only ever creates items as **Proposed** (suggestions). The note-taker confirms, dismisses, or edits-then-confirms. For Decisions and Actions the agent may revise or retract its own **Proposed** items as context arrives; live-inferred **Agenda Items are append-only** (the agent adds, never revises or retracts its own — the final pass re-infers cleanly, see ADR 0029). The agent never silently alters a **Confirmed** item. Extraction runs on a rolling ~15-30s cadence, not per-utterance; live agenda inference runs on a slower separate cadence.
 
 **Nudge**:
 A reactive, dismissible prompt the agent raises about the state of the notes (e.g. "this Action has no Owner", "this Decision contradicts an earlier one"). Never changes anything on its own; the note-taker acts or dismisses.
