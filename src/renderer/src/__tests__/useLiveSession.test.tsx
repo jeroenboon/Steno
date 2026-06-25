@@ -21,6 +21,7 @@ import { useAppStore } from '../store/appStore'
 const unsubSpan = vi.fn()
 const unsubItems = vi.fn()
 const unsubNudges = vi.fn()
+const unsubAgenda = vi.fn()
 const unsubSummary = vi.fn()
 const unsubSummaries = vi.fn()
 
@@ -31,6 +32,7 @@ const mockApi = {
   onTranscriptSpan: vi.fn().mockReturnValue(unsubSpan),
   onItemsChanged: vi.fn().mockReturnValue(unsubItems),
   onNudgesChanged: vi.fn().mockReturnValue(unsubNudges),
+  onAgendaChanged: vi.fn().mockReturnValue(unsubAgenda),
   onSummaryChanged: vi.fn().mockReturnValue(unsubSummary),
   onItemsSummaries: vi.fn().mockReturnValue(unsubSummaries),
 }
@@ -45,6 +47,7 @@ beforeEach(() => {
   mockApi.onTranscriptSpan.mockReturnValue(unsubSpan)
   mockApi.onItemsChanged.mockReturnValue(unsubItems)
   mockApi.onNudgesChanged.mockReturnValue(unsubNudges)
+  mockApi.onAgendaChanged.mockReturnValue(unsubAgenda)
   mockApi.onSummaryChanged.mockReturnValue(unsubSummary)
   mockApi.onItemsSummaries.mockReturnValue(unsubSummaries)
 
@@ -86,10 +89,11 @@ describe('useLiveSession', () => {
     await waitFor(() => {
       expect(getUserMedia).toHaveBeenCalled()
     })
-    // All five push channels are subscribed once the session starts.
+    // All push channels are subscribed once the session starts.
     expect(mockApi.onTranscriptSpan).toHaveBeenCalled()
     expect(mockApi.onItemsChanged).toHaveBeenCalled()
     expect(mockApi.onNudgesChanged).toHaveBeenCalled()
+    expect(mockApi.onAgendaChanged).toHaveBeenCalled()
     expect(mockApi.onSummaryChanged).toHaveBeenCalled()
     expect(mockApi.onItemsSummaries).toHaveBeenCalled()
   })
@@ -107,6 +111,7 @@ describe('useLiveSession', () => {
     expect(unsubSpan).toHaveBeenCalledTimes(1)
     expect(unsubItems).toHaveBeenCalledTimes(1)
     expect(unsubNudges).toHaveBeenCalledTimes(1)
+    expect(unsubAgenda).toHaveBeenCalledTimes(1)
     expect(unsubSummary).toHaveBeenCalledTimes(1)
     expect(unsubSummaries).toHaveBeenCalledTimes(1)
     // service.stop() forwards to main via audio:stop.
