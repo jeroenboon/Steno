@@ -427,6 +427,7 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
       liveSession.resume()
       return meeting
     },
+    meetingRepo: mRepo,
   })
 
   for (const channel of IPC_CHANNELS) {
