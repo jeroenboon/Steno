@@ -462,7 +462,13 @@ Commit: `feat(live): add slow-cadence agenda inference scheduler`
 
 ---
 
-### Step 4.3 — Live routing filter: Confirmed agenda + Off-agenda only
+### Step 4.3 — Live routing filter: Confirmed agenda + Off-agenda only ✅ done
+
+> Note: the runtime builds a `_liveRoutingContext()` for the rolling tick =
+> Confirmed agenda items from the repo (Proposed ones are not yet routing
+> targets, so they fall back to Off-agenda). The final pass keeps using the full
+> agenda (it does not call this helper). The repo, not the static context, is the
+> live agenda source.
 
 **Context:** during Live, Decisions/Actions may only be routed to **Confirmed**
 agenda items (plus Off-agenda). The owner/agenda assignment must therefore see only

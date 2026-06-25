@@ -20,6 +20,7 @@ import Database from 'better-sqlite3'
 import { describe, it, expect, afterEach, vi } from 'vitest'
 
 import type { AgendaItem, Meeting, MeetingId, Participant, TranscriptSpan } from '@shared/domain'
+import { OffAgenda } from '@shared/domain'
 import { FakeClock, FakeExtractionProvider } from '@shared/providers'
 
 import { runMigrations } from '../db/migrate'
@@ -405,6 +406,46 @@ describe('meeting end', () => {
     const summaryEvents = sender.sentOn('items:summaries') as ItemsSummariesPayload[]
     expect(summaryEvents).toHaveLength(1)
     expect(summaryEvents[0]?.summaries).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Live routing — Confirmed agenda + Off-agenda only (ADR 0029)
+// ---------------------------------------------------------------------------
+
+describe('live routing — Confirmed agenda + Off-agenda only', () => {
+  it('routes a live Decision to a Confirmed agenda item, never a Proposed one', async () => {
+    const h = buildHarness({ context: EMPTY_CONTEXT })
+    const aiRepo = agendaItemRepo(h.db)
+    aiRepo.insert(
+      { id: 'ai-confirmed', title: 'Begroting', topic: 'Q3-begroting', state: 'confirmed' },
+      MTG_ID,
+    )
+    aiRepo.insert(
+      { id: 'ai-proposed', title: 'Planning', topic: 'Volgend kwartaal', state: 'proposed' },
+      MTG_ID,
+    )
+
+    h.provider.scriptRollingResponse({
+      proposedDecisions: [
+        { rationale: 'Begroting akkoord', sourceSpanId: 's1', agendaItemHint: 'Begroting' },
+        { rationale: 'Planning akkoord', sourceSpanId: 's1', agendaItemHint: 'Planning' },
+      ],
+      proposedActions: [],
+    })
+
+    h.runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    h.clock.tick(20_000)
+    await h.runtime.tick()
+
+    const decisions = decisionRepo(h.db).listByMeeting(MTG_ID)
+    const find = (r: string): string | undefined =>
+      decisions.find((d) => d.rationale === r)?.agendaItemId
+
+    // The Confirmed item is a routing target.
+    expect(find('Begroting akkoord')).toBe('ai-confirmed')
+    // The Proposed item is NOT a live target → falls back to Off-agenda.
+    expect(find('Planning akkoord')).toBe(OffAgenda.id)
   })
 })
 

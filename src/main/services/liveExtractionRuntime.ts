@@ -312,8 +312,24 @@ export class LiveExtractionRuntime {
     if (this._stopped) return
     if (this._scheduler === null) return
 
-    await this._scheduler.tick(this._meetingId, this._context)
+    await this._scheduler.tick(this._meetingId, this._liveRoutingContext())
     await this._runSummary()
+  }
+
+  /**
+   * Context for a live rolling turn. Decisions/Actions may route only to
+   * Confirmed agenda items + the Off-agenda bucket during Live, so the candidate
+   * agenda is the Confirmed items from the repo; Proposed items the agent has
+   * inferred are not yet routing targets (ADR 0029). The final pass keeps using
+   * the full agenda (it does not call this). Falls back to the static context
+   * when no agenda repo is wired.
+   */
+  private _liveRoutingContext(): MeetingContext {
+    if (this._agendaItemRepo === undefined) return this._context
+    const confirmed = this._agendaItemRepo
+      .listByMeeting(this._meetingId)
+      .filter((a) => a.state === 'confirmed')
+    return { ...this._context, agendaItems: confirmed }
   }
 
   // -------------------------------------------------------------------------
