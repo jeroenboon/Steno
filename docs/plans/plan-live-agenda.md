@@ -407,7 +407,12 @@ Commit: `feat(live): infer agenda, participants and title on the final pass for 
 
 Depends on Slice 1. Implements ADR 0029's live behaviour. Build last.
 
-### Step 4.1 — Agenda proposal service (propose Proposed items + dedup)
+### Step 4.1 — Agenda proposal service (propose Proposed items + dedup) ✅ done
+
+> Note: dedups via the shared `isTitleCovered`/`normaliseAgendaTitle` (same rule
+> as the adapter grounding filter), against existing items + the Off-agenda
+> sentinel, growing the known set within a batch so in-batch duplicates are
+> skipped too. Append-only: never edits/retracts.
 
 **Context:** a small service that inserts agent-proposed Agenda Items as `proposed`,
 skipping near-duplicates of existing agenda items via a normalised-title compare
