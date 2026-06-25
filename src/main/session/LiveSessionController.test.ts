@@ -23,9 +23,11 @@ import { FakeASRProvider, FakeClock, FakeExtractionProvider } from '@shared/prov
 
 import { runMigrations } from '../db/migrate'
 import { actionRepo } from '../db/repos/actionRepo'
+import { agendaItemRepo } from '../db/repos/agendaItemRepo'
 import { decisionRepo } from '../db/repos/decisionRepo'
 import { discussionSummaryRepo } from '../db/repos/discussionSummaryRepo'
 import { meetingRepo } from '../db/repos/meetingRepo'
+import { participantRepo } from '../db/repos/participantRepo'
 import { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
 import { MemorySecretStorage } from '../settings/SecretStorage'
 import { SettingsStore } from '../settings/SettingsStore'
@@ -107,6 +109,8 @@ async function buildHarness(opts: { asrOk?: boolean } = {}): Promise<Harness> {
     transcriptSpanRepo: spanRepo,
     discussionSummaryRepo: discussionSummaryRepo(db),
     meetingRepo: mRepo,
+    agendaItemRepo: agendaItemRepo(db),
+    participantRepo: participantRepo(db),
     sender,
     clock,
     buildAsr,

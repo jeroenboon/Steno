@@ -292,6 +292,8 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     transcriptSpanRepo: spanRepo,
     discussionSummaryRepo: dsRepo,
     meetingRepo: mRepo,
+    agendaItemRepo: aiRepo,
+    participantRepo: pRepo,
     sender: mainWindow.webContents,
     clock: new RealClock(),
   })

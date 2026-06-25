@@ -24,9 +24,11 @@ import type { Clock } from '@shared/providers'
 
 import { AudioCaptureBridge, type IpcSender } from '../audio/AudioCaptureBridge'
 import type { actionRepo } from '../db/repos/actionRepo'
+import type { agendaItemRepo } from '../db/repos/agendaItemRepo'
 import type { decisionRepo } from '../db/repos/decisionRepo'
 import type { discussionSummaryRepo } from '../db/repos/discussionSummaryRepo'
 import type { meetingRepo } from '../db/repos/meetingRepo'
+import type { participantRepo } from '../db/repos/participantRepo'
 import type { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
 import { LiveExtractionRuntime } from '../services/liveExtractionRuntime'
 import { tryBuildAsrProvider, tryBuildExtractionProvider } from '../settings/providerFactory'
@@ -47,6 +49,8 @@ export interface LiveSessionControllerDeps {
   transcriptSpanRepo: ReturnType<typeof transcriptSpanRepo>
   discussionSummaryRepo: ReturnType<typeof discussionSummaryRepo>
   meetingRepo: ReturnType<typeof meetingRepo>
+  agendaItemRepo: ReturnType<typeof agendaItemRepo>
+  participantRepo: ReturnType<typeof participantRepo>
   sender: IpcSender
   clock: Clock
   /** Injected so tests can supply fake providers. Defaults to the real factory. */
@@ -67,6 +71,8 @@ export class LiveSessionController {
   private readonly _spanRepo: ReturnType<typeof transcriptSpanRepo>
   private readonly _dsRepo: ReturnType<typeof discussionSummaryRepo>
   private readonly _meetingRepo: ReturnType<typeof meetingRepo>
+  private readonly _agendaItemRepo: ReturnType<typeof agendaItemRepo>
+  private readonly _participantRepo: ReturnType<typeof participantRepo>
   private readonly _sender: IpcSender
   private readonly _clock: Clock
   private readonly _buildAsr: typeof tryBuildAsrProvider
@@ -83,6 +89,8 @@ export class LiveSessionController {
     this._spanRepo = deps.transcriptSpanRepo
     this._dsRepo = deps.discussionSummaryRepo
     this._meetingRepo = deps.meetingRepo
+    this._agendaItemRepo = deps.agendaItemRepo
+    this._participantRepo = deps.participantRepo
     this._sender = deps.sender
     this._clock = deps.clock
     this._buildAsr = deps.buildAsr ?? tryBuildAsrProvider
@@ -212,6 +220,9 @@ export class LiveSessionController {
       actionsRepo: this._actionRepo,
       spanRepo: this._spanRepo,
       dsRepo: this._dsRepo,
+      agendaItemRepo: this._agendaItemRepo,
+      participantRepo: this._participantRepo,
+      meetingRepo: this._meetingRepo,
       sender: this._sender,
     })
   }
