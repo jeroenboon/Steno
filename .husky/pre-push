@@ -1,0 +1,8 @@
+# Pre-push gate: run the fast half of the Definition of Done locally so broken
+# code never reaches GitHub (branch protection isn't enforced on a private Free
+# repo). The slow, environment-specific steps — build + the native ABI smoke
+# test — stay in CI (.github/workflows/ci.yml).
+#
+# To push despite a failure (rare; e.g. a WIP spike branch): git push --no-verify
+echo "pre-push: typecheck · lint · format:check · test"
+npm run typecheck && npm run lint && npm run format:check && npm test
