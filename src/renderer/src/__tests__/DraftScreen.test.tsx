@@ -26,6 +26,7 @@ const mockApi = {
   participantAdd: vi.fn(),
   participantRemove: vi.fn(),
   meetingStart: vi.fn(),
+  inferContextFromText: vi.fn(),
 }
 
 Object.assign(window, {
@@ -44,7 +45,7 @@ describe('DraftScreen', () => {
 
     expect(screen.getByTestId('screen-draft')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: /vergaderingtitel/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /agenda/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /agenda items/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /deelnemer/i })).toBeInTheDocument()
     expect(screen.getByRole('radiogroup', { name: /taal/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /starten/i })).toBeInTheDocument()
@@ -166,6 +167,85 @@ describe('DraftScreen', () => {
     await new Promise((resolve) => setTimeout(resolve, 100))
     expect(useAppStore.getState().activeMeeting).toBe('m-1')
     expect(useAppStore.getState().route).toBe('live')
+  })
+
+  // ---------------------------------------------------------------------------
+  // Paste an agenda (ADR 0029)
+  // ---------------------------------------------------------------------------
+
+  it('renders the paste textarea and the Uitlezen button', () => {
+    render(<DraftScreen />)
+
+    expect(screen.getByRole('textbox', { name: /agenda plakken/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /uitlezen/i })).toBeInTheDocument()
+  })
+
+  it('keeps the Uitlezen button disabled until the paste field has non-whitespace text', async () => {
+    const user = userEvent.setup()
+    render(<DraftScreen />)
+
+    const uitlezen = screen.getByRole('button', { name: /uitlezen/i })
+    expect(uitlezen).toBeDisabled()
+
+    const paste = screen.getByRole('textbox', { name: /agenda plakken/i })
+    await user.type(paste, '   ')
+    expect(uitlezen).toBeDisabled()
+
+    await user.type(paste, 'Agenda: begroting')
+    expect(uitlezen).not.toBeDisabled()
+  })
+
+  it('fills title, agenda and participants from the inferred context and keeps them editable', async () => {
+    const user = userEvent.setup()
+    mockApi.inferContextFromText.mockResolvedValue({
+      title: 'Begrotingsoverleg',
+      agendaItems: [
+        { title: 'Begroting', topic: 'Q3-begroting' },
+        { title: 'Planning', topic: 'Volgend kwartaal' },
+      ],
+      participants: [{ name: 'Jeroen' }],
+    })
+
+    render(<DraftScreen />)
+
+    const paste = screen.getByRole('textbox', { name: /agenda plakken/i })
+    await user.type(paste, 'Agenda: begroting en planning, met Jeroen')
+    await user.click(screen.getByRole('button', { name: /uitlezen/i }))
+
+    // Title input filled.
+    const titleInput = await screen.findByRole('textbox', { name: /vergaderingtitel/i })
+    expect((titleInput as HTMLInputElement).value).toBe('Begrotingsoverleg')
+
+    // Agenda + participants populated.
+    expect(await screen.findByText('Begroting')).toBeInTheDocument()
+    expect(screen.getByText('Planning')).toBeInTheDocument()
+    expect(screen.getByText('Jeroen')).toBeInTheDocument()
+
+    // The call carried the pasted text + language.
+    expect(mockApi.inferContextFromText).toHaveBeenCalledWith({
+      text: 'Agenda: begroting en planning, met Jeroen',
+      primaryLanguage: 'nl',
+    })
+
+    // Items stay removable (Confirmed Draft items, editable like manual ones).
+    await user.click(screen.getByRole('button', { name: /verwijderen begroting/i }))
+    expect(screen.queryByText('Begroting')).not.toBeInTheDocument()
+  })
+
+  it('keeps manual entry working when inference returns an empty context', async () => {
+    const user = userEvent.setup()
+    mockApi.inferContextFromText.mockResolvedValue({ agendaItems: [], participants: [] })
+
+    render(<DraftScreen />)
+
+    const paste = screen.getByRole('textbox', { name: /agenda plakken/i })
+    await user.type(paste, 'Onleesbare brij')
+    await user.click(screen.getByRole('button', { name: /uitlezen/i }))
+
+    // A gentle hint appears; the title stays empty and editable.
+    expect(await screen.findByText(/geen agenda herkend/i)).toBeInTheDocument()
+    const titleInput = screen.getByRole('textbox', { name: /vergaderingtitel/i })
+    expect((titleInput as HTMLInputElement).value).toBe('')
   })
 
   it('allows start button to be reached and activated via keyboard', async () => {

@@ -266,7 +266,13 @@ Commit: `feat(draft): expose inferContextFromText over the preload bridge`
 
 ---
 
-### Step 2.4 — DraftScreen paste field + "Uitlezen" fill
+### Step 2.4 — DraftScreen paste field + "Uitlezen" fill ✅ done **Slice 2 complete.**
+
+> Note: inferred items get client-side ids (the manual flow's ids are throwaway
+> `temp`-meeting ids anyway) and fill the existing editable lists, so they behave
+> exactly like manually added Confirmed items. Empty result ⇒ a gentle hint and
+> manual entry stays usable. Tightened the pre-existing render test's agenda
+> heading matcher to `/agenda items/i` since "Agenda plakken" is a second heading.
 
 **Context:** add a large textarea + "Uitlezen" button at the top of `DraftScreen`.
 On click it calls `inferContextFromText` and fills the existing local-state title,

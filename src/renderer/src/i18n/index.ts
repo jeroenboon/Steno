@@ -38,6 +38,12 @@ const nl = {
   'egress.indicator.label': 'Gegevensverwerking',
 
   // Draft screen (item 0014)
+  'draft.paste.heading': 'Agenda plakken',
+  'draft.paste.placeholder':
+    'Plak hier een agenda uit Word, Outlook of e-mail. We lezen de titel, agendapunten en deelnemers eruit.',
+  'draft.paste.button': 'Uitlezen',
+  'draft.paste.loading': 'Bezig met uitlezen...',
+  'draft.paste.hint': 'Geen agenda herkend. Vul de velden hieronder handmatig in.',
   'draft.meeting.title.label': 'Vergaderingtitel',
   'draft.meeting.title.placeholder': 'Bijv. Q3 Planning',
   'draft.agenda.heading': 'Agenda items',

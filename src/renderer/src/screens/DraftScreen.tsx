@@ -58,6 +58,11 @@ export function DraftScreen(): React.JSX.Element {
   const [participants, setParticipants] = useState<Participant[]>([])
   const [participantInput, setParticipantInput] = useState('')
 
+  // Paste-an-agenda (ADR 0029)
+  const [pasteText, setPasteText] = useState('')
+  const [isReading, setIsReading] = useState(false)
+  const [showPasteHint, setShowPasteHint] = useState(false)
+
   // Loading state
   const [isCreating, setIsCreating] = useState(false)
 
@@ -66,6 +71,55 @@ export function DraftScreen(): React.JSX.Element {
   // ---------------------------------------------------------------------------
 
   const isValid = meetingTitle.trim().length > 0
+
+  // ---------------------------------------------------------------------------
+  // Paste-an-agenda handler (ADR 0029)
+  //
+  // Structure pasted free text into the editable Draft fields. Pasting is an
+  // input method, so the resulting items are Confirmed Draft items (exactly the
+  // manual add/remove flow). Degrades gracefully: an empty result (e.g. no
+  // extraction key) keeps manual entry working and shows a gentle hint.
+  // ---------------------------------------------------------------------------
+
+  const handleReadPaste = async (): Promise<void> => {
+    const text = pasteText.trim()
+    if (text.length === 0 || isReading) return
+
+    setIsReading(true)
+    setShowPasteHint(false)
+    try {
+      const ctx = await window.api.inferContextFromText({ text, primaryLanguage })
+      const titleText = ctx.title?.trim() ?? ''
+      const isEmpty =
+        titleText.length === 0 && ctx.agendaItems.length === 0 && ctx.participants.length === 0
+      if (isEmpty) {
+        setShowPasteHint(true)
+        return
+      }
+      if (titleText.length > 0) setMeetingTitle(titleText)
+      if (ctx.agendaItems.length > 0) {
+        setAgendaItems(
+          ctx.agendaItems.map((a, i) => ({
+            id: `paste-agenda-${String(Date.now())}-${String(i)}`,
+            title: a.title,
+            topic: a.topic,
+          })),
+        )
+      }
+      if (ctx.participants.length > 0) {
+        setParticipants(
+          ctx.participants.map((p, i) => ({
+            id: `paste-participant-${String(Date.now())}-${String(i)}`,
+            name: p.name,
+          })),
+        )
+      }
+    } catch (err) {
+      console.error('Failed to read pasted agenda:', err)
+    } finally {
+      setIsReading(false)
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Agenda item handlers
@@ -192,6 +246,35 @@ export function DraftScreen(): React.JSX.Element {
             void handleStart()
           }}
         >
+          {/* Paste an agenda (ADR 0029) */}
+          <div className="form-group">
+            <h2 className="form-section-title">{t('draft.paste.heading')}</h2>
+            <textarea
+              className="form-input form-textarea"
+              rows={5}
+              placeholder={t('draft.paste.placeholder')}
+              aria-label={t('draft.paste.heading')}
+              value={pasteText}
+              onChange={(e) => {
+                setPasteText(e.currentTarget.value)
+              }}
+              disabled={isReading || isCreating}
+            />
+            <div className="form-row">
+              <button
+                type="button"
+                className="btn btn--secondary"
+                disabled={isReading || isCreating || pasteText.trim().length === 0}
+                onClick={() => {
+                  void handleReadPaste()
+                }}
+              >
+                {isReading ? t('draft.paste.loading') : t('draft.paste.button')}
+              </button>
+            </div>
+            {showPasteHint && <p className="form-hint">{t('draft.paste.hint')}</p>}
+          </div>
+
           {/* Meeting Title */}
           <div className="form-group">
             <label htmlFor="meeting-title" className="form-label">
