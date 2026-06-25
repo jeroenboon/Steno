@@ -16,7 +16,7 @@
  * rendering stays in LiveScreen.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   AgendaChangedPayloadSchema,
@@ -34,6 +34,8 @@ import { useAppStore } from '../store/appStore'
 export interface UseLiveSessionResult {
   /** Smoothed RMS audio level (0–1) for the live meter. */
   audioLevel: number
+  /** Pause/resume audio emission for the active capture session. */
+  setCapturePaused: (paused: boolean) => void
 }
 
 export function useLiveSession(liveMeetingId: string | null): UseLiveSessionResult {
@@ -178,5 +180,9 @@ export function useLiveSession(liveMeetingId: string | null): UseLiveSessionResu
     setRoute,
   ])
 
-  return { audioLevel }
+  const setCapturePaused = useCallback((paused: boolean) => {
+    serviceRef.current?.setPaused(paused)
+  }, [])
+
+  return { audioLevel, setCapturePaused }
 }

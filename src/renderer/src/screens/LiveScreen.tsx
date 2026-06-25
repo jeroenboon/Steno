@@ -499,7 +499,7 @@ export function LiveScreen(): React.JSX.Element {
   // --- Session orchestration (audio capture + IPC subscriptions) ---
   // Keyed on liveMeetingId (a recording session), not activeMeeting (which is
   // also set when a meeting is merely loaded for Review).
-  const { audioLevel } = useLiveSession(liveMeetingId)
+  const { audioLevel, setCapturePaused } = useLiveSession(liveMeetingId)
 
   // --- Marginalia leaders ---
   // The live-layout is the positioned container the leader overlay measures
@@ -638,15 +638,17 @@ export function LiveScreen(): React.JSX.Element {
     try {
       if (paused) {
         await window.api.meetingResume({ meetingId: activeMeeting })
+        setCapturePaused(false)
         setPaused(false)
       } else {
         await window.api.meetingPause({ meetingId: activeMeeting })
+        setCapturePaused(true)
         setPaused(true)
       }
     } catch (err) {
       console.error('[LiveScreen] pause/resume failed:', err)
     }
-  }, [activeMeeting, paused])
+  }, [activeMeeting, paused, setCapturePaused])
 
   const handleEndMeeting = useCallback(async () => {
     if (activeMeeting === null || endingMeeting) return

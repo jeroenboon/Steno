@@ -106,6 +106,7 @@ export class AudioCaptureService {
   private _loopbackSource: MediaStreamAudioSourceNode | null = null
   // eslint-disable-next-line @typescript-eslint/no-deprecated
   private _processor: ScriptProcessorNode | null = null
+  private _paused = false
   private _micStream: MediaStream | null = null
   private _loopbackStream: MediaStream | null = null
   private _framer: PcmFramer | null = null
@@ -186,6 +187,11 @@ export class AudioCaptureService {
 
     // eslint-disable-next-line @typescript-eslint/no-deprecated
     processor.onaudioprocess = (event) => {
+      // Paused (meeting pause halts audio, CONTEXT.md): keep the audio graph
+      // alive so resume needs no re-permission, but emit nothing — no frames
+      // reach the ASR session while paused.
+      if (this._paused) return
+
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       const micData = event.inputBuffer.getChannelData(0)
 
@@ -223,6 +229,14 @@ export class AudioCaptureService {
     await window.api.audioStart({ meetingId })
 
     return { loopbackState }
+  }
+
+  /**
+   * Pause or resume audio emission. While paused the audio graph stays alive
+   * (no re-permission on resume) but no frames are sent to the ASR session.
+   */
+  setPaused(paused: boolean): void {
+    this._paused = paused
   }
 
   /** Stop capture and tear down the audio graph. */
