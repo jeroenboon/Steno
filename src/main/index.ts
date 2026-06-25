@@ -34,6 +34,7 @@ import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
 import { createIpcRegistry } from './ipc-registry'
 import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
+import { MeetingLifecycleService } from './services/meetingLifecycleService'
 import { ImportSessionController } from './session/ImportSessionController'
 import { LiveSessionController } from './session/LiveSessionController'
 import { testProviderConnection } from './settings/connectionTest'
@@ -202,6 +203,8 @@ const IPC_CHANNELS: IpcChannel[] = [
   'context:inferFromText',
   'agendaItem:confirm',
   'agendaItem:editAndConfirm',
+  'meeting:pause',
+  'meeting:resume',
 ]
 
 async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
@@ -299,6 +302,9 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     sender: mainWindow.webContents,
     clock: new RealClock(),
   })
+
+  // Pause/resume enforcer: persists the paused sub-state on the Meeting.
+  const meetingLifecycle = new MeetingLifecycleService(mRepo, new RealClock())
 
   // ---------------------------------------------------------------------------
   // Import session controller (item 0026)
@@ -411,6 +417,16 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
       return built.provider.inferContext({ source: { text: req.text } })
     },
     agendaItemRepo: aiRepo,
+    onMeetingPause: (meetingId) => {
+      const meeting = meetingLifecycle.pauseMeeting(meetingId)
+      liveSession.pause()
+      return meeting
+    },
+    onMeetingResume: (meetingId) => {
+      const meeting = meetingLifecycle.resumeMeeting(meetingId)
+      liveSession.resume()
+      return meeting
+    },
   })
 
   for (const channel of IPC_CHANNELS) {

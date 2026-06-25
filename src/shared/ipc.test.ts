@@ -15,6 +15,8 @@ import {
   AgendaChangedPayloadSchema,
   AgendaItemConfirmRequestSchema,
   AgendaItemEditAndConfirmRequestSchema,
+  MeetingPauseRequestSchema,
+  MeetingResumeRequestSchema,
   type IpcChannel,
 } from './ipc'
 
@@ -235,6 +237,24 @@ describe('IpcChannel', () => {
     const confirm: IpcChannel = 'agendaItem:confirm'
     const edit: IpcChannel = 'agendaItem:editAndConfirm'
     expect([confirm, edit]).toEqual(['agendaItem:confirm', 'agendaItem:editAndConfirm'])
+  })
+
+  it('includes the meeting pause/resume channel names', () => {
+    const pause: IpcChannel = 'meeting:pause'
+    const resume: IpcChannel = 'meeting:resume'
+    expect([pause, resume]).toEqual(['meeting:pause', 'meeting:resume'])
+  })
+})
+
+describe('MeetingPause/Resume request schemas', () => {
+  it('parse a valid meetingId', () => {
+    expect(MeetingPauseRequestSchema.parse({ meetingId: 'm-1' })).toEqual({ meetingId: 'm-1' })
+    expect(MeetingResumeRequestSchema.parse({ meetingId: 'm-1' })).toEqual({ meetingId: 'm-1' })
+  })
+
+  it('reject an empty meetingId', () => {
+    expect(() => MeetingPauseRequestSchema.parse({ meetingId: '' })).toThrow()
+    expect(() => MeetingResumeRequestSchema.parse({ meetingId: '' })).toThrow()
   })
 })
 

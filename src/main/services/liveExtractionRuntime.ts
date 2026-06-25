@@ -205,6 +205,7 @@ export class LiveExtractionRuntime {
   private readonly _meetingStartedAt: Date
 
   private _stopped = false
+  private _paused = false
   private _endMeetingCalled = false
   /** Latest running summary — in-memory only, not persisted. */
   private _runningSummary = ''
@@ -343,7 +344,7 @@ export class LiveExtractionRuntime {
    * Also triggers the running summary update when the scheduler fired a turn.
    */
   async tick(): Promise<void> {
-    if (this._stopped) return
+    if (this._stopped || this._paused) return
     if (this._scheduler === null) return
 
     await this._scheduler.tick(this._meetingId, this._liveRoutingContext())
@@ -351,13 +352,19 @@ export class LiveExtractionRuntime {
     await this._runSummary()
   }
 
-  /** Pause the live agenda inference cadence (mirrors the meeting pause). */
+  /**
+   * Pause the live cadence (the meeting pause halts audio and the cadence,
+   * CONTEXT.md). tick() becomes a no-op and the slow agenda scheduler halts
+   * until resume().
+   */
   pause(): void {
+    this._paused = true
     this._agendaScheduler?.pause()
   }
 
-  /** Resume the live agenda inference cadence after a pause. */
+  /** Resume the live cadence after a pause. */
   resume(): void {
+    this._paused = false
     this._agendaScheduler?.resume()
   }
 

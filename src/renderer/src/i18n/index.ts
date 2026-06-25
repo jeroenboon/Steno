@@ -311,6 +311,8 @@ const nl = {
 
   // Live screen — end meeting (item 0021)
   'live.end.button': 'Vergadering beëindigen',
+  'live.pause.button': 'Pauzeren',
+  'live.resume.button': 'Hervatten',
   'live.noactive.message': 'Ga naar Voorbereiding om een vergadering te starten.',
   'live.noactive.action': 'Naar voorbereiding',
 

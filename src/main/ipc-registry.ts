@@ -80,6 +80,10 @@ import {
   AgendaItemConfirmResponseSchema,
   AgendaItemEditAndConfirmRequestSchema,
   AgendaItemEditAndConfirmResponseSchema,
+  MeetingPauseRequestSchema,
+  MeetingPauseResponseSchema,
+  MeetingResumeRequestSchema,
+  MeetingResumeResponseSchema,
 } from '@shared/ipc'
 import type {
   IpcChannel,
@@ -120,6 +124,8 @@ import type {
   ContextInferFromTextResponse,
   AgendaItemConfirmResponse,
   AgendaItemEditAndConfirmResponse,
+  MeetingPauseResponse,
+  MeetingResumeResponse,
 } from '@shared/ipc'
 import type { Clock } from '@shared/providers'
 
@@ -277,6 +283,14 @@ export interface IpcRegistryDependencies {
    * channels throw "not available".
    */
   agendaItemRepo?: ReturnType<typeof agendaItemRepo>
+  /**
+   * Pause/resume the active Live meeting. Wired in main/index.ts to persist the
+   * paused flag (MeetingLifecycleService) and forward to the live runtime
+   * (runtime.pause/resume). Return the updated Meeting. When absent those
+   * channels throw "not available".
+   */
+  onMeetingPause?: (meetingId: string) => import('@shared/domain').Meeting
+  onMeetingResume?: (meetingId: string) => import('@shared/domain').Meeting
 }
 
 // ---------------------------------------------------------------------------
@@ -709,6 +723,26 @@ function makeHandleAgendaItemEditAndConfirm(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleMeetingPause(deps: IpcRegistryDependencies) {
+  return function handleMeetingPause(raw: unknown): MeetingPauseResponse {
+    const req = MeetingPauseRequestSchema.parse(raw)
+    if (deps.onMeetingPause === undefined) {
+      throw new Error('meeting:pause is not available')
+    }
+    return MeetingPauseResponseSchema.parse(deps.onMeetingPause(req.meetingId))
+  }
+}
+
+function makeHandleMeetingResume(deps: IpcRegistryDependencies) {
+  return function handleMeetingResume(raw: unknown): MeetingResumeResponse {
+    const req = MeetingResumeRequestSchema.parse(raw)
+    if (deps.onMeetingResume === undefined) {
+      throw new Error('meeting:resume is not available')
+    }
+    return MeetingResumeResponseSchema.parse(deps.onMeetingResume(req.meetingId))
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -750,6 +784,8 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'context:inferFromText': makeHandleInferContextFromText(deps),
     'agendaItem:confirm': makeHandleAgendaItemConfirm(deps),
     'agendaItem:editAndConfirm': makeHandleAgendaItemEditAndConfirm(deps),
+    'meeting:pause': makeHandleMeetingPause(deps),
+    'meeting:resume': makeHandleMeetingResume(deps),
   }
 
   return {

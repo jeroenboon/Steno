@@ -170,6 +170,16 @@ export class LiveSessionController {
     this._currentBridge?.pushAudioFrame(frame)
   }
 
+  /** Pause the active runtime's live cadence. No-op when not started. */
+  pause(): void {
+    this._activeRuntime?.pause()
+  }
+
+  /** Resume the active runtime's live cadence. No-op when not started. */
+  resume(): void {
+    this._activeRuntime?.resume()
+  }
+
   // -------------------------------------------------------------------------
   // Internal
   // -------------------------------------------------------------------------

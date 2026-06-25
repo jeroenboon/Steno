@@ -46,6 +46,9 @@ const mockApi = {
   onAgendaChanged: vi.fn().mockReturnValue(mockUnsub),
   agendaItemConfirm: vi.fn(),
   agendaItemEditAndConfirm: vi.fn(),
+  meetingEnd: vi.fn().mockResolvedValue({ ok: true }),
+  meetingPause: vi.fn().mockResolvedValue({ id: 'active-session', paused: true }),
+  meetingResume: vi.fn().mockResolvedValue({ id: 'active-session', paused: false }),
   meetingCreate: vi.fn(),
   agendaItemAdd: vi.fn(),
   agendaItemRemove: vi.fn().mockResolvedValue({ ok: true }),
@@ -503,6 +506,25 @@ describe('LiveScreen — item 0018 items UI', () => {
     await waitFor(() => {
       expect(screen.getByTestId('screen-live')).toHaveClass('screen--live--recording')
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Pause / resume
+// ---------------------------------------------------------------------------
+
+describe('LiveScreen — pause/resume', () => {
+  it('pauses the meeting and toggles to a resume control', async () => {
+    const user = userEvent.setup()
+    render(<LiveScreen />)
+
+    await user.click(screen.getByRole('button', { name: /pauzeren/i }))
+    expect(mockApi.meetingPause).toHaveBeenCalledWith({ meetingId: 'active-session' })
+
+    // The control flips to resume.
+    const resumeBtn = await screen.findByRole('button', { name: /hervatten/i })
+    await user.click(resumeBtn)
+    expect(mockApi.meetingResume).toHaveBeenCalledWith({ meetingId: 'active-session' })
   })
 })
 

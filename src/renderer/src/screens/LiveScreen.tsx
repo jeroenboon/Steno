@@ -513,6 +513,7 @@ export function LiveScreen(): React.JSX.Element {
   const [editState, setEditState] = useState<EditState | null>(null)
   const [addingKind, setAddingKind] = useState<ItemKind | null>(null)
   const [endingMeeting, setEndingMeeting] = useState(false)
+  const [paused, setPaused] = useState(false)
   // Inline edit state for a Proposed agenda item being groomed (ADR 0029).
   const [agendaEdit, setAgendaEdit] = useState<{ id: string; title: string } | null>(null)
 
@@ -632,6 +633,21 @@ export function LiveScreen(): React.JSX.Element {
     }
   }, [agendaEdit, agendaItems, setAgendaItems])
 
+  const handleTogglePause = useCallback(async () => {
+    if (activeMeeting === null) return
+    try {
+      if (paused) {
+        await window.api.meetingResume({ meetingId: activeMeeting })
+        setPaused(false)
+      } else {
+        await window.api.meetingPause({ meetingId: activeMeeting })
+        setPaused(true)
+      }
+    } catch (err) {
+      console.error('[LiveScreen] pause/resume failed:', err)
+    }
+  }, [activeMeeting, paused])
+
   const handleEndMeeting = useCallback(async () => {
     if (activeMeeting === null || endingMeeting) return
     setEndingMeeting(true)
@@ -749,17 +765,30 @@ export function LiveScreen(): React.JSX.Element {
             {meetingTitle.length > 0 ? meetingTitle : t('screen.live.title')}
           </h1>
         </div>
-        <button
-          type="button"
-          className="btn btn--secondary live-end-btn"
-          data-testid="end-meeting-btn"
-          disabled={endingMeeting}
-          onClick={() => {
-            void handleEndMeeting()
-          }}
-        >
-          {t('live.end.button')}
-        </button>
+        <div className="live-header__actions">
+          <button
+            type="button"
+            className="btn btn--secondary live-pause-btn"
+            data-testid="pause-meeting-btn"
+            disabled={endingMeeting}
+            onClick={() => {
+              void handleTogglePause()
+            }}
+          >
+            {paused ? t('live.resume.button') : t('live.pause.button')}
+          </button>
+          <button
+            type="button"
+            className="btn btn--secondary live-end-btn"
+            data-testid="end-meeting-btn"
+            disabled={endingMeeting}
+            onClick={() => {
+              void handleEndMeeting()
+            }}
+          >
+            {t('live.end.button')}
+          </button>
+        </div>
       </header>
 
       {/* ------------------------------------------------------------------ */}

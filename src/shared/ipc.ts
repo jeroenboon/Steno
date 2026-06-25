@@ -751,6 +751,27 @@ export type AgendaItemEditAndConfirmResponse = z.infer<
 >
 
 // ---------------------------------------------------------------------------
+// meeting:pause / meeting:resume — pause is a sub-state within Live (the same
+// transcript continues after resume). Halts the live cadence (runtime.pause).
+// ---------------------------------------------------------------------------
+
+export const MeetingPauseRequestSchema = z.object({
+  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
+})
+export const MeetingPauseResponseSchema = MeetingSchema
+
+export type MeetingPauseRequest = z.infer<typeof MeetingPauseRequestSchema>
+export type MeetingPauseResponse = z.infer<typeof MeetingPauseResponseSchema>
+
+export const MeetingResumeRequestSchema = z.object({
+  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
+})
+export const MeetingResumeResponseSchema = MeetingSchema
+
+export type MeetingResumeRequest = z.infer<typeof MeetingResumeRequestSchema>
+export type MeetingResumeResponse = z.infer<typeof MeetingResumeResponseSchema>
+
+// ---------------------------------------------------------------------------
 // Channel registry — exhaustive union of all channel names
 // ---------------------------------------------------------------------------
 
@@ -789,6 +810,8 @@ export type IpcChannel =
   | 'context:inferFromText'
   | 'agendaItem:confirm'
   | 'agendaItem:editAndConfirm'
+  | 'meeting:pause'
+  | 'meeting:resume'
 
 /**
  * One-way channels: renderer sends, main receives (no invoke/response).
@@ -1025,4 +1048,8 @@ export interface RendererApi {
   agendaItemEditAndConfirm: (
     req: AgendaItemEditAndConfirmRequest,
   ) => Promise<AgendaItemEditAndConfirmResponse>
+  /** Pause a Live meeting (sub-state within Live; halts the live cadence). */
+  meetingPause: (req: MeetingPauseRequest) => Promise<MeetingPauseResponse>
+  /** Resume a paused Live meeting; the same transcript continues. */
+  meetingResume: (req: MeetingResumeRequest) => Promise<MeetingResumeResponse>
 }

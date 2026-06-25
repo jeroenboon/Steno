@@ -85,6 +85,10 @@ import type {
   AgendaItemConfirmResponse,
   AgendaItemEditAndConfirmRequest,
   AgendaItemEditAndConfirmResponse,
+  MeetingPauseRequest,
+  MeetingPauseResponse,
+  MeetingResumeRequest,
+  MeetingResumeResponse,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -320,6 +324,11 @@ const api: RendererApi = {
       'agendaItem:editAndConfirm',
       req,
     ) as Promise<AgendaItemEditAndConfirmResponse>,
+
+  meetingPause: (req: MeetingPauseRequest) =>
+    ipcRenderer.invoke('meeting:pause', req) as Promise<MeetingPauseResponse>,
+  meetingResume: (req: MeetingResumeRequest) =>
+    ipcRenderer.invoke('meeting:resume', req) as Promise<MeetingResumeResponse>,
 }
 
 contextBridge.exposeInMainWorld('api', api)

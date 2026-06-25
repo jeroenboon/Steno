@@ -492,6 +492,25 @@ describe('agenda inference scheduler wiring', () => {
     expect(agendaItemRepo(h.db).listByMeeting(MTG_ID)).toHaveLength(1)
   })
 
+  it('pause() halts the rolling extraction tick; resume() restarts it', async () => {
+    const h = buildHarness({ cadenceMs: 20_000 })
+    h.provider.scriptRollingResponse({
+      proposedDecisions: [{ rationale: 'Beslist', sourceSpanId: 's1' }],
+      proposedActions: [],
+    })
+
+    h.runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    h.runtime.pause()
+    h.clock.tick(20_000)
+    await h.runtime.tick()
+    // Paused: the rolling turn did not run.
+    expect(h.provider.callCount()).toBe(0)
+
+    h.runtime.resume()
+    await h.runtime.tick()
+    expect(h.provider.callCount()).toBe(1)
+  })
+
   it('stops the agenda scheduler at meeting end (no inference after the final pass)', async () => {
     const h = buildHarness({ context: EMPTY_CONTEXT, agendaCadenceMs: 90_000 })
     h.provider.scriptInferContextResponse({ agendaItems: [], participants: [] })
