@@ -9,6 +9,9 @@ import {
   ImportStartResponseSchema,
   ImportFinishRequestSchema,
   ImportProgressEventSchema,
+  ContextInferFromTextRequestSchema,
+  ContextInferFromTextResponseSchema,
+  type IpcChannel,
 } from './ipc'
 
 // Slice 1 — Zod schema validation: valid payloads parse, invalid ones throw
@@ -144,5 +147,65 @@ describe('ImportProgressEventSchema', () => {
 
   it('rejects an unknown stage', () => {
     expect(() => ImportProgressEventSchema.parse({ stage: 'pondering' })).toThrow()
+  })
+})
+
+// Slice 2 — context:inferFromText (paste an agenda, ADR 0029)
+
+describe('ContextInferFromTextRequestSchema', () => {
+  it('parses a valid paste request', () => {
+    const result = ContextInferFromTextRequestSchema.parse({
+      text: 'Agenda: begroting bespreken',
+      primaryLanguage: 'nl',
+    })
+    expect(result.text).toBe('Agenda: begroting bespreken')
+    expect(result.primaryLanguage).toBe('nl')
+  })
+
+  it('rejects empty text', () => {
+    expect(() =>
+      ContextInferFromTextRequestSchema.parse({ text: '', primaryLanguage: 'nl' }),
+    ).toThrow()
+  })
+
+  it('rejects a missing primary language', () => {
+    expect(() => ContextInferFromTextRequestSchema.parse({ text: 'Agenda' })).toThrow()
+  })
+})
+
+describe('ContextInferFromTextResponseSchema', () => {
+  it('parses an inferred context with an optional title', () => {
+    const result = ContextInferFromTextResponseSchema.parse({
+      agendaItems: [{ title: 'Begroting', topic: 'Q3' }],
+      participants: [{ name: 'Jeroen' }],
+      title: 'Begrotingsoverleg',
+    })
+    expect(result.agendaItems[0]?.title).toBe('Begroting')
+    expect(result.title).toBe('Begrotingsoverleg')
+  })
+
+  it('parses an empty inferred context (nothing could be inferred)', () => {
+    expect(ContextInferFromTextResponseSchema.parse({ agendaItems: [], participants: [] })).toEqual(
+      {
+        agendaItems: [],
+        participants: [],
+      },
+    )
+  })
+
+  it('rejects an agenda item with an empty title', () => {
+    expect(() =>
+      ContextInferFromTextResponseSchema.parse({
+        agendaItems: [{ title: '', topic: 'x' }],
+        participants: [],
+      }),
+    ).toThrow()
+  })
+})
+
+describe('IpcChannel', () => {
+  it('includes the context:inferFromText channel name', () => {
+    const channel: IpcChannel = 'context:inferFromText'
+    expect(channel).toBe('context:inferFromText')
   })
 })

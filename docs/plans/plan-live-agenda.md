@@ -199,7 +199,12 @@ Commit: `feat(extraction): support text source, title and grounding in OpenAI-co
 Depends on Slice 1 (generalised `inferContext` with a text source). Smallest
 user-facing win.
 
-### Step 2.1 — `context:inferFromText` IPC contract
+### Step 2.1 — `context:inferFromText` IPC contract ✅ done
+
+> Note: the `inferContextFromText` method on `RendererApi` was deferred to Step
+> 2.3, where the preload implements it — adding it here would break the preload's
+> typecheck (per-commit DoD). This step lands the request/response schemas and
+> the `IpcChannel` union member only.
 
 `/tdd`:
 

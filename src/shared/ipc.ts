@@ -13,6 +13,7 @@ import { z } from 'zod'
 
 import { MeetingSchema, AgendaItemSchema, ParticipantSchema } from './domain'
 import { DecisionSchema, ActionSchema, DiscussionSummarySchema, NudgeSchema } from './domain/types'
+import { InferredContextSchema } from './providers'
 import { type EgressState } from './settings/egressState'
 import { AppSettingsSchema } from './settings/settingsSchema'
 
@@ -674,6 +675,29 @@ export const ImportProgressEventSchema = z.object({
 export type ImportProgressEvent = z.infer<typeof ImportProgressEventSchema>
 
 // ---------------------------------------------------------------------------
+// context:inferFromText — structure a pasted agenda into title + agenda items
+// + participants (paste-an-agenda, ADR 0029)
+//
+// The user pastes free text in Draft; main builds the extraction provider and
+// calls inferContext({ source: { text } }). The resulting items fill the
+// editable Draft fields as Confirmed items (pasting is an input method, not
+// agent inference). Degrades to an empty context when no extraction provider is
+// configured, so manual entry still works.
+// ---------------------------------------------------------------------------
+
+export const ContextInferFromTextRequestSchema = z.object({
+  /** The raw text the user pasted (an agenda from Word/Markdown/anything). */
+  text: z.string().min(1, 'Text cannot be empty'),
+  /** The primary language for inference (e.g. 'nl', 'en'). */
+  primaryLanguage: z.string().min(1, 'Primary language cannot be empty'),
+})
+
+export const ContextInferFromTextResponseSchema = InferredContextSchema
+
+export type ContextInferFromTextRequest = z.infer<typeof ContextInferFromTextRequestSchema>
+export type ContextInferFromTextResponse = z.infer<typeof ContextInferFromTextResponseSchema>
+
+// ---------------------------------------------------------------------------
 // Channel registry — exhaustive union of all channel names
 // ---------------------------------------------------------------------------
 
@@ -709,6 +733,7 @@ export type IpcChannel =
   | 'model:download'
   | 'import:start'
   | 'import:finish'
+  | 'context:inferFromText'
 
 /**
  * One-way channels: renderer sends, main receives (no invoke/response).
