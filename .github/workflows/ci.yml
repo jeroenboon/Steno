@@ -37,11 +37,12 @@ jobs:
           node-version: 22
           cache: npm
 
-      # Match the npm that generated package-lock.json (npm 11). Node 22 ships
-      # npm 10, whose optional-dependency resolution (the @emnapi wasm deps)
-      # differs enough that `npm ci` rejects an npm-11 lockfile as out of sync.
+      # Pin the exact npm that generated package-lock.json. The optional
+      # @emnapi wasm-fallback deps (via the ESLint resolver) resolve differently
+      # across npm patch versions, so an npm mismatch makes `npm ci` reject the
+      # lockfile as out of sync. Keep this in lockstep with the dev toolchain.
       - name: Pin npm to the lockfile's version
-        run: npm install --global npm@11
+        run: npm install --global npm@11.6.2
 
       # The Electron binary is a large download; cache it across runs so only
       # the first run (or a lockfile change) pays for it. Cache misses are
