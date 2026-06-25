@@ -1448,17 +1448,71 @@ body::before {
  * Settings sections (D5)
  * --------------------------------------------------------------------------- */
 
+/* ---------------------------------------------------------------------------
+ * Provider role card (ASR / Extraction) — the Phase 0.4 role-card pattern.
+ * Each role is a self-contained card so the page reads as a few clear units
+ * rather than one long ribbon of fields.
+ * --------------------------------------------------------------------------- */
+.provider-role-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background-color: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.provider-role-card__title {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+/* The provider select holds a short label ("Deepgram — Cloud"); don't let it
+ * stretch the full card width. */
+.provider-role-card__select {
+  max-width: 360px;
+}
+
+.provider-role-card__key-status {
+  margin: 0;
+}
+
+.provider-role-card__key-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--color-confirmed);
+}
+
+.provider-role-card__key-badge::before {
+  content: '✓';
+}
+
+/* Config panel sits below the choice, set off by a hairline so the chosen
+ * provider's settings read as a sub-group of the card. */
+.provider-role-card__config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-dim);
+}
+
 .settings-section {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding-bottom: var(--space-6);
-  border-bottom: 1px solid var(--color-border-dim);
-}
-
-.settings-section:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+  padding: var(--space-5);
+  background-color: var(--color-surface-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
 .settings-section__heading {
@@ -1476,7 +1530,7 @@ body::before {
   margin: 0;
   line-height: 1.5;
   padding: var(--space-2) var(--space-3);
-  background-color: var(--color-surface-1);
+  background-color: var(--color-surface-2);
   border-left: 2px solid var(--color-border);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
@@ -1490,6 +1544,30 @@ body::before {
   font-size: 12px;
   color: var(--color-nudge);
   margin: 0;
+}
+
+/* API-key input-group: the key field and its Save/Cancel buttons read as one
+ * joined control instead of a wide input with a lonely button far to the right. */
+.settings-key-row {
+  display: flex;
+  align-items: stretch;
+  max-width: 480px;
+}
+
+.settings-key-row .form-input {
+  flex: 1;
+  min-width: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.settings-key-row .btn {
+  border-radius: 0;
+  border-left-width: 0;
+  white-space: nowrap;
+}
+
+.settings-key-row .btn:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 
 .settings-custom-openai {

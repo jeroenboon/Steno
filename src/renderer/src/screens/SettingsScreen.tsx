@@ -197,7 +197,7 @@ function KeyField(props: KeyFieldProps): React.JSX.Element {
       ) : null}
 
       {showInput && (
-        <div className="form-row">
+        <div className="settings-key-row">
           <input
             id={props.testIdInput}
             data-testid={props.testIdInput}
