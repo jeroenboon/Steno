@@ -132,6 +132,7 @@ function buildHarness(
   opts: {
     noProvider?: boolean
     cadenceMs?: number
+    agendaCadenceMs?: number
     context?: MeetingContext
     meeting?: Meeting
   } = {},
@@ -168,6 +169,7 @@ function buildHarness(
     agendaItemRepo: agendaItemRepo(db),
     participantRepo: participantRepo(db),
     meetingRepo: meetingRepo(db),
+    ...(opts.agendaCadenceMs !== undefined ? { agendaCadenceMs: opts.agendaCadenceMs } : {}),
     sender,
   })
 
@@ -446,6 +448,63 @@ describe('live routing — Confirmed agenda + Off-agenda only', () => {
     expect(find('Begroting akkoord')).toBe('ai-confirmed')
     // The Proposed item is NOT a live target → falls back to Off-agenda.
     expect(find('Planning akkoord')).toBe(OffAgenda.id)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Agenda inference scheduler wiring (ADR 0029)
+// ---------------------------------------------------------------------------
+
+describe('agenda inference scheduler wiring', () => {
+  it('proposes agenda items on a slow tick from accumulating spans', async () => {
+    const h = buildHarness({ context: EMPTY_CONTEXT, agendaCadenceMs: 90_000 })
+    h.provider.scriptInferContextResponse({
+      agendaItems: [{ title: 'Begroting', topic: 'Q3-begroting' }],
+      participants: [],
+    })
+
+    h.runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    h.clock.tick(90_000)
+    await h.runtime.tick()
+
+    const agenda = agendaItemRepo(h.db).listByMeeting(MTG_ID)
+    expect(agenda.find((a) => a.title === 'Begroting')?.state).toBe('proposed')
+  })
+
+  it('does not propose agenda items while paused', async () => {
+    const h = buildHarness({ context: EMPTY_CONTEXT, agendaCadenceMs: 90_000 })
+    h.provider.scriptInferContextResponse({
+      agendaItems: [{ title: 'Begroting', topic: 'Q3-begroting' }],
+      participants: [],
+    })
+
+    h.runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    h.runtime.pause()
+    h.clock.tick(90_000)
+    await h.runtime.tick()
+
+    expect(agendaItemRepo(h.db).listByMeeting(MTG_ID)).toHaveLength(0)
+
+    // Resume re-arms it.
+    h.runtime.resume()
+    h.clock.tick(90_000)
+    await h.runtime.tick()
+    expect(agendaItemRepo(h.db).listByMeeting(MTG_ID)).toHaveLength(1)
+  })
+
+  it('stops the agenda scheduler at meeting end (no inference after the final pass)', async () => {
+    const h = buildHarness({ context: EMPTY_CONTEXT, agendaCadenceMs: 90_000 })
+    h.provider.scriptInferContextResponse({ agendaItems: [], participants: [] })
+
+    h.runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    await h.runtime.endMeeting({ ...MEETING, state: 'ended' })
+    // The final pass inferred context once.
+    expect(h.provider.inferContextCalls()).toHaveLength(1)
+
+    h.clock.tick(90_000)
+    await h.runtime.tick()
+    // The agenda scheduler did not fire after end.
+    expect(h.provider.inferContextCalls()).toHaveLength(1)
   })
 })
 

@@ -63,6 +63,8 @@ import type { meetingRepo } from '../db/repos/meetingRepo'
 import type { participantRepo } from '../db/repos/participantRepo'
 import type { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
 
+import { AgendaInferenceScheduler } from './agendaInferenceScheduler'
+import { AgendaProposalService } from './agendaProposalService'
 import {
   ExtractionLoopScheduler,
   type MeetingContext,
@@ -164,6 +166,12 @@ export interface LiveExtractionRuntimeOptions {
   agendaItemRepo?: ReturnType<typeof agendaItemRepo>
   participantRepo?: ReturnType<typeof participantRepo>
   meetingRepo?: ReturnType<typeof meetingRepo>
+  /**
+   * Cadence (ms) for the slow live agenda inference scheduler (ADR 0029).
+   * Defaults to the scheduler's own default. Only armed when an extraction
+   * provider and an agendaItemRepo are both present.
+   */
+  agendaCadenceMs?: number
   sender: IpcSender
   /**
    * When the meeting started (used for the EmptyAgendaItem nudge heuristic).
@@ -182,6 +190,8 @@ export class LiveExtractionRuntime {
   private _context: MeetingContext
   /** Null when no extraction provider configured (degraded path). */
   private readonly _scheduler: ExtractionLoopScheduler | null
+  /** Slow live agenda inference scheduler; null when not armed (ADR 0029). */
+  private readonly _agendaScheduler: AgendaInferenceScheduler | null
   /** The extraction provider, or null when degraded. Used for summarise/query. */
   private readonly _provider: ExtractionProvider | null
   private readonly _spanRepo: ReturnType<typeof transcriptSpanRepo>
@@ -233,10 +243,27 @@ export class LiveExtractionRuntime {
         ...opts.schedulerDeps,
         itemLifecycleService: wrappedService,
       })
+
+      // Arm the slow live agenda inference scheduler when an agenda repo is
+      // wired (ADR 0029). It shares the runtime's span store and clock — no
+      // second source of truth. Absent repo ⇒ no live agenda inference.
+      if (opts.agendaItemRepo !== undefined) {
+        this._agendaScheduler = new AgendaInferenceScheduler({
+          provider: opts.schedulerDeps.provider,
+          proposalService: new AgendaProposalService({ agendaItemRepo: opts.agendaItemRepo }),
+          spanRepo: opts.spanRepo,
+          agendaItemRepo: opts.agendaItemRepo,
+          clock: opts.schedulerDeps.clock,
+          ...(opts.agendaCadenceMs !== undefined ? { cadenceMs: opts.agendaCadenceMs } : {}),
+        })
+      } else {
+        this._agendaScheduler = null
+      }
     } else {
       // Degraded path: no extraction provider — keep transcription + persistence
       this._provider = null
       this._scheduler = null
+      this._agendaScheduler = null
       console.warn(
         '[LiveExtractionRuntime] No extraction provider configured. ' +
           'Transcript spans will be persisted but live extraction is disabled. ' +
@@ -313,7 +340,18 @@ export class LiveExtractionRuntime {
     if (this._scheduler === null) return
 
     await this._scheduler.tick(this._meetingId, this._liveRoutingContext())
+    await this._agendaScheduler?.tick(this._meetingId)
     await this._runSummary()
+  }
+
+  /** Pause the live agenda inference cadence (mirrors the meeting pause). */
+  pause(): void {
+    this._agendaScheduler?.pause()
+  }
+
+  /** Resume the live agenda inference cadence after a pause. */
+  resume(): void {
+    this._agendaScheduler?.resume()
   }
 
   /**
@@ -395,6 +433,10 @@ export class LiveExtractionRuntime {
     this._endMeetingCalled = true
 
     if (this._scheduler === null) return
+
+    // Stop the slow agenda scheduler before the final pass so it can't fire a
+    // late inference turn concurrently with (or after) finalisation.
+    this._agendaScheduler?.pause()
 
     // Un-prepared live meeting (quick-start / agenda spoken at the top): infer
     // the agenda, participants and title over the whole transcript before the

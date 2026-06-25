@@ -493,7 +493,16 @@ Commit: `feat(live): route live Decisions/Actions only to Confirmed agenda items
 
 ---
 
-### Step 4.4 — Wire the agenda scheduler into LiveExtractionRuntime
+### Step 4.4 — Wire the agenda scheduler into LiveExtractionRuntime ✅ done
+
+> Note: the runtime arms the AgendaInferenceScheduler when an agendaItemRepo is
+> wired (live path), sharing the extraction scheduler's clock + the span store.
+> `tick()` drives it after the rolling turn; new `pause()`/`resume()` delegate to
+> it; `endMeeting()` pauses it before the final pass so no late inference races
+> finalisation. Import leaves agendaItemRepo unset, so the scheduler is never
+> armed there. Note: nothing yet calls runtime.pause() from the live pause flow
+> (pause isn't plumbed to the runtime today) — the capability is in place and
+> tested; wiring it to the meeting pause is a small follow-up.
 
 **Context:** start/stop the slow agenda scheduler alongside the extraction scheduler;
 honour pause/resume; ensure it reads accumulating final spans. No second source of
