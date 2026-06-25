@@ -76,6 +76,21 @@ describe('agendaItemRepo', () => {
     expect(listed?.state).toBe('proposed')
   })
 
+  it('updates an agenda item title, topic and state', () => {
+    const repo = agendaItemRepo(db)
+    repo.insert({ ...sampleItem, id: 'ai-upd', state: 'proposed' }, 'mtg-1')
+    repo.update({
+      id: 'ai-upd',
+      title: 'Nieuwe titel',
+      topic: 'Nieuw onderwerp',
+      state: 'confirmed',
+    })
+    const found = repo.findById('ai-upd')
+    expect(found?.title).toBe('Nieuwe titel')
+    expect(found?.topic).toBe('Nieuw onderwerp')
+    expect(found?.state).toBe('confirmed')
+  })
+
   it('cascades delete when meeting is deleted', () => {
     const repo = agendaItemRepo(db)
     repo.insert(sampleItem, 'mtg-1')

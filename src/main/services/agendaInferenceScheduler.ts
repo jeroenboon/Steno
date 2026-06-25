@@ -14,7 +14,7 @@
  * Determinism: time comes only from the injected Clock; tests advance it
  * explicitly. Never logs transcript content (principle #12).
  */
-import type { MeetingId } from '@shared/domain'
+import type { AgendaItem, MeetingId } from '@shared/domain'
 import type { Clock, ExtractionProvider } from '@shared/providers'
 
 import type { agendaItemRepo } from '../db/repos/agendaItemRepo'
@@ -33,6 +33,11 @@ export interface AgendaInferenceSchedulerDeps {
   clock: Clock
   /** Milliseconds between agenda inference ticks. Defaults to 90 000 ms. */
   cadenceMs?: number
+  /**
+   * Called when a tick proposes ≥1 new agenda item. Used by the runtime to push
+   * an agenda:changed event to the renderer (ADR 0029).
+   */
+  onProposed?: (proposed: AgendaItem[]) => void
 }
 
 export class AgendaInferenceScheduler {
@@ -42,6 +47,7 @@ export class AgendaInferenceScheduler {
   private readonly _agendaItemRepo: ReturnType<typeof agendaItemRepo>
   private readonly _clock: Clock
   private readonly _cadenceMs: number
+  private readonly _onProposed: ((proposed: AgendaItem[]) => void) | undefined
 
   private _lastTickAt: number
   private _inFlight = false
@@ -54,6 +60,7 @@ export class AgendaInferenceScheduler {
     this._agendaItemRepo = deps.agendaItemRepo
     this._clock = deps.clock
     this._cadenceMs = deps.cadenceMs ?? DEFAULT_AGENDA_CADENCE_MS
+    this._onProposed = deps.onProposed
     this._lastTickAt = this._clock.now()
   }
 
@@ -92,7 +99,8 @@ export class AgendaInferenceScheduler {
         knownAgendaItems,
       })
 
-      this._proposalService.propose(meetingId, inferred.agendaItems)
+      const proposed = this._proposalService.propose(meetingId, inferred.agendaItems)
+      if (proposed.length > 0) this._onProposed?.(proposed)
     } catch (err) {
       // Never log transcript content (principle #12) — only a non-sensitive tag.
       const message = err instanceof Error ? err.message : String(err)

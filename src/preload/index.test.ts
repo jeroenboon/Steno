@@ -32,3 +32,22 @@ describe('preload bridge — inferContextFromText (ADR 0029)', () => {
     expect(invoke).toHaveBeenCalledWith('context:inferFromText', req)
   })
 })
+
+describe('preload bridge — live agenda grooming (ADR 0029)', () => {
+  it('forwards agendaItemConfirm to the agendaItem:confirm channel', async () => {
+    const api = await loadApi()
+
+    await api.agendaItemConfirm({ agendaItemId: 'ai-1' })
+
+    expect(invoke).toHaveBeenCalledWith('agendaItem:confirm', { agendaItemId: 'ai-1' })
+  })
+
+  it('forwards agendaItemEditAndConfirm to the agendaItem:editAndConfirm channel', async () => {
+    const api = await loadApi()
+
+    const req = { agendaItemId: 'ai-1', title: 'Nieuw', topic: 'nieuw' }
+    await api.agendaItemEditAndConfirm(req)
+
+    expect(invoke).toHaveBeenCalledWith('agendaItem:editAndConfirm', req)
+  })
+})

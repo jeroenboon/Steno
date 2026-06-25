@@ -19,6 +19,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import {
+  AgendaChangedPayloadSchema,
   ItemsChangedPayloadSchema,
   ItemsSummariesPayloadSchema,
   NudgesChangedPayloadSchema,
@@ -46,6 +47,7 @@ export function useLiveSession(liveMeetingId: string | null): UseLiveSessionResu
   const setLoopbackState = useAppStore((s) => s.setLoopbackState)
   const mergeProposedItems = useAppStore((s) => s.mergeProposedItems)
   const setNudges = useAppStore((s) => s.setNudges)
+  const setAgendaItems = useAppStore((s) => s.setAgendaItems)
   const setRunningSummary = useAppStore((s) => s.setRunningSummary)
   const setDiscussionSummaries = useAppStore((s) => s.setDiscussionSummaries)
   const setRoute = useAppStore((s) => s.setRoute)
@@ -90,6 +92,15 @@ export function useLiveSession(liveMeetingId: string | null): UseLiveSessionResu
       NudgesChangedPayloadSchema,
       (payload) => {
         setNudges(payload.nudges)
+      },
+    )
+
+    // Live agenda inference (ADR 0029) — replace the agenda with the pushed set.
+    const unsubAgenda = onValidated(
+      window.api.onAgendaChanged,
+      AgendaChangedPayloadSchema,
+      (payload) => {
+        setAgendaItems(payload.agendaItems)
       },
     )
 
@@ -142,6 +153,7 @@ export function useLiveSession(liveMeetingId: string | null): UseLiveSessionResu
       unsubSpan()
       unsubItems()
       unsubNudges()
+      unsubAgenda()
       unsubSummary()
       unsubSummaries()
       void service.stop().catch((err: unknown) => {
@@ -160,6 +172,7 @@ export function useLiveSession(liveMeetingId: string | null): UseLiveSessionResu
     setLoopbackState,
     mergeProposedItems,
     setNudges,
+    setAgendaItems,
     setRunningSummary,
     setDiscussionSummaries,
     setRoute,

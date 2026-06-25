@@ -80,6 +80,11 @@ import type {
   ImportProgressEvent,
   ContextInferFromTextRequest,
   ContextInferFromTextResponse,
+  AgendaChangedPayload,
+  AgendaItemConfirmRequest,
+  AgendaItemConfirmResponse,
+  AgendaItemEditAndConfirmRequest,
+  AgendaItemEditAndConfirmResponse,
 } from '@shared/ipc'
 
 const api: RendererApi = {
@@ -292,6 +297,29 @@ const api: RendererApi = {
 
   inferContextFromText: (req: ContextInferFromTextRequest) =>
     ipcRenderer.invoke('context:inferFromText', req) as Promise<ContextInferFromTextResponse>,
+
+  // ---------------------------------------------------------------------------
+  // Live agenda grooming (ADR 0029)
+  // ---------------------------------------------------------------------------
+
+  onAgendaChanged: (cb: (payload: AgendaChangedPayload) => void): UnsubscribeFn => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: AgendaChangedPayload) => {
+      cb(payload)
+    }
+    ipcRenderer.on('agenda:changed', listener)
+    return () => {
+      ipcRenderer.removeListener('agenda:changed', listener)
+    }
+  },
+
+  agendaItemConfirm: (req: AgendaItemConfirmRequest) =>
+    ipcRenderer.invoke('agendaItem:confirm', req) as Promise<AgendaItemConfirmResponse>,
+
+  agendaItemEditAndConfirm: (req: AgendaItemEditAndConfirmRequest) =>
+    ipcRenderer.invoke(
+      'agendaItem:editAndConfirm',
+      req,
+    ) as Promise<AgendaItemEditAndConfirmResponse>,
 }
 
 contextBridge.exposeInMainWorld('api', api)

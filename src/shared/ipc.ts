@@ -703,6 +703,54 @@ export type ContextInferFromTextRequest = z.infer<typeof ContextInferFromTextReq
 export type ContextInferFromTextResponse = z.infer<typeof ContextInferFromTextResponseSchema>
 
 // ---------------------------------------------------------------------------
+// agenda:changed — main → renderer push event (live agenda inference, ADR 0029)
+//
+// Emitted whenever the live agenda set changes (the slow agenda scheduler
+// proposes new items). Carries the full current agenda (Confirmed + Proposed)
+// so the renderer replaces its local agenda state, exactly like nudges:changed.
+// ---------------------------------------------------------------------------
+
+export const AgendaChangedPayloadSchema = z.object({
+  agendaItems: z.array(AgendaItemSchema),
+})
+
+export type AgendaChangedPayload = z.infer<typeof AgendaChangedPayloadSchema>
+
+// ---------------------------------------------------------------------------
+// agendaItem:confirm — note-taker confirms a Proposed Agenda Item (ADR 0029)
+//
+// Persists state → 'confirmed' so the item becomes a live routing bucket
+// immediately. Returns the updated item.
+// ---------------------------------------------------------------------------
+
+export const AgendaItemConfirmRequestSchema = z.object({
+  agendaItemId: z.string().min(1, 'Agenda item ID cannot be empty'),
+})
+
+export const AgendaItemConfirmResponseSchema = AgendaItemSchema
+
+export type AgendaItemConfirmRequest = z.infer<typeof AgendaItemConfirmRequestSchema>
+export type AgendaItemConfirmResponse = z.infer<typeof AgendaItemConfirmResponseSchema>
+
+// ---------------------------------------------------------------------------
+// agendaItem:editAndConfirm — edit a Proposed Agenda Item's title/topic and
+// confirm it in one step (ADR 0029)
+// ---------------------------------------------------------------------------
+
+export const AgendaItemEditAndConfirmRequestSchema = z.object({
+  agendaItemId: z.string().min(1, 'Agenda item ID cannot be empty'),
+  title: z.string().min(1, 'Agenda item title cannot be empty'),
+  topic: z.string().min(1, 'Agenda item topic cannot be empty'),
+})
+
+export const AgendaItemEditAndConfirmResponseSchema = AgendaItemSchema
+
+export type AgendaItemEditAndConfirmRequest = z.infer<typeof AgendaItemEditAndConfirmRequestSchema>
+export type AgendaItemEditAndConfirmResponse = z.infer<
+  typeof AgendaItemEditAndConfirmResponseSchema
+>
+
+// ---------------------------------------------------------------------------
 // Channel registry — exhaustive union of all channel names
 // ---------------------------------------------------------------------------
 
@@ -739,6 +787,8 @@ export type IpcChannel =
   | 'import:start'
   | 'import:finish'
   | 'context:inferFromText'
+  | 'agendaItem:confirm'
+  | 'agendaItem:editAndConfirm'
 
 /**
  * One-way channels: renderer sends, main receives (no invoke/response).
@@ -956,4 +1006,23 @@ export interface RendererApi {
    * context when no extraction provider is configured.
    */
   inferContextFromText: (req: ContextInferFromTextRequest) => Promise<ContextInferFromTextResponse>
+  /**
+   * Subscribe to live agenda updates pushed from main (ADR 0029). Fired when the
+   * slow agenda scheduler proposes new items. The callback receives the full
+   * current agenda; the UI replaces its local agenda state. Returns an
+   * unsubscribe function.
+   */
+  onAgendaChanged: (cb: (payload: AgendaChangedPayload) => void) => UnsubscribeFn
+  /**
+   * Confirm a Proposed Agenda Item (ADR 0029). Persists state → 'confirmed' so
+   * it becomes a live routing bucket immediately. Returns the updated item.
+   */
+  agendaItemConfirm: (req: AgendaItemConfirmRequest) => Promise<AgendaItemConfirmResponse>
+  /**
+   * Edit a Proposed Agenda Item's title/topic and confirm it in one step
+   * (ADR 0029).
+   */
+  agendaItemEditAndConfirm: (
+    req: AgendaItemEditAndConfirmRequest,
+  ) => Promise<AgendaItemEditAndConfirmResponse>
 }

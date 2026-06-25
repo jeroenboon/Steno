@@ -50,7 +50,7 @@ import type {
   MeetingId,
   TranscriptSpan,
 } from '@shared/domain'
-import type { NudgesChangedPayload, SummaryChangedPayload } from '@shared/ipc'
+import type { AgendaChangedPayload, NudgesChangedPayload, SummaryChangedPayload } from '@shared/ipc'
 import { deriveNudges } from '@shared/nudges/deriveNudges'
 import type { ExtractionProvider } from '@shared/providers'
 
@@ -248,13 +248,20 @@ export class LiveExtractionRuntime {
       // wired (ADR 0029). It shares the runtime's span store and clock — no
       // second source of truth. Absent repo ⇒ no live agenda inference.
       if (opts.agendaItemRepo !== undefined) {
+        const agendaRepo = opts.agendaItemRepo
         this._agendaScheduler = new AgendaInferenceScheduler({
           provider: opts.schedulerDeps.provider,
-          proposalService: new AgendaProposalService({ agendaItemRepo: opts.agendaItemRepo }),
+          proposalService: new AgendaProposalService({ agendaItemRepo: agendaRepo }),
           spanRepo: opts.spanRepo,
-          agendaItemRepo: opts.agendaItemRepo,
+          agendaItemRepo: agendaRepo,
           clock: opts.schedulerDeps.clock,
           ...(opts.agendaCadenceMs !== undefined ? { cadenceMs: opts.agendaCadenceMs } : {}),
+          // Push the full current agenda to the renderer when new items appear.
+          onProposed: () => {
+            this._sender.send('agenda:changed', {
+              agendaItems: agendaRepo.listByMeeting(this._meetingId),
+            } satisfies AgendaChangedPayload)
+          },
         })
       } else {
         this._agendaScheduler = null

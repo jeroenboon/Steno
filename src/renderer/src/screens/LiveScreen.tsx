@@ -480,6 +480,7 @@ export function LiveScreen(): React.JSX.Element {
   const confirmedDecisions = useAppStore((s) => s.confirmedDecisions)
   const confirmedActions = useAppStore((s) => s.confirmedActions)
   const agendaItems = useAppStore((s) => s.agendaItems)
+  const setAgendaItems = useAppStore((s) => s.setAgendaItems)
   const participants = useAppStore((s) => s.participants)
   const activeMeeting = useAppStore((s) => s.activeMeeting)
   const liveMeetingId = useAppStore((s) => s.liveMeetingId)
@@ -512,6 +513,8 @@ export function LiveScreen(): React.JSX.Element {
   const [editState, setEditState] = useState<EditState | null>(null)
   const [addingKind, setAddingKind] = useState<ItemKind | null>(null)
   const [endingMeeting, setEndingMeeting] = useState(false)
+  // Inline edit state for a Proposed agenda item being groomed (ADR 0029).
+  const [agendaEdit, setAgendaEdit] = useState<{ id: string; title: string } | null>(null)
 
   // --- Derived maps ---
   const transcriptSpanMap = React.useMemo(() => {
@@ -586,6 +589,49 @@ export function LiveScreen(): React.JSX.Element {
     setEditState(null)
   }, [])
 
+  // --- Proposed agenda item grooming (ADR 0029) ---
+  const handleAgendaConfirm = useCallback(
+    async (id: string) => {
+      try {
+        await window.api.agendaItemConfirm({ agendaItemId: id })
+        setAgendaItems(agendaItems.map((a) => (a.id === id ? { ...a, state: 'confirmed' } : a)))
+      } catch (err) {
+        console.error('[LiveScreen] agenda confirm failed:', err)
+      }
+    },
+    [agendaItems, setAgendaItems],
+  )
+
+  const handleAgendaDismiss = useCallback(
+    async (id: string) => {
+      try {
+        await window.api.agendaItemRemove({ agendaItemId: id })
+        setAgendaItems(agendaItems.filter((a) => a.id !== id))
+      } catch (err) {
+        console.error('[LiveScreen] agenda dismiss failed:', err)
+      }
+    },
+    [agendaItems, setAgendaItems],
+  )
+
+  const handleAgendaEditSave = useCallback(async () => {
+    if (agendaEdit === null) return
+    const { id, title } = agendaEdit
+    const trimmed = title.trim()
+    if (trimmed.length === 0) return
+    const existing = agendaItems.find((a) => a.id === id)
+    const topic = existing?.topic ?? trimmed
+    try {
+      await window.api.agendaItemEditAndConfirm({ agendaItemId: id, title: trimmed, topic })
+      setAgendaItems(
+        agendaItems.map((a) => (a.id === id ? { ...a, title: trimmed, state: 'confirmed' } : a)),
+      )
+      setAgendaEdit(null)
+    } catch (err) {
+      console.error('[LiveScreen] agenda editAndConfirm failed:', err)
+    }
+  }, [agendaEdit, agendaItems, setAgendaItems])
+
   const handleEndMeeting = useCallback(async () => {
     if (activeMeeting === null || endingMeeting) return
     setEndingMeeting(true)
@@ -638,14 +684,23 @@ export function LiveScreen(): React.JSX.Element {
   )
 
   // --- Grouping ---
-  // Build full list of groups: agenda items + off-agenda
+  // Confirmed agenda items are the routing buckets; Proposed items the agent
+  // inferred live are groomed separately (ADR 0029) and only become buckets once
+  // the note-taker confirms them.
   const allGroups = React.useMemo(() => {
     const groups = [
-      ...agendaItems.map((ai) => ({ id: ai.id, title: ai.title })),
+      ...agendaItems
+        .filter((ai) => ai.state === 'confirmed')
+        .map((ai) => ({ id: ai.id, title: ai.title })),
       { id: OffAgenda.id, title: t('live.items.offagenda.heading') },
     ]
     return groups
   }, [agendaItems])
+
+  const proposedAgenda = React.useMemo(
+    () => agendaItems.filter((ai) => ai.state === 'proposed'),
+    [agendaItems],
+  )
 
   // Redraw the leaders whenever the transcript or the item set changes.
   const leaderRecomputeKey = [
@@ -814,6 +869,96 @@ export function LiveScreen(): React.JSX.Element {
           {/* Agenda groups */}
           {/* ------------------------------------------------------------------ */}
           <div className="live-groups">
+            {/* Proposed agenda items (ADR 0029): dashed groups groomed inline. */}
+            {proposedAgenda.map((item) => (
+              <section
+                key={item.id}
+                className="live-group live-group--proposed"
+                data-testid={`proposed-agenda-${item.id}`}
+              >
+                <header className="live-group__header">
+                  <span className="live-group__marker live-group__marker--proposed">╌</span>
+                  {agendaEdit?.id === item.id ? (
+                    <input
+                      className="form-input live-group__edit-input"
+                      aria-label={t('live.agenda.edit.titleLabel')}
+                      value={agendaEdit.title}
+                      autoFocus
+                      onChange={(e) => {
+                        setAgendaEdit({ id: item.id, title: e.currentTarget.value })
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          void handleAgendaEditSave()
+                        } else if (e.key === 'Escape') {
+                          setAgendaEdit(null)
+                        }
+                      }}
+                    />
+                  ) : (
+                    <h3 className="live-group__title">
+                      {item.title}{' '}
+                      <span className="live-group__proposed-tag">
+                        {t('live.agenda.proposed.label')}
+                      </span>
+                    </h3>
+                  )}
+                  <span className="live-group__agenda-actions">
+                    {agendaEdit?.id === item.id ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn--small btn--primary"
+                          onClick={() => void handleAgendaEditSave()}
+                        >
+                          {t('live.agenda.edit.save')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          onClick={() => {
+                            setAgendaEdit(null)
+                          }}
+                        >
+                          {t('live.agenda.edit.cancel')}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn--small btn--primary"
+                          aria-label={t('live.agenda.confirm')}
+                          onClick={() => void handleAgendaConfirm(item.id)}
+                        >
+                          ✓
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          aria-label={t('live.agenda.edit')}
+                          onClick={() => {
+                            setAgendaEdit({ id: item.id, title: item.title })
+                          }}
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--small"
+                          aria-label={t('live.agenda.dismiss')}
+                          onClick={() => void handleAgendaDismiss(item.id)}
+                        >
+                          ✕
+                        </button>
+                      </>
+                    )}
+                  </span>
+                </header>
+              </section>
+            ))}
+
             {allGroups.map((group) => {
               const groupProposedDecisions = proposedDecisions.filter(
                 (d) => d.agendaItemId === group.id,

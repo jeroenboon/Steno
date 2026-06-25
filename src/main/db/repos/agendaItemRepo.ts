@@ -28,6 +28,12 @@ export function agendaItemRepo(db: Database.Database) {
       ).run({ id: item.id, meetingId, title: item.title, topic: item.topic, state: item.state })
     },
 
+    update(item: AgendaItem): void {
+      db.prepare(
+        `UPDATE agenda_items SET title = @title, topic = @topic, state = @state WHERE id = @id`,
+      ).run({ id: item.id, title: item.title, topic: item.topic, state: item.state })
+    },
+
     findById(id: string): AgendaItem | null {
       const row = db.prepare('SELECT * FROM agenda_items WHERE id = ?').get(id) as
         | AgendaItemRow

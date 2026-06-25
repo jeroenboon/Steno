@@ -76,6 +76,10 @@ import {
   ImportFinishRequestSchema,
   ContextInferFromTextRequestSchema,
   ContextInferFromTextResponseSchema,
+  AgendaItemConfirmRequestSchema,
+  AgendaItemConfirmResponseSchema,
+  AgendaItemEditAndConfirmRequestSchema,
+  AgendaItemEditAndConfirmResponseSchema,
 } from '@shared/ipc'
 import type {
   IpcChannel,
@@ -114,10 +118,13 @@ import type {
   ImportFinishResponse,
   ContextInferFromTextRequest,
   ContextInferFromTextResponse,
+  AgendaItemConfirmResponse,
+  AgendaItemEditAndConfirmResponse,
 } from '@shared/ipc'
 import type { Clock } from '@shared/providers'
 
 import type { AudioCaptureBridge } from './audio/AudioCaptureBridge'
+import type { agendaItemRepo } from './db/repos/agendaItemRepo'
 import type { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import type { ItemLifecycleService } from './services/itemLifecycleService'
 import type { ConnectionTestResult } from './settings/connectionTest'
@@ -263,6 +270,13 @@ export interface IpcRegistryDependencies {
    * returns an empty context so manual entry keeps working.
    */
   inferContextFromText?: (req: ContextInferFromTextRequest) => Promise<ContextInferFromTextResponse>
+  /**
+   * Agenda repo for grooming Proposed agenda items live (ADR 0029):
+   * agendaItem:confirm and agendaItem:editAndConfirm persist through it so a
+   * confirmed item becomes a live routing bucket immediately. When absent those
+   * channels throw "not available".
+   */
+  agendaItemRepo?: ReturnType<typeof agendaItemRepo>
 }
 
 // ---------------------------------------------------------------------------
@@ -663,6 +677,38 @@ function makeHandleInferContextFromText(deps: IpcRegistryDependencies) {
   }
 }
 
+function makeHandleAgendaItemConfirm(deps: IpcRegistryDependencies) {
+  return function handleAgendaItemConfirm(raw: unknown): AgendaItemConfirmResponse {
+    const req = AgendaItemConfirmRequestSchema.parse(raw)
+    if (deps.agendaItemRepo === undefined) {
+      throw new Error('agendaItem:confirm is not available')
+    }
+    const item = deps.agendaItemRepo.findById(req.agendaItemId)
+    if (item === null) {
+      throw new Error('agendaItem:confirm: item not found')
+    }
+    const confirmed = { ...item, state: 'confirmed' as const }
+    deps.agendaItemRepo.update(confirmed)
+    return AgendaItemConfirmResponseSchema.parse(confirmed)
+  }
+}
+
+function makeHandleAgendaItemEditAndConfirm(deps: IpcRegistryDependencies) {
+  return function handleAgendaItemEditAndConfirm(raw: unknown): AgendaItemEditAndConfirmResponse {
+    const req = AgendaItemEditAndConfirmRequestSchema.parse(raw)
+    if (deps.agendaItemRepo === undefined) {
+      throw new Error('agendaItem:editAndConfirm is not available')
+    }
+    const item = deps.agendaItemRepo.findById(req.agendaItemId)
+    if (item === null) {
+      throw new Error('agendaItem:editAndConfirm: item not found')
+    }
+    const updated = { ...item, title: req.title, topic: req.topic, state: 'confirmed' as const }
+    deps.agendaItemRepo.update(updated)
+    return AgendaItemEditAndConfirmResponseSchema.parse(updated)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -702,6 +748,8 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'import:start': makeHandleImportStart(deps),
     'import:finish': makeHandleImportFinish(deps),
     'context:inferFromText': makeHandleInferContextFromText(deps),
+    'agendaItem:confirm': makeHandleAgendaItemConfirm(deps),
+    'agendaItem:editAndConfirm': makeHandleAgendaItemEditAndConfirm(deps),
   }
 
   return {

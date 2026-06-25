@@ -200,6 +200,8 @@ const IPC_CHANNELS: IpcChannel[] = [
   'import:start',
   'import:finish',
   'context:inferFromText',
+  'agendaItem:confirm',
+  'agendaItem:editAndConfirm',
 ]
 
 async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
@@ -408,6 +410,7 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
       }
       return built.provider.inferContext({ source: { text: req.text } })
     },
+    agendaItemRepo: aiRepo,
   })
 
   for (const channel of IPC_CHANNELS) {

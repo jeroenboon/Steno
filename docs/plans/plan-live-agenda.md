@@ -523,7 +523,17 @@ Commit: `feat(live): drive the agenda inference scheduler from the live runtime`
 
 ---
 
-### Step 4.5 — Push Proposed agenda items to the renderer + LiveScreen UI
+### Step 4.5 — Push Proposed agenda items to the renderer + LiveScreen UI ✅ done
+
+> Note: chose a **dedicated `agenda:changed` push event** (full current agenda,
+> like nudges:changed) over overloading `items:changed` — smaller conceptual
+> diff. New invoke channels `agendaItem:confirm` + `agendaItem:editAndConfirm`
+> (dismiss reuses the existing `agendaItem:remove`), persisted through a new
+> `agendaItemRepo.update`, so a confirmed item becomes a live routing bucket
+> immediately. The agenda scheduler gained an `onProposed` callback the runtime
+> uses to emit the event. UI: Proposed items render **inline as dashed agenda
+> groups** (user's choice) with keyboard-reachable confirm/edit/dismiss controls;
+> the store replaces its agenda on `agenda:changed`.
 
 **Context:** the note-taker needs to see Proposed agenda items and confirm/edit/
 dismiss them, keyboard-first. Reuse the `InterceptingItemLifecycleService` pattern

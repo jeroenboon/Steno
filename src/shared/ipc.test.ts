@@ -12,6 +12,9 @@ import {
   ImportProgressEventSchema,
   ContextInferFromTextRequestSchema,
   ContextInferFromTextResponseSchema,
+  AgendaChangedPayloadSchema,
+  AgendaItemConfirmRequestSchema,
+  AgendaItemEditAndConfirmRequestSchema,
   type IpcChannel,
 } from './ipc'
 
@@ -226,5 +229,67 @@ describe('IpcChannel', () => {
   it('includes the context:inferFromText channel name', () => {
     const channel: IpcChannel = 'context:inferFromText'
     expect(channel).toBe('context:inferFromText')
+  })
+
+  it('includes the agenda confirm/edit channel names', () => {
+    const confirm: IpcChannel = 'agendaItem:confirm'
+    const edit: IpcChannel = 'agendaItem:editAndConfirm'
+    expect([confirm, edit]).toEqual(['agendaItem:confirm', 'agendaItem:editAndConfirm'])
+  })
+})
+
+// Slice 4 — live agenda grooming (ADR 0029)
+
+describe('AgendaChangedPayloadSchema', () => {
+  it('parses a payload carrying the current agenda', () => {
+    const result = AgendaChangedPayloadSchema.parse({
+      agendaItems: [
+        { id: 'ai-1', title: 'Begroting', topic: 'Q3', state: 'proposed' },
+        { id: 'ai-2', title: 'Planning', topic: 'Later', state: 'confirmed' },
+      ],
+    })
+    expect(result.agendaItems).toHaveLength(2)
+    expect(result.agendaItems[0]?.state).toBe('proposed')
+  })
+
+  it('rejects an agenda item with an unknown state', () => {
+    expect(() =>
+      AgendaChangedPayloadSchema.parse({
+        agendaItems: [{ id: 'ai-1', title: 'x', topic: 'y', state: 'archived' }],
+      }),
+    ).toThrow()
+  })
+})
+
+describe('AgendaItemConfirmRequestSchema', () => {
+  it('parses a valid confirm request', () => {
+    expect(AgendaItemConfirmRequestSchema.parse({ agendaItemId: 'ai-1' })).toEqual({
+      agendaItemId: 'ai-1',
+    })
+  })
+
+  it('rejects an empty agenda item id', () => {
+    expect(() => AgendaItemConfirmRequestSchema.parse({ agendaItemId: '' })).toThrow()
+  })
+})
+
+describe('AgendaItemEditAndConfirmRequestSchema', () => {
+  it('parses a valid edit-and-confirm request', () => {
+    const result = AgendaItemEditAndConfirmRequestSchema.parse({
+      agendaItemId: 'ai-1',
+      title: 'Nieuwe titel',
+      topic: 'Nieuw onderwerp',
+    })
+    expect(result.title).toBe('Nieuwe titel')
+  })
+
+  it('rejects an empty title', () => {
+    expect(() =>
+      AgendaItemEditAndConfirmRequestSchema.parse({
+        agendaItemId: 'ai-1',
+        title: '',
+        topic: 'x',
+      }),
+    ).toThrow()
   })
 })
