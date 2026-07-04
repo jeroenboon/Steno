@@ -36,11 +36,14 @@ import type { discussionSummaryRepo } from '../db/repos/discussionSummaryRepo'
 import type { meetingRepo } from '../db/repos/meetingRepo'
 import type { participantRepo } from '../db/repos/participantRepo'
 import type { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
+import { persistInferredContext } from '../services/inferredContextPersistence'
 import { LiveExtractionRuntime } from '../services/liveExtractionRuntime'
 import { MeetingLifecycleService } from '../services/meetingLifecycleService'
 import { tryBuildAsrProvider, tryBuildExtractionProvider } from '../settings/providerFactory'
 import type { SecretStorage } from '../settings/SecretStorage'
 import type { SettingsStore } from '../settings/SettingsStore'
+
+import { finalizeMeetingEnd } from './finalizeMeetingEnd'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -232,12 +235,9 @@ export class ImportSessionController {
     this._emitProgress('extracting')
     await this._runFinalPass(extractionProvider, meetingId)
 
-    // Mark the meeting Ended through the single enforcer (Live → Ended), which
-    // sets state + endedAt and guards a double-end. The import row is inserted
-    // Live in start(), so it transitions here.
-    if (this._meetingRepo.findById(meetingId)?.state === 'live') {
-      this._meetingLifecycle.endMeeting(meetingId)
-    }
+    // Mark the meeting Ended through the single enforcer (Live → Ended); the
+    // import row is inserted Live in start(), so it transitions here.
+    finalizeMeetingEnd(this._meetingRepo, this._meetingLifecycle, meetingId)
 
     this._emitProgress('done')
     return { meetingId }
@@ -269,17 +269,14 @@ export class ImportSessionController {
     if (spans.length === 0) return
 
     const inferred = await provider.inferContext({ source: { spans } })
-    for (const item of inferred.agendaItems) {
-      // Import-inferred agenda items are Proposed: the user never confirmed them
-      // (ADR 0029). User-supplied import items stay Confirmed (see start()).
-      this._agendaRepo.insert(
-        { id: randomUUID(), title: item.title, topic: item.topic, state: 'proposed' },
-        meetingId,
-      )
-    }
-    for (const p of inferred.participants) {
-      this._participantRepo.insert({ id: randomUUID(), name: p.name }, meetingId)
-    }
+    // Import-inferred agenda items are Proposed: the user never confirmed them
+    // (ADR 0029). User-supplied import items stay Confirmed (see start()). Same
+    // rule as the live final pass, via the shared helper.
+    persistInferredContext(
+      { agendaItemRepo: this._agendaRepo, participantRepo: this._participantRepo },
+      meetingId,
+      inferred,
+    )
   }
 
   /**

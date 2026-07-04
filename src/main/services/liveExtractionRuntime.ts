@@ -38,8 +38,6 @@
  * These channels are documented in src/shared/ipc.ts (event-only, no invoke).
  */
 
-import { randomUUID } from 'crypto'
-
 import type {
   Action,
   Decision,
@@ -68,6 +66,7 @@ import {
   type MeetingContext,
   type ExtractionLoopSchedulerDeps,
 } from './extractionLoopScheduler'
+import { persistInferredContext } from './inferredContextPersistence'
 import { ItemLifecycleService } from './itemLifecycleService'
 import { sendItemsChanged } from './itemsChangedNotifier'
 
@@ -453,23 +452,13 @@ export class LiveExtractionRuntime {
 
     const inferred = await this._provider.inferContext({ source: { spans } })
 
-    const newAgenda = inferred.agendaItems.map((a) => ({
-      id: randomUUID(),
-      title: a.title,
-      topic: a.topic,
-      state: 'proposed' as const,
-    }))
-    for (const item of newAgenda) {
-      this._agendaItemRepo.insert(item, this._meetingId)
-    }
-
-    const newParticipants = inferred.participants.map((p) => ({
-      id: randomUUID(),
-      name: p.name,
-    }))
-    for (const p of newParticipants) {
-      this._participantRepo.insert(p, this._meetingId)
-    }
+    // Persist the inferred agenda as Proposed + participants (the shared rule),
+    // reusing the created rows to enrich the in-memory context below.
+    const { agendaItems: newAgenda, participants: newParticipants } = persistInferredContext(
+      { agendaItemRepo: this._agendaItemRepo, participantRepo: this._participantRepo },
+      this._meetingId,
+      inferred,
+    )
 
     // Enrich the context so the final pass routes into the inferred agenda and
     // nudges reflect it.
