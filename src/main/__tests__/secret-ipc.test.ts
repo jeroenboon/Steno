@@ -21,6 +21,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
 
 import { DEFAULT_SETTINGS } from '../../shared/settings/settingsSchema'
 import { createIpcRegistry } from '../ipc-registry'
+import { tryBuildProviders } from '../settings/providerFactory'
 import { MemorySecretStorage } from '../settings/SecretStorage'
 import { SettingsStore } from '../settings/SettingsStore'
 
@@ -129,8 +130,7 @@ describe('secret:has IPC handler', () => {
 // ---------------------------------------------------------------------------
 
 describe('provider wiring — missing key yields graceful error state', () => {
-  it('tryBuildProviders returns an error result when Deepgram key is absent', async () => {
-    const { tryBuildProviders } = await import('../settings/providerFactory')
+  it('tryBuildProviders returns an error result when Deepgram key is absent', () => {
     const storage = new MemorySecretStorage()
     // No deepgram key stored
     storage.setSecret('anthropic', 'ant-key')
@@ -142,8 +142,7 @@ describe('provider wiring — missing key yields graceful error state', () => {
     }
   })
 
-  it('tryBuildProviders returns providers when both keys are present', async () => {
-    const { tryBuildProviders } = await import('../settings/providerFactory')
+  it('tryBuildProviders returns providers when both keys are present', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('deepgram', 'dg-key')
     storage.setSecret('anthropic', 'ant-key')
@@ -156,8 +155,7 @@ describe('provider wiring — missing key yields graceful error state', () => {
     }
   })
 
-  it('tryBuildProviders returns an error result when Anthropic key is absent', async () => {
-    const { tryBuildProviders } = await import('../settings/providerFactory')
+  it('tryBuildProviders returns an error result when Anthropic key is absent', () => {
     const storage = new MemorySecretStorage()
     storage.setSecret('deepgram', 'dg-key')
     // No anthropic key
