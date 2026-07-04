@@ -7,11 +7,18 @@
  * connection builder — only the URL + auth header differ.
  *
  * ## Design decisions (see ADR 0011 for the template, ADR 0028 for why ASR has
- * no shared realtime wire across vendors)
+ * no shared realtime protocol across vendors)
  *
  * ### Raw WebSocket over the OpenAI SDK
  * Injecting a WebSocketFactory makes the transport boundary fully mockable in
  * tests without faking an entire SDK object graph (mirrors DeepgramAsrProvider).
+ *
+ * ### Shared transport plumbing
+ * The generic realtime machinery (span queue + async-iterator, reconnect with
+ * backoff, frame decode) lives in {@link RealtimeSpanStream}. This adapter is
+ * the OpenAI Realtime {@link RealtimeAsrWire}: the connection (URL + auth
+ * header), the `transcription_session.update` sent on open, the pcm16/base64
+ * frame encoding, and the delta/completed -> TranscriptSpan parse.
  *
  * ### Interim + final spans
  * OpenAI Realtime emits `conversation.item.input_audio_transcription.delta`
@@ -26,15 +33,9 @@
  * That keeps spans monotonically ordered for live display; extraction uses the
  * full transcript on the final pass regardless.
  *
- * ### Reconnect / backoff
- * On socket close/error the provider reconnects with exponential backoff
- * (1s → 2s → ... → maxBackoffMs). `sleep` is injected so tests resolve it
- * instantly. The session (span queue + iterator) survives reconnects.
- *
  * ### Privacy (principle #12)
  * The API key travels only in the connection header, never in any log line.
- * Audio frames, transcript text, and raw payloads are never logged — only
- * non-sensitive metadata (reconnect attempts, backoff, socket lifecycle).
+ * Audio frames, transcript text, and raw payloads are never logged.
  */
 
 import { randomUUID } from 'node:crypto'
@@ -46,7 +47,7 @@ import { CAPTURE_SAMPLE_RATE, resamplePcm16 } from '@shared/audio/pcmResampler'
 import { TranscriptSpanSchema, type TranscriptSpan } from '@shared/domain/types'
 import { RealClock, type ASRProvider, type Clock } from '@shared/providers'
 
-import type { WebSocketLike } from './DeepgramAsrProvider'
+import { RealtimeSpanStream, type RealtimeAsrWire, type WebSocketLike } from './realtimeSpanStream'
 
 // ---------------------------------------------------------------------------
 // WebSocket abstraction
@@ -68,9 +69,6 @@ export type RealtimeWebSocketFactory = (
   url: string,
   options?: RealtimeWebSocketOptions,
 ) => WebSocketLike
-
-/** WebSocket readyState OPEN, per the WHATWG spec (and `ws`). */
-const WS_OPEN = 1
 
 // ---------------------------------------------------------------------------
 // Connection descriptor (URL + auth) — injectable so Azure (4.2) reuses the wire
@@ -140,13 +138,6 @@ export interface OpenAIRealtimeAsrProviderOptions {
 }
 
 // ---------------------------------------------------------------------------
-// Backoff constants
-// ---------------------------------------------------------------------------
-
-const INITIAL_BACKOFF_MS = 1_000
-const BACKOFF_MULTIPLIER = 2
-
-// ---------------------------------------------------------------------------
 // Adapter
 // ---------------------------------------------------------------------------
 
@@ -154,27 +145,21 @@ export class OpenAIRealtimeAsrProvider implements ASRProvider {
   private readonly _apiKey: string
   private readonly _model: string
   private readonly _language: string
-  private readonly _sleep: (ms: number) => Promise<void>
-  private readonly _maxBackoffMs: number
   private readonly _clock: Clock
   private readonly _wsFactory: RealtimeWebSocketFactory
   private readonly _buildConnection: (apiKey: string) => RealtimeConnection
   private readonly _inputSampleRate: number
+  private readonly _stream: RealtimeSpanStream
 
-  private _socket: WebSocketLike | null = null
-  private _stopped = false
+  // Per-session span timing, reset on start(). The Realtime events carry no
+  // timestamps, so spans are timed from the Clock elapsed since start().
   private _startedAtMs = 0
   private _lastEndMs = 0
-
-  private _queue: TranscriptSpan[] = []
-  private _waiters: ((result: IteratorResult<TranscriptSpan>) => void)[] = []
 
   constructor(options: OpenAIRealtimeAsrProviderOptions) {
     this._apiKey = options.apiKey
     this._model = options.model ?? DEFAULT_MODEL
     this._language = options.language ?? 'nl'
-    this._sleep = options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)))
-    this._maxBackoffMs = options.maxBackoffMs ?? 30_000
     this._clock = options.clock ?? new RealClock()
     this._wsFactory =
       options.webSocketFactory ??
@@ -186,165 +171,87 @@ export class OpenAIRealtimeAsrProvider implements ASRProvider {
         ) as unknown as WebSocketLike)
     this._buildConnection = options.buildConnection ?? defaultOpenAIConnection
     this._inputSampleRate = options.inputSampleRate ?? OPENAI_REALTIME_SAMPLE_RATE
+
+    const wire: RealtimeAsrWire = {
+      name: 'OpenAIRealtimeAsrProvider',
+      connect: () => {
+        const { url, options: connOpts } = this._buildConnection(this._apiKey)
+        return this._wsFactory(url, connOpts)
+      },
+      reset: () => {
+        this._startedAtMs = this._clock.now()
+        this._lastEndMs = 0
+      },
+      onOpen: (socket) => {
+        socket.send(
+          JSON.stringify({
+            type: 'transcription_session.update',
+            session: {
+              input_audio_format: 'pcm16',
+              input_audio_transcription: { model: this._model, language: this._language },
+              turn_detection: { type: 'server_vad' },
+            },
+          }),
+        )
+      },
+      encodeFrame: (chunk) => {
+        const resampled = resamplePcm16(chunk, CAPTURE_SAMPLE_RATE, this._inputSampleRate)
+        const audio = Buffer.from(resampled).toString('base64')
+        return JSON.stringify({ type: 'input_audio_buffer.append', audio })
+      },
+      parseMessage: (message) => this._parseMessage(message),
+    }
+
+    const streamOptions: { sleep?: (ms: number) => Promise<void>; maxBackoffMs?: number } = {}
+    if (options.sleep !== undefined) streamOptions.sleep = options.sleep
+    if (options.maxBackoffMs !== undefined) streamOptions.maxBackoffMs = options.maxBackoffMs
+    this._stream = new RealtimeSpanStream(wire, streamOptions)
   }
 
   // -------------------------------------------------------------------------
-  // ASRProvider interface
+  // ASRProvider interface — delegates to the shared stream
   // -------------------------------------------------------------------------
 
   start(): void {
-    this._stopped = false
-    this._startedAtMs = this._clock.now()
-    this._lastEndMs = 0
-    this._connect(0)
+    this._stream.start()
   }
 
   stop(): void {
-    this._stopped = true
-    this._socket?.close()
-    this._socket = null
-    const done: IteratorReturnResult<undefined> = { value: undefined, done: true }
-    for (const resolve of this._waiters) {
-      resolve(done)
-    }
-    this._waiters = []
+    this._stream.stop()
   }
 
   pushAudioFrame(chunk: Uint8Array): void {
-    if (this._socket?.readyState === WS_OPEN) {
-      const resampled = resamplePcm16(chunk, CAPTURE_SAMPLE_RATE, this._inputSampleRate)
-      const audio = Buffer.from(resampled).toString('base64')
-      this._socket.send(JSON.stringify({ type: 'input_audio_buffer.append', audio }))
-    }
+    this._stream.pushAudioFrame(chunk)
   }
 
   spans(): AsyncIterable<TranscriptSpan> {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const self = this
-
-    return {
-      [Symbol.asyncIterator](): AsyncIterator<TranscriptSpan> {
-        return {
-          next(): Promise<IteratorResult<TranscriptSpan>> {
-            if (self._stopped && self._queue.length === 0) {
-              return Promise.resolve({ value: undefined, done: true })
-            }
-
-            const queued = self._queue.shift()
-            if (queued !== undefined) {
-              return Promise.resolve({ value: queued, done: false })
-            }
-
-            if (self._stopped) {
-              return Promise.resolve({ value: undefined, done: true })
-            }
-
-            return new Promise<IteratorResult<TranscriptSpan>>((resolve) => {
-              self._waiters.push(resolve)
-            })
-          },
-        }
-      },
-    }
+    return this._stream.spans()
   }
 
   // -------------------------------------------------------------------------
-  // Internal: connect + reconnect
+  // Internal: parse Realtime payload -> TranscriptSpan(s)
   // -------------------------------------------------------------------------
 
-  private _connect(backoffMs: number): void {
-    if (this._stopped) return
-
-    const { url, options } = this._buildConnection(this._apiKey)
-    const socket = this._wsFactory(url, options)
-    this._socket = socket
-
-    socket.onopen = () => {
-      console.info('[OpenAIRealtimeAsrProvider] Socket opened')
-      this._configureSession()
-    }
-
-    socket.onmessage = (event: { data: unknown }) => {
-      this._handleMessage(event.data)
-    }
-
-    socket.onerror = () => {
-      console.error('[OpenAIRealtimeAsrProvider] Socket error — will reconnect')
-    }
-
-    socket.onclose = (event) => {
-      if (this._stopped) return
-      const code = event?.code !== undefined ? String(event.code) : 'unknown'
-      const nextBackoff = Math.min(
-        backoffMs === 0 ? INITIAL_BACKOFF_MS : backoffMs * BACKOFF_MULTIPLIER,
-        this._maxBackoffMs,
-      )
-      console.info(
-        `[OpenAIRealtimeAsrProvider] Socket closed (code ${code}) — reconnecting in ${String(nextBackoff)}ms`,
-      )
-      void this._reconnectAfterDelay(nextBackoff)
-    }
-  }
-
-  private async _reconnectAfterDelay(backoffMs: number): Promise<void> {
-    await this._sleep(backoffMs)
-    if (this._stopped) return
-    this._connect(backoffMs)
-  }
-
-  /** Send the transcription_session.update event that configures model + language. */
-  private _configureSession(): void {
-    this._socket?.send(
-      JSON.stringify({
-        type: 'transcription_session.update',
-        session: {
-          input_audio_format: 'pcm16',
-          input_audio_transcription: { model: this._model, language: this._language },
-          turn_detection: { type: 'server_vad' },
-        },
-      }),
-    )
-  }
-
-  // -------------------------------------------------------------------------
-  // Internal: parse Realtime payload → TranscriptSpan
-  // -------------------------------------------------------------------------
-
-  private _handleMessage(raw: unknown): void {
-    let text: string
-    if (typeof raw === 'string') {
-      text = raw
-    } else if (raw instanceof ArrayBuffer) {
-      text = Buffer.from(raw).toString('utf8')
-    } else if (raw instanceof Uint8Array) {
-      text = Buffer.from(raw).toString('utf8')
-    } else {
-      text = String(raw)
-    }
-
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(text) as unknown
-    } catch {
-      return
-    }
-
-    const delta = DeltaEventSchema.safeParse(parsed)
+  private _parseMessage(message: unknown): TranscriptSpan[] {
+    const delta = DeltaEventSchema.safeParse(message)
     if (delta.success) {
-      this._emitSpan(delta.data.delta, false)
-      return
+      const span = this._toSpan(delta.data.delta, false)
+      return span === null ? [] : [span]
     }
 
-    const completed = CompletedEventSchema.safeParse(parsed)
+    const completed = CompletedEventSchema.safeParse(message)
     if (completed.success) {
-      this._emitSpan(completed.data.transcript, true)
+      const span = this._toSpan(completed.data.transcript, true)
+      return span === null ? [] : [span]
     }
+
     // Other events (session.created, committed, errors) are ignored.
+    return []
   }
 
-  private _emitSpan(rawText: string, isFinal: boolean): void {
+  private _toSpan(rawText: string, isFinal: boolean): TranscriptSpan | null {
     const text = rawText.trim()
-    if (text.length === 0) return
+    if (text.length === 0) return null
 
     const nowMs = Math.max(0, this._clock.now() - this._startedAtMs)
     const span = TranscriptSpanSchema.safeParse({
@@ -354,15 +261,9 @@ export class OpenAIRealtimeAsrProvider implements ASRProvider {
       endMs: nowMs,
       isFinal,
     })
-    if (!span.success) return
+    if (!span.success) return null
     if (isFinal) this._lastEndMs = nowMs
-
-    const waiter = this._waiters.shift()
-    if (waiter !== undefined) {
-      waiter({ value: span.data, done: false })
-    } else {
-      this._queue.push(span.data)
-    }
+    return span.data
   }
 }
 
