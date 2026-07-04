@@ -25,7 +25,7 @@ import { decisionRepo } from '../db/repos/decisionRepo'
 import { meetingRepo } from '../db/repos/meetingRepo'
 import { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
 
-import { ItemLifecycleService } from './itemLifecycleService'
+import { ItemLifecycleService, type ProposeItemsResult } from './itemLifecycleService'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -139,6 +139,50 @@ describe('proposeItems', () => {
 
     expect(results.decisions).toHaveLength(1)
     expect(results.actions).toHaveLength(1)
+  })
+})
+
+// ===========================================================================
+// onProposed — optional notify seam (replaces the runtime's subclass hack)
+// ===========================================================================
+
+describe('proposeItems onProposed callback', () => {
+  it('fires onProposed with the created items when a proposal produces items', () => {
+    const fired: ProposeItemsResult[] = []
+    const notifying = new ItemLifecycleService(decRepo, actRepo, (result) => fired.push(result))
+
+    const result = notifying.proposeItems(MEETING_ID, {
+      decisions: [
+        { id: 'd1', rationale: 'Go forward', agendaItemId: AGENDA_ID, sourceSpanId: SPAN_ID },
+      ],
+      actions: [{ id: 'a1', agendaItemId: AGENDA_ID, sourceSpanId: SPAN_ID, status: 'open' }],
+    })
+
+    expect(fired).toHaveLength(1)
+    expect(fired[0]?.decisions.map((d) => d.id)).toEqual(['d1'])
+    expect(fired[0]?.actions.map((a) => a.id)).toEqual(['a1'])
+    // The callback receives the same result the caller gets back.
+    expect(fired[0]).toEqual(result)
+  })
+
+  it('does not fire onProposed when the proposal is empty', () => {
+    const fired: ProposeItemsResult[] = []
+    const notifying = new ItemLifecycleService(decRepo, actRepo, (result) => fired.push(result))
+
+    notifying.proposeItems(MEETING_ID, { decisions: [], actions: [] })
+
+    expect(fired).toHaveLength(0)
+  })
+
+  it('proposes normally when no callback is supplied', () => {
+    const result = svc.proposeItems(MEETING_ID, {
+      decisions: [
+        { id: 'd1', rationale: 'Go forward', agendaItemId: AGENDA_ID, sourceSpanId: SPAN_ID },
+      ],
+      actions: [],
+    })
+
+    expect(result.decisions).toHaveLength(1)
   })
 })
 
