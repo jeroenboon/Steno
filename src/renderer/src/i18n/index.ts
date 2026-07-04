@@ -311,6 +311,10 @@ const nl = {
 
   // Live screen — end meeting (item 0021)
   'live.end.button': 'Vergadering beëindigen',
+  'live.end.busy': 'Afronden…',
+  'live.ending.title': 'Notulen worden gegenereerd…',
+  'live.ending.subtitle':
+    'De vergadering wordt afgerond en de notulen per agendapunt worden opgesteld. Even geduld.',
   'live.pause.button': 'Pauzeren',
   'live.resume.button': 'Hervatten',
   'live.noactive.message': 'Ga naar Voorbereiding om een vergadering te starten.',
