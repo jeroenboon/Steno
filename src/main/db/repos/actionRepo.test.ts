@@ -66,6 +66,22 @@ describe('actionRepo', () => {
     expect(found?.dueDate).toBeUndefined()
   })
 
+  it('resolves the meeting id for an action, null when unknown', () => {
+    const repo = actionRepo(db)
+    repo.insert(
+      {
+        id: 'act-m',
+        agendaItemId: 'ai-1',
+        sourceSpanId: 'span-mtg-1',
+        status: 'open',
+        state: 'proposed',
+      },
+      'mtg-1',
+    )
+    expect(repo.findMeetingId('act-m')).toBe('mtg-1')
+    expect(repo.findMeetingId('nope')).toBeNull()
+  })
+
   it('persists the action description', () => {
     const repo = actionRepo(db)
     const action: Action = {
