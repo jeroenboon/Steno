@@ -1,0 +1,86 @@
+name: CI
+
+# Mirrors the Definition of Done gate (CLAUDE.md): build, lint, format:check,
+# Vitest, and the native ABI smoke test — on every PR to master and every push
+# to master.
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+# A newer push to the same PR/branch cancels the in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only: this workflow only verifies; it never writes to the repo.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: DoD gate (build · lint · format · test · native)
+    # Windows because the app ships on Windows and the native dual-ABI trap
+    # (better-sqlite3 / sherpa-onnx under Node vs Electron) is what test:native
+    # exists to catch — running it on the target OS is the point.
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Pin the exact npm that generated package-lock.json. The optional
+      # @emnapi wasm-fallback deps (via the ESLint resolver) resolve differently
+      # across npm patch versions, so an npm mismatch makes `npm ci` reject the
+      # lockfile as out of sync. Keep this in lockstep with the dev toolchain.
+      - name: Pin npm to the lockfile's version
+        run: npm install --global npm@11.6.2
+
+      # The Electron binary is a large download; cache it across runs so only
+      # the first run (or a lockfile change) pays for it. Cache misses are
+      # non-fatal.
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            electron-${{ runner.os }}-
+
+      # Reproducible install from the committed lockfile. postinstall swaps the
+      # native modules to the Electron ABI (scripts/rebuild-native.mjs).
+      - name: Install dependencies
+        run: npm ci
+
+      # Cheap, fast checks first so failures surface quickly.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Build
+        run: npm run build
+
+      # pretest swaps the native ABI to Node so Vitest can open better-sqlite3.
+      - name: Unit tests (Vitest)
+        run: npm test
+
+      # pretest:native swaps back to the Electron ABI, then loads the native
+      # modules under Electron's real runtime (ELECTRON_RUN_AS_NODE — no display
+      # needed). This is the gate the Node-side suite structurally cannot catch.
+      - name: Native ABI smoke test
+        run: npm run test:native

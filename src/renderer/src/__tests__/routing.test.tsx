@@ -39,6 +39,8 @@ vi.stubGlobal('api', {
   onItemsSummaries: vi.fn().mockReturnValue(() => undefined),
   // Nudges (item 0019)
   onNudgesChanged: vi.fn().mockReturnValue(() => undefined),
+  // Live agenda inference (ADR 0029)
+  onAgendaChanged: vi.fn().mockReturnValue(() => undefined),
   // Running summary (item 0020)
   onSummaryChanged: vi.fn().mockReturnValue(() => undefined),
   summaryQuery: vi.fn().mockResolvedValue({ answer: '' }),

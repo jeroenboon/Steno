@@ -22,7 +22,8 @@
     "pretest:native": "npm run rebuild:native",
     "rebuild:native": "node scripts/rebuild-native.mjs electron",
     "rebuild:native:node": "node scripts/rebuild-native.mjs node",
-    "postinstall": "node scripts/rebuild-native.mjs electron"
+    "postinstall": "node scripts/rebuild-native.mjs electron",
+    "prepare": "husky"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",
@@ -64,6 +65,7 @@
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
+    "husky": "^9.1.7",
     "jsdom": "^26.1.0",
     "postcss": "^8.5.6",
     "prettier": "^3.5.3",
@@ -71,5 +73,10 @@
     "typescript-eslint": "^8.61.0",
     "vite": "^6.3.5",
     "vitest": "^3.1.4"
+  },
+  "overrides": {
+    "@emnapi/core": "1.10.0",
+    "@emnapi/runtime": "1.10.0",
+    "@emnapi/wasi-threads": "1.2.2"
   }
 }
