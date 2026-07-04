@@ -68,6 +68,14 @@ export function decisionRepo(db: Database.Database) {
       return rows.map(rowToDomain)
     },
 
+    /** Resolve the meeting a decision belongs to, or null when unknown. */
+    findMeetingId(id: string): string | null {
+      const row = db.prepare('SELECT meeting_id FROM decisions WHERE id = ?').get(id) as
+        | { meeting_id: string }
+        | undefined
+      return row?.meeting_id ?? null
+    },
+
     delete(id: string): void {
       db.prepare('DELETE FROM decisions WHERE id = ?').run(id)
     },

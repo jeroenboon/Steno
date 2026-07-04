@@ -32,6 +32,29 @@ import type { CaptureMode, LoopbackState } from '../services/AudioCaptureService
 export type ProposedDecision = ItemsChangedPayload['decisions'][number]
 export type ProposedAction = ItemsChangedPayload['actions'][number]
 
+/**
+ * Split a meeting's decisions/actions into the store's four state-keyed lists.
+ * The single wholesale-reconcile rule shared by an authoritative items:changed
+ * event and the initial meeting load — the Proposed/Confirmed split lives here,
+ * not in per-transition store actions (ADR 0033).
+ */
+function splitItemsByState(
+  decisions: ProposedDecision[],
+  actions: ProposedAction[],
+): {
+  proposedDecisions: ProposedDecision[]
+  proposedActions: ProposedAction[]
+  confirmedDecisions: ProposedDecision[]
+  confirmedActions: ProposedAction[]
+} {
+  return {
+    proposedDecisions: decisions.filter((d) => d.state === 'proposed'),
+    proposedActions: actions.filter((a) => a.state === 'proposed'),
+    confirmedDecisions: decisions.filter((d) => d.state === 'confirmed'),
+    confirmedActions: actions.filter((a) => a.state === 'confirmed'),
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Route type
 // ---------------------------------------------------------------------------
@@ -216,30 +239,16 @@ export interface AppState {
   setLoopbackState: (state: LoopbackState) => void
 
   /**
-   * Merge newly proposed decisions/actions from an items:changed event (item 0018).
-   * Proposed items are replaced with the new set from the turn.
-   * Confirmed items already in the store are NOT touched.
+   * Reconcile the full item set for a meeting from an authoritative
+   * items:changed event (ADR 0033). Main emits every current decision/action
+   * (both states) after any mutation — agent turn or note-taker action — so the
+   * renderer replaces its four lists wholesale, split by state. Applied only
+   * when the payload's meetingId matches the currently-focused meeting; a stale
+   * event for a different meeting is ignored. This replaces the former
+   * optimistic transitions (mergeProposedItems / confirmItem / removeProposedItem
+   * / addConfirmedItem): the transition rule now lives only in main.
    */
-  mergeProposedItems: (payload: {
-    decisions: ProposedDecision[]
-    actions: ProposedAction[]
-  }) => void
-
-  /**
-   * Move a proposed decision/action to the confirmed list (note-taker confirmed it).
-   * Removes from proposed, adds to confirmed with state='confirmed'.
-   */
-  confirmItem: (kind: 'decision' | 'action', id: string) => void
-
-  /**
-   * Remove a proposed decision/action (note-taker dismissed it or agent retracted it).
-   */
-  removeProposedItem: (kind: 'decision' | 'action', id: string) => void
-
-  /**
-   * Add a confirmed item directly (manual add, item 0018).
-   */
-  addConfirmedItem: (kind: 'decision' | 'action', item: ProposedDecision | ProposedAction) => void
+  reconcileItems: (payload: ItemsChangedPayload) => void
 
   /** Set the agenda items for the current meeting. */
   setAgendaItems: (items: AgendaItem[]) => void
@@ -362,61 +371,11 @@ export const useAppStore = create<AppState>()((set) => ({
     set({ loopbackState: state })
   },
 
-  mergeProposedItems: ({ decisions, actions }) => {
-    set({ proposedDecisions: decisions, proposedActions: actions })
-  },
-
-  confirmItem: (kind, id) => {
+  reconcileItems: (payload) => {
     set((state) => {
-      if (kind === 'decision') {
-        const item = state.proposedDecisions.find((d) => d.id === id)
-        if (item === undefined) return {}
-        const confirmed = { ...item, state: 'confirmed' as const }
-        return {
-          proposedDecisions: state.proposedDecisions.filter((d) => d.id !== id),
-          confirmedDecisions: [...state.confirmedDecisions.filter((d) => d.id !== id), confirmed],
-        }
-      } else {
-        const item = state.proposedActions.find((a) => a.id === id)
-        if (item === undefined) return {}
-        const confirmed = { ...item, state: 'confirmed' as const }
-        return {
-          proposedActions: state.proposedActions.filter((a) => a.id !== id),
-          confirmedActions: [...state.confirmedActions.filter((a) => a.id !== id), confirmed],
-        }
-      }
-    })
-  },
-
-  removeProposedItem: (kind, id) => {
-    set((state) => {
-      if (kind === 'decision') {
-        return { proposedDecisions: state.proposedDecisions.filter((d) => d.id !== id) }
-      } else {
-        return { proposedActions: state.proposedActions.filter((a) => a.id !== id) }
-      }
-    })
-  },
-
-  addConfirmedItem: (kind, item) => {
-    set((state) => {
-      if (kind === 'decision') {
-        const d = item as ProposedDecision
-        return {
-          confirmedDecisions: [
-            ...state.confirmedDecisions.filter((x) => x.id !== d.id),
-            { ...d, state: 'confirmed' as const },
-          ],
-        }
-      } else {
-        const a = item as ProposedAction
-        return {
-          confirmedActions: [
-            ...state.confirmedActions.filter((x) => x.id !== a.id),
-            { ...a, state: 'confirmed' as const },
-          ],
-        }
-      }
+      // Ignore a stale event for a meeting other than the one in focus.
+      if (payload.meetingId !== state.activeMeeting) return {}
+      return splitItemsByState(payload.decisions, payload.actions)
     })
   },
 
@@ -471,11 +430,8 @@ export const useAppStore = create<AppState>()((set) => ({
       meetingSource: payload.meeting.source,
       // Review must surface Proposed items too: the final pass and any un-confirmed
       // live proposals are Proposed, and the note-taker confirms/dismisses them
-      // here. Split by state so each renders in its own lane.
-      proposedDecisions: payload.decisions.filter((d) => d.state === 'proposed'),
-      proposedActions: payload.actions.filter((a) => a.state === 'proposed'),
-      confirmedDecisions: payload.decisions.filter((d) => d.state === 'confirmed'),
-      confirmedActions: payload.actions.filter((a) => a.state === 'confirmed'),
+      // here. Same wholesale split by state as an authoritative items:changed.
+      ...splitItemsByState(payload.decisions, payload.actions),
       agendaItems: payload.agendaItems,
       participants: payload.participants,
       discussionSummaries: payload.summaries,

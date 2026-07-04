@@ -93,4 +93,14 @@ describe('decisionRepo', () => {
     meetingRepo(db).delete('mtg-1')
     expect(repo.findById('dec-1')).toBeNull()
   })
+
+  it('resolves the meeting id for a decision', () => {
+    const repo = decisionRepo(db)
+    repo.insert(decision, 'mtg-1')
+    expect(repo.findMeetingId('dec-1')).toBe('mtg-1')
+  })
+
+  it('returns null when resolving the meeting id of an unknown decision', () => {
+    expect(decisionRepo(db).findMeetingId('nope')).toBeNull()
+  })
 })

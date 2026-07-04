@@ -89,6 +89,14 @@ export function actionRepo(db: Database.Database) {
       return rows.map(rowToDomain)
     },
 
+    /** Resolve the meeting an action belongs to, or null when unknown. */
+    findMeetingId(id: string): string | null {
+      const row = db.prepare('SELECT meeting_id FROM actions WHERE id = ?').get(id) as
+        | { meeting_id: string }
+        | undefined
+      return row?.meeting_id ?? null
+    },
+
     delete(id: string): void {
       db.prepare('DELETE FROM actions WHERE id = ?').run(id)
     },

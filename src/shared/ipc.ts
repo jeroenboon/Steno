@@ -250,9 +250,12 @@ export type { TranscriptSpan } from './domain/types'
 // ---------------------------------------------------------------------------
 // items:changed — main → renderer push event (item 0018)
 //
-// Emitted after every rolling extraction turn (or final pass) that produces
-// ≥1 newly proposed Decision or Action. Carries the full proposed set for
-// that turn so the renderer can merge/replace its local state.
+// Emitted after ANY item mutation (an agent extraction turn OR a note-taker IPC
+// action: confirm / dismiss / edit / create). Main is authoritative: the payload
+// carries the FULL current item set for `meetingId` (both Proposed and Confirmed),
+// so the renderer reconciles wholesale by state rather than re-deriving
+// transitions locally (ADR 0033). The renderer applies it only when `meetingId`
+// matches the meeting it currently has focused.
 //
 // Pattern: webContents.send('items:changed', payload) on main;
 //          ipcRenderer.on('items:changed', listener) in preload, exposed as
@@ -263,7 +266,9 @@ export { DecisionSchema, ActionSchema, DiscussionSummarySchema, NudgeSchema } fr
 export type { Decision, Action, DiscussionSummary, Nudge } from './domain/types'
 
 export const ItemsChangedPayloadSchema = z.object({
-  /** Decisions proposed in this extraction turn. */
+  /** The meeting these items belong to (renderer applies only for its focused meeting). */
+  meetingId: z.string().min(1),
+  /** Full current decisions for the meeting (both Proposed and Confirmed). */
   decisions: z.array(
     z.object({
       id: z.string().min(1),
@@ -273,7 +278,7 @@ export const ItemsChangedPayloadSchema = z.object({
       state: z.enum(['proposed', 'confirmed']),
     }),
   ),
-  /** Actions proposed in this extraction turn. */
+  /** Full current actions for the meeting (both Proposed and Confirmed). */
   actions: z.array(
     z.object({
       id: z.string().min(1),

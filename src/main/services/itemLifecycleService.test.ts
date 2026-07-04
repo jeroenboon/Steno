@@ -25,7 +25,7 @@ import { decisionRepo } from '../db/repos/decisionRepo'
 import { meetingRepo } from '../db/repos/meetingRepo'
 import { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
 
-import { ItemLifecycleService, type ProposeItemsResult } from './itemLifecycleService'
+import { ItemLifecycleService } from './itemLifecycleService'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -143,38 +143,81 @@ describe('proposeItems', () => {
 })
 
 // ===========================================================================
-// onProposed — optional notify seam (replaces the runtime's subclass hack)
+// onItemsChanged — optional notify seam fired with the meeting on every mutation
 // ===========================================================================
 
-describe('proposeItems onProposed callback', () => {
-  it('fires onProposed with the created items when a proposal produces items', () => {
-    const fired: ProposeItemsResult[] = []
-    const notifying = new ItemLifecycleService(decRepo, actRepo, (result) => fired.push(result))
+describe('onItemsChanged notify seam', () => {
+  /** A service that records the meeting ids its onItemsChanged seam fires with. */
+  function makeNotifying(): { svc: ItemLifecycleService; fired: string[] } {
+    const fired: string[] = []
+    return {
+      svc: new ItemLifecycleService(decRepo, actRepo, (meetingId) => fired.push(meetingId)),
+      fired,
+    }
+  }
 
-    const result = notifying.proposeItems(MEETING_ID, {
+  it('fires with the meeting id when a proposal produces items', () => {
+    const { svc: notifying, fired } = makeNotifying()
+
+    notifying.proposeItems(MEETING_ID, {
       decisions: [
         { id: 'd1', rationale: 'Go forward', agendaItemId: AGENDA_ID, sourceSpanId: SPAN_ID },
       ],
       actions: [{ id: 'a1', agendaItemId: AGENDA_ID, sourceSpanId: SPAN_ID, status: 'open' }],
     })
 
-    expect(fired).toHaveLength(1)
-    expect(fired[0]?.decisions.map((d) => d.id)).toEqual(['d1'])
-    expect(fired[0]?.actions.map((a) => a.id)).toEqual(['a1'])
-    // The callback receives the same result the caller gets back.
-    expect(fired[0]).toEqual(result)
+    expect(fired).toEqual([MEETING_ID])
   })
 
-  it('does not fire onProposed when the proposal is empty', () => {
-    const fired: ProposeItemsResult[] = []
-    const notifying = new ItemLifecycleService(decRepo, actRepo, (result) => fired.push(result))
-
+  it('does not fire when the proposal is empty', () => {
+    const { svc: notifying, fired } = makeNotifying()
     notifying.proposeItems(MEETING_ID, { decisions: [], actions: [] })
-
     expect(fired).toHaveLength(0)
   })
 
-  it('proposes normally when no callback is supplied', () => {
+  it('fires with the resolved meeting id when a proposed item is confirmed', () => {
+    // Seed a proposed decision without a callback, then confirm through a
+    // notifying service — confirm carries only kind+id, so the seam must resolve
+    // the meeting itself.
+    svc.proposeItems(MEETING_ID, {
+      decisions: [
+        { id: 'd1', rationale: 'Go forward', agendaItemId: AGENDA_ID, sourceSpanId: SPAN_ID },
+      ],
+      actions: [],
+    })
+    const { svc: notifying, fired } = makeNotifying()
+
+    notifying.confirm({ kind: 'decision', id: 'd1' })
+
+    expect(fired).toEqual([MEETING_ID])
+  })
+
+  it('fires when a proposed item is dismissed (meeting resolved before the delete)', () => {
+    svc.proposeItems(MEETING_ID, {
+      decisions: [],
+      actions: [{ id: 'a1', agendaItemId: AGENDA_ID, sourceSpanId: SPAN_ID, status: 'open' }],
+    })
+    const { svc: notifying, fired } = makeNotifying()
+
+    notifying.dismiss({ kind: 'action', id: 'a1' })
+
+    expect(fired).toEqual([MEETING_ID])
+  })
+
+  it('fires when a confirmed item is created directly', () => {
+    const { svc: notifying, fired } = makeNotifying()
+
+    notifying.createConfirmedDecision(MEETING_ID, {
+      id: 'd9',
+      rationale: 'Manual add',
+      agendaItemId: AGENDA_ID,
+      sourceSpanId: SPAN_ID,
+    })
+
+    expect(fired).toEqual([MEETING_ID])
+  })
+
+  it('mutates normally when no callback is supplied', () => {
     const result = svc.proposeItems(MEETING_ID, {
       decisions: [
         { id: 'd1', rationale: 'Go forward', agendaItemId: AGENDA_ID, sourceSpanId: SPAN_ID },

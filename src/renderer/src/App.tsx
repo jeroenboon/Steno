@@ -14,10 +14,12 @@
 import React, { useEffect, useState } from 'react'
 
 import type { EgressState } from '@shared/ipc'
+import { ItemsChangedPayloadSchema } from '@shared/ipc'
 
 import { EgressIndicator } from './components/EgressIndicator'
 import { Wordmark } from './components/Wordmark'
 import { t } from './i18n'
+import { onValidated } from './ipc/onValidated'
 import { DraftScreen } from './screens/DraftScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { ImportScreen } from './screens/ImportScreen'
@@ -76,6 +78,7 @@ export function App(): React.JSX.Element {
   const route = useAppStore((s) => s.route)
   const setRoute = useAppStore((s) => s.setRoute)
   const liveMeetingId = useAppStore((s) => s.liveMeetingId)
+  const reconcileItems = useAppStore((s) => s.reconcileItems)
 
   const [egressState, setEgressState] = useState<EgressState>(DEFAULT_EGRESS)
   const [keysConfigured, setKeysConfigured] = useState<boolean | null>(null)
@@ -117,6 +120,18 @@ export function App(): React.JSX.Element {
       }
     })()
   }, [])
+
+  // Authoritative item reconciliation (ADR 0033). Main pushes the full item set
+  // for a meeting after any mutation — an agent extraction turn OR a note-taker
+  // IPC action (confirm / dismiss / edit / create). One app-level subscription
+  // covers both Live and Review; reconcileItems self-guards by meetingId so a
+  // stale event for another meeting is ignored. The renderer no longer applies
+  // optimistic transitions.
+  useEffect(() => {
+    return onValidated(window.api.onItemsChanged, ItemsChangedPayloadSchema, (payload) => {
+      reconcileItems(payload)
+    })
+  }, [reconcileItems])
 
   // A live recording session is in progress (not merely a meeting loaded for
   // Review) — this is what enables the Live tab, shows the live dot, and locks
