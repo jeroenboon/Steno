@@ -252,7 +252,7 @@ describe('endMeeting()', () => {
     extraction.scriptFinalPassResponse({
       proposedDecisions: [],
       proposedActions: [],
-      discussionSummaries: [{ agendaItemId: '__off-agenda__', text: 'Klaar.' }],
+      discussionSummaries: [{ agendaItemHint: undefined, text: 'Klaar.' }],
     })
 
     controller.start(MEETING_ID)

@@ -225,13 +225,26 @@ export class ExtractionLoopScheduler {
       return
     }
 
-    // Persist Discussion Summaries first (autosave, principle #13)
+    // Persist Discussion Summaries first (autosave, principle #13). The provider
+    // hints the agenda item by title; resolve it to a real id (unmatched → Off-
+    // agenda) exactly like decisions/actions, so the summary lands on a group the
+    // Review screen and export can find.
     for (const ds of response.discussionSummaries ?? []) {
       this._dsRepo.insert(
-        { id: randomUUID(), agendaItemId: ds.agendaItemId, text: ds.text },
+        {
+          id: randomUUID(),
+          agendaItemId: resolveAgendaItem(ds.agendaItemHint, context.agendaItems),
+          text: ds.text,
+        },
         meeting.id,
       )
     }
+
+    // The final pass is authoritative over the whole transcript. Supersede any
+    // still-Proposed rolling items so the same content can't appear twice (e.g.
+    // once under Off-agenda from a live turn, once under its agenda item here).
+    // Confirmed items the note-taker already curated are left untouched (ADR 0035).
+    this._itemService.retractAllProposed(meeting.id)
 
     // Propose decisions/actions from the final pass
     this._proposeItems(meeting.id, response.proposedDecisions, response.proposedActions, context)

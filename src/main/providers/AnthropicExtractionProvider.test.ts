@@ -89,7 +89,7 @@ const validRollingContent = {
 
 const validFinalPassContent = {
   ...validRollingContent,
-  discussionSummaries: [{ agendaItemId: 'agenda-1', text: 'Team discussed Q3 launch.' }],
+  discussionSummaries: [{ agendaItemHint: 'Launch planning', text: 'Team discussed Q3 launch.' }],
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +137,7 @@ describe('AnthropicExtractionProvider', () => {
     const result = await provider.extract(finalPassRequest)
 
     expect(result.discussionSummaries).toHaveLength(1)
-    expect(result.discussionSummaries?.[0]?.agendaItemId).toBe('agenda-1')
+    expect(result.discussionSummaries?.[0]?.agendaItemHint).toBe('Launch planning')
   })
 
   // -------------------------------------------------------------------------

@@ -335,7 +335,7 @@ describe('meeting end', () => {
     provider.scriptFinalPassResponse({
       proposedDecisions: [],
       proposedActions: [],
-      discussionSummaries: [{ agendaItemId: 'ai-1', text: 'Q3 was solid.' }],
+      discussionSummaries: [{ agendaItemHint: 'ai-1', text: 'Q3 was solid.' }],
     })
 
     runtime.handleSpan(makeSpan('s1', { isFinal: true }))
@@ -352,7 +352,7 @@ describe('meeting end', () => {
     provider.scriptFinalPassResponse({
       proposedDecisions: [],
       proposedActions: [],
-      discussionSummaries: [{ agendaItemId: 'ai-1', text: 'Q3 was solid.' }],
+      discussionSummaries: [{ agendaItemHint: 'ai-1', text: 'Q3 was solid.' }],
     })
 
     runtime.handleSpan(makeSpan('s1', { isFinal: true }))

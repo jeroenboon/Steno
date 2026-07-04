@@ -25,6 +25,7 @@ import Database from 'better-sqlite3'
 import { describe, it, expect } from 'vitest'
 
 import type { AgendaItem, Meeting, MeetingId, Participant, TranscriptSpan } from '@shared/domain'
+import { OffAgenda } from '@shared/domain'
 import { FakeClock, FakeExtractionProvider } from '@shared/providers'
 import type { ExtractionRequest } from '@shared/providers'
 
@@ -343,7 +344,7 @@ describe('final pass', () => {
     provider.scriptFinalPassResponse({
       proposedDecisions: [],
       proposedActions: [],
-      discussionSummaries: [{ agendaItemId: 'ai-1', text: 'Q3 was on track.' }],
+      discussionSummaries: [{ agendaItemHint: 'Q3 review', text: 'Q3 was on track.' }],
     })
 
     const endedMeeting: Meeting = { ...MEETING, state: 'ended' }
@@ -411,8 +412,8 @@ describe('final pass', () => {
       proposedDecisions: [{ rationale: 'Final decision', sourceSpanId: 's1' }],
       proposedActions: [],
       discussionSummaries: [
-        { agendaItemId: 'ai-1', text: 'We covered Q3 thoroughly.' },
-        { agendaItemId: 'ai-2', text: 'Budget discussion was brief.' },
+        { agendaItemHint: 'Q3 review', text: 'We covered Q3 thoroughly.' },
+        { agendaItemHint: 'Budget', text: 'Budget discussion was brief.' },
       ],
     })
 
@@ -424,6 +425,74 @@ describe('final pass', () => {
     const texts = summaries.map((s) => s.text).sort()
     expect(texts).toContain('We covered Q3 thoroughly.')
     expect(texts).toContain('Budget discussion was brief.')
+  })
+
+  it("resolves each summary's agendaItemHint to a real agenda item id", async () => {
+    const { db, provider, scheduler } = buildHarness()
+
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+
+    // The provider only ever sees a numbered agenda (no ids); it hints by title.
+    // A matching title must resolve to the real id; an unmatched hint → Off-agenda.
+    provider.scriptFinalPassResponse({
+      proposedDecisions: [],
+      proposedActions: [],
+      discussionSummaries: [
+        { agendaItemHint: 'Q3 review', text: 'We reviewed Q3.' },
+        { agendaItemHint: 'iets heel anders', text: 'Overig geklets.' },
+      ],
+    })
+
+    const endedMeeting: Meeting = { ...MEETING, state: 'ended' }
+    await scheduler.runFinalPass(endedMeeting, CONTEXT)
+
+    const summaries = discussionSummaryRepo(db).listByMeeting(MTG_ID)
+    const byText = new Map(summaries.map((s) => [s.text, s.agendaItemId]))
+    expect(byText.get('We reviewed Q3.')).toBe('ai-1')
+    expect(byText.get('Overig geklets.')).toBe(OffAgenda.id)
+  })
+
+  it('supersedes still-Proposed rolling items but keeps Confirmed ones', async () => {
+    const { db, provider, scheduler, itemService } = buildHarness()
+
+    // A live rolling turn proposes a decision + an action.
+    provider.scriptRollingResponse({
+      proposedDecisions: [{ rationale: 'Rolling proposed', sourceSpanId: 's1' }],
+      proposedActions: [{ description: 'Rolling action', sourceSpanId: 's1' }],
+    })
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    await scheduler.notifyPaused(MTG_ID, CONTEXT) // flush the rolling turn
+
+    const rolled = decisionRepo(db).listByMeeting(MTG_ID)
+    expect(rolled).toHaveLength(1)
+    const rolledDecision = rolled[0]
+    if (rolledDecision === undefined) throw new Error('expected a rolling decision')
+
+    // The note-taker confirms the decision live (it must survive the final pass).
+    itemService.confirm({ kind: 'decision', id: rolledDecision.id })
+
+    // The final pass re-extracts the whole transcript and proposes a fresh set.
+    provider.scriptFinalPassResponse({
+      proposedDecisions: [
+        { rationale: 'Final decision', sourceSpanId: 's1', agendaItemHint: 'Q3 review' },
+      ],
+      proposedActions: [],
+      discussionSummaries: [],
+    })
+
+    const endedMeeting: Meeting = { ...MEETING, state: 'ended' }
+    await scheduler.runFinalPass(endedMeeting, CONTEXT)
+
+    const decisions = decisionRepo(db).listByMeeting(MTG_ID)
+    const actions = actionRepo(db).listByMeeting(MTG_ID)
+
+    // The still-Proposed rolling action was retracted → no duplicate under Off-agenda.
+    expect(actions).toHaveLength(0)
+    // The Confirmed decision stays; the final pass adds one fresh Proposed decision.
+    const byRationale = new Map(decisions.map((d) => [d.rationale, d.state]))
+    expect(byRationale.get('Rolling proposed')).toBe('confirmed')
+    expect(byRationale.get('Final decision')).toBe('proposed')
+    expect(decisions).toHaveLength(2)
   })
 
   it('final pass also proposes decisions and actions', async () => {

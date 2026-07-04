@@ -308,7 +308,7 @@ function buildExtractBody(request: ExtractionRequest): string {
       : '(geen deelnemers)'
 
   const summariesInstruction = request.isFinalPass
-    ? `\n\nDit is de EINDEXTRACTIE. Voeg ook een "discussionSummaries" array toe met een object per agendapunt: { "agendaItemId": "...", "text": "..." }.`
+    ? `\n\nDit is de EINDEXTRACTIE. Voeg ook een "discussionSummaries" array toe met één object per agendapunt: { "agendaItemHint": "<exacte titel van het agendapunt hierboven>", "text": "korte samenvatting van wat er onder dat punt is besproken" }. Gebruik voor agendaItemHint de exacte titel uit de agenda; voor besproken zaken zonder agendapunt laat je agendaItemHint weg.`
     : ''
 
   return `Je bent een assistent die vergadernotities analyseert en beslissingen en actiepunten extraheert.
