@@ -249,7 +249,7 @@ export class LiveExtractionRuntime {
    */
   private _emitNudges(): void {
     const decisions = this._decisionsRepo.listByMeeting(this._meetingId)
-    const actions = this._actionsRepo.listActionsByMeeting(this._meetingId)
+    const actions = this._actionsRepo.listByMeeting(this._meetingId)
     const spans = this._spanRepo.listByMeeting(this._meetingId)
     const context = this._contextOwner.current()
     const nudges = deriveNudges(

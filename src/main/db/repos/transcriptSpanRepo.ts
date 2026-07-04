@@ -3,26 +3,7 @@ import type Database from 'better-sqlite3'
 import { TranscriptSpanSchema } from '@shared/domain'
 import type { TranscriptSpan } from '@shared/domain'
 
-interface TranscriptSpanRow {
-  id: string
-  meeting_id: string
-  text: string
-  start_ms: number
-  end_ms: number
-  confidence: number | null
-  speaker_label: string | null
-}
-
-function rowToDomain(row: TranscriptSpanRow): TranscriptSpan {
-  return TranscriptSpanSchema.parse({
-    id: row.id,
-    text: row.text,
-    startMs: row.start_ms,
-    endMs: row.end_ms,
-    confidence: row.confidence ?? undefined,
-    speakerLabel: row.speaker_label ?? undefined,
-  })
-}
+import { parseRow } from '../mapRow'
 
 export function transcriptSpanRepo(db: Database.Database) {
   return {
@@ -43,17 +24,17 @@ export function transcriptSpanRepo(db: Database.Database) {
 
     findById(id: string): TranscriptSpan | null {
       const row = db.prepare('SELECT * FROM transcript_spans WHERE id = ?').get(id) as
-        | TranscriptSpanRow
+        | Record<string, unknown>
         | undefined
       if (row === undefined) return null
-      return rowToDomain(row)
+      return parseRow(row, TranscriptSpanSchema)
     },
 
     listByMeeting(meetingId: string): TranscriptSpan[] {
       const rows = db
         .prepare('SELECT * FROM transcript_spans WHERE meeting_id = ? ORDER BY start_ms ASC')
-        .all(meetingId) as TranscriptSpanRow[]
-      return rows.map(rowToDomain)
+        .all(meetingId) as Record<string, unknown>[]
+      return rows.map((row) => parseRow(row, TranscriptSpanSchema))
     },
 
     delete(id: string): void {

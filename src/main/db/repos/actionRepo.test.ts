@@ -130,7 +130,7 @@ describe('actionRepo', () => {
     expect(found?.owner).toBe('p-2')
   })
 
-  it('listActionsByMeeting returns all actions for a meeting', () => {
+  it('listByMeeting returns all actions for a meeting', () => {
     const repo = actionRepo(db)
     repo.insert(
       {
@@ -152,7 +152,7 @@ describe('actionRepo', () => {
       },
       'mtg-1',
     )
-    expect(repo.listActionsByMeeting('mtg-1')).toHaveLength(2)
+    expect(repo.listByMeeting('mtg-1')).toHaveLength(2)
   })
 
   it('listOpenActionsByOwner returns open actions for an owner across meetings', () => {

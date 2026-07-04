@@ -29,6 +29,6 @@ export function sendItemsChanged(
   sender.send('items:changed', {
     meetingId,
     decisions: decisions.listByMeeting(meetingId),
-    actions: actions.listActionsByMeeting(meetingId),
+    actions: actions.listByMeeting(meetingId),
   } satisfies ItemsChangedPayload)
 }

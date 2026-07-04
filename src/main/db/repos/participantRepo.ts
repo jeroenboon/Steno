@@ -3,15 +3,7 @@ import type Database from 'better-sqlite3'
 import { ParticipantSchema } from '@shared/domain'
 import type { Participant } from '@shared/domain'
 
-interface ParticipantRow {
-  id: string
-  meeting_id: string
-  name: string
-}
-
-function rowToDomain(row: ParticipantRow): Participant {
-  return ParticipantSchema.parse({ id: row.id, name: row.name })
-}
+import { parseRow } from '../mapRow'
 
 export function participantRepo(db: Database.Database) {
   return {
@@ -23,17 +15,17 @@ export function participantRepo(db: Database.Database) {
 
     findById(id: string): Participant | null {
       const row = db.prepare('SELECT * FROM participants WHERE id = ?').get(id) as
-        | ParticipantRow
+        | Record<string, unknown>
         | undefined
       if (row === undefined) return null
-      return rowToDomain(row)
+      return parseRow(row, ParticipantSchema)
     },
 
     listByMeeting(meetingId: string): Participant[] {
       const rows = db
         .prepare('SELECT * FROM participants WHERE meeting_id = ?')
-        .all(meetingId) as ParticipantRow[]
-      return rows.map(rowToDomain)
+        .all(meetingId) as Record<string, unknown>[]
+      return rows.map((row) => parseRow(row, ParticipantSchema))
     },
 
     delete(id: string): void {
