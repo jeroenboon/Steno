@@ -25,6 +25,7 @@ import React, { useEffect, useState } from 'react'
 import { extractionPresets } from '../../../shared/providers'
 import { buildDisclosureCopy, computeEgressState } from '../../../shared/settings/egressState'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
+import { AzureExtractionCard } from '../components/AzureExtractionCard'
 import { KeyField } from '../components/KeyField'
 import { ProviderKeyCard } from '../components/ProviderKeyCard'
 import { ProviderKeyHelp } from '../components/ProviderKeyHelp'
@@ -35,10 +36,8 @@ import { t } from '../i18n'
 
 import {
   isValidUrl,
-  validateAzureFields,
   validateCustomFields,
   type AzureFields,
-  type AzureValidationErrors,
   type CustomFields,
   type CustomValidationErrors,
 } from './settingsValidation'
@@ -60,6 +59,30 @@ interface AudioAsrFields {
   apiVersion: string
   keyRef: string
   displayName: string
+}
+
+/** Empty Azure extraction form (used until a config is persisted). */
+const AZURE_DEFAULT_FIELDS: AzureFields = {
+  endpoint: '',
+  deployment: '',
+  apiVersion: '2024-12-01-preview',
+  model: '',
+  displayName: 'Azure OpenAI',
+  keyRef: 'azure',
+}
+
+/** Seed values for the Azure card: the persisted config when present, else defaults. */
+function azureInitialFields(settings: AppSettings): AzureFields {
+  if (settings.extractionProvider !== 'azure-openai') return AZURE_DEFAULT_FIELDS
+  const c = settings.azureOpenAI
+  return {
+    endpoint: c.endpoint,
+    deployment: c.deployment,
+    apiVersion: c.apiVersion,
+    model: c.model,
+    displayName: c.displayName,
+    keyRef: c.keyRef,
+  }
 }
 
 /** Default model id per cloud audio vendor (user-overridable). */
@@ -146,18 +169,10 @@ export function SettingsScreen(): React.JSX.Element {
   const [customOpenAISaveState, setCustomOpenAISaveState] = useState<KeySaveState>('idle')
   const [customDirty, setCustomDirty] = useState(false)
 
-  // ---- Azure OpenAI fields (Phase 2.2) ----
-  const [azureFields, setAzureFields] = useState<AzureFields>({
-    endpoint: '',
-    deployment: '',
-    apiVersion: '2024-12-01-preview',
-    model: '',
-    displayName: 'Azure OpenAI',
-    keyRef: 'azure',
-  })
-  const [azureErrors, setAzureErrors] = useState<AzureValidationErrors>({})
-  const [azureSaveState, setAzureSaveState] = useState<KeySaveState>('idle')
-  const [azureDirty, setAzureDirty] = useState(false)
+  // ---- Azure OpenAI (Phase 2.2) — form state lives in AzureExtractionCard ----
+  // Only the reveal-dirty flag stays here: true once the user switches to Azure,
+  // so the card mounts with Save enabled (vs a fresh load, which starts clean).
+  const [azureInitiallyDirty, setAzureInitiallyDirty] = useState(false)
 
   // ---- import-only cloud ASR fields (Phase 3.4) ----
   const [audioFields, setAudioFields] = useState<AudioAsrFields>({
@@ -192,16 +207,7 @@ export function SettingsScreen(): React.JSX.Element {
         })
       }
 
-      if (s.extractionProvider === 'azure-openai') {
-        setAzureFields({
-          endpoint: s.azureOpenAI.endpoint,
-          deployment: s.azureOpenAI.deployment,
-          apiVersion: s.azureOpenAI.apiVersion,
-          model: s.azureOpenAI.model,
-          displayName: s.azureOpenAI.displayName,
-          keyRef: s.azureOpenAI.keyRef,
-        })
-      }
+      // Azure form values are seeded by AzureExtractionCard from settings itself.
 
       if (s.asrProvider === 'openai-audio') {
         setAudioFields((f) => ({
@@ -448,21 +454,22 @@ export function SettingsScreen(): React.JSX.Element {
         azureOpenAI: undefined,
       } as AppSettings)
     } else if (provider === 'azure') {
-      // Reveal the Azure config panel; persist only on explicit save (the
-      // fields may still be empty / invalid here).
-      setAzureDirty(true)
-      setAzureSaveState('idle')
+      // Reveal the Azure config panel (the card mounts with Save enabled via
+      // initiallyDirty); persist only on explicit save. Seed a default config
+      // block so egress/shared-key can read it before the first save.
+      setAzureInitiallyDirty(true)
+      const init = azureInitialFields(settings)
       setSettings({
         ...settings,
         extractionProvider: 'azure-openai',
         openaiCompatible: undefined,
         azureOpenAI: {
-          endpoint: azureFields.endpoint,
-          deployment: azureFields.deployment,
-          apiVersion: azureFields.apiVersion,
-          model: azureFields.model,
-          keyRef: azureFields.keyRef,
-          displayName: azureFields.displayName,
+          endpoint: init.endpoint,
+          deployment: init.deployment,
+          apiVersion: init.apiVersion,
+          model: init.model,
+          keyRef: init.keyRef,
+          displayName: init.displayName,
         },
       } as AppSettings)
     } else {
@@ -520,13 +527,9 @@ export function SettingsScreen(): React.JSX.Element {
     setCustomDirty(false)
   }
 
-  async function handleSaveAzureOpenAI(): Promise<void> {
-    const errors = validateAzureFields(azureFields)
-    setAzureErrors(errors)
-    if (Object.keys(errors).length > 0) return
-
-    const { endpoint, deployment, apiVersion, model, displayName, keyRef } = azureFields
-    setAzureSaveState('saving')
+  /** Persist a validated Azure config emitted by AzureExtractionCard. */
+  async function persistAzure(fields: AzureFields): Promise<void> {
+    const { endpoint, deployment, apiVersion, model, displayName, keyRef } = fields
     await persistSettings({
       ...settings,
       extractionProvider: 'azure-openai',
@@ -540,8 +543,6 @@ export function SettingsScreen(): React.JSX.Element {
         displayName: displayName.trim(),
       },
     } as AppSettings)
-    setAzureSaveState('saved')
-    setAzureDirty(false)
   }
 
   async function handleDownloadModel(): Promise<void> {
@@ -857,192 +858,13 @@ export function SettingsScreen(): React.JSX.Element {
           }}
           configPanel={
             isAzure ? (
-              /* Azure OpenAI fields */
-              <div className="settings-azure-openai">
-                <div className="form-group">
-                  <label htmlFor="azure-openai-endpoint" className="form-label">
-                    {t('settings.azure.endpoint.label')}
-                  </label>
-                  <input
-                    id="azure-openai-endpoint"
-                    data-testid="azure-openai-endpoint"
-                    type="url"
-                    className={`form-input${azureErrors.endpoint !== undefined ? ' form-input--error' : ''}`}
-                    placeholder={t('settings.azure.endpoint.placeholder')}
-                    value={azureFields.endpoint}
-                    onChange={(e) => {
-                      const v = e.currentTarget.value
-                      setAzureFields((f) => ({ ...f, endpoint: v }))
-                      setAzureErrors((err) => {
-                        const next = { ...err }
-                        delete next.endpoint
-                        return next
-                      })
-                      setAzureDirty(true)
-                      if (azureSaveState === 'saved') setAzureSaveState('idle')
-                    }}
-                  />
-                  {azureErrors.endpoint !== undefined && (
-                    <p className="form-error">{azureErrors.endpoint}</p>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="azure-openai-deployment" className="form-label">
-                    {t('settings.azure.deployment.label')}
-                  </label>
-                  <input
-                    id="azure-openai-deployment"
-                    data-testid="azure-openai-deployment"
-                    type="text"
-                    className={`form-input${azureErrors.deployment !== undefined ? ' form-input--error' : ''}`}
-                    placeholder={t('settings.azure.deployment.placeholder')}
-                    value={azureFields.deployment}
-                    onChange={(e) => {
-                      const v = e.currentTarget.value
-                      setAzureFields((f) => ({ ...f, deployment: v }))
-                      setAzureErrors((err) => {
-                        const next = { ...err }
-                        delete next.deployment
-                        return next
-                      })
-                      setAzureDirty(true)
-                      if (azureSaveState === 'saved') setAzureSaveState('idle')
-                    }}
-                  />
-                  {azureErrors.deployment !== undefined && (
-                    <p className="form-error">{azureErrors.deployment}</p>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="azure-openai-api-version" className="form-label">
-                    {t('settings.azure.apiVersion.label')}
-                  </label>
-                  <input
-                    id="azure-openai-api-version"
-                    data-testid="azure-openai-api-version"
-                    type="text"
-                    className={`form-input${azureErrors.apiVersion !== undefined ? ' form-input--error' : ''}`}
-                    placeholder={t('settings.azure.apiVersion.placeholder')}
-                    value={azureFields.apiVersion}
-                    onChange={(e) => {
-                      const v = e.currentTarget.value
-                      setAzureFields((f) => ({ ...f, apiVersion: v }))
-                      setAzureErrors((err) => {
-                        const next = { ...err }
-                        delete next.apiVersion
-                        return next
-                      })
-                      setAzureDirty(true)
-                      if (azureSaveState === 'saved') setAzureSaveState('idle')
-                    }}
-                  />
-                  {azureErrors.apiVersion !== undefined && (
-                    <p className="form-error">{azureErrors.apiVersion}</p>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="azure-openai-model" className="form-label">
-                    {t('settings.azure.model.label')}
-                  </label>
-                  <input
-                    id="azure-openai-model"
-                    data-testid="azure-openai-model"
-                    type="text"
-                    className={`form-input${azureErrors.model !== undefined ? ' form-input--error' : ''}`}
-                    placeholder={t('settings.azure.model.placeholder')}
-                    value={azureFields.model}
-                    onChange={(e) => {
-                      const v = e.currentTarget.value
-                      setAzureFields((f) => ({ ...f, model: v }))
-                      setAzureErrors((err) => {
-                        const next = { ...err }
-                        delete next.model
-                        return next
-                      })
-                      setAzureDirty(true)
-                      if (azureSaveState === 'saved') setAzureSaveState('idle')
-                    }}
-                  />
-                  {azureErrors.model !== undefined && (
-                    <p className="form-error">{azureErrors.model}</p>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="azure-openai-display-name" className="form-label">
-                    {t('settings.azure.displayName.label')}
-                  </label>
-                  <input
-                    id="azure-openai-display-name"
-                    data-testid="azure-openai-display-name"
-                    type="text"
-                    className={`form-input${azureErrors.displayName !== undefined ? ' form-input--error' : ''}`}
-                    placeholder={t('settings.azure.displayName.placeholder')}
-                    value={azureFields.displayName}
-                    onChange={(e) => {
-                      const v = e.currentTarget.value
-                      setAzureFields((f) => ({ ...f, displayName: v }))
-                      setAzureErrors((err) => {
-                        const next = { ...err }
-                        delete next.displayName
-                        return next
-                      })
-                      setAzureDirty(true)
-                      if (azureSaveState === 'saved') setAzureSaveState('idle')
-                    }}
-                  />
-                  {azureErrors.displayName !== undefined && (
-                    <p className="form-error">{azureErrors.displayName}</p>
-                  )}
-                </div>
-
-                <KeyField
-                  idBase="azure-openai"
-                  label={t('settings.azure.key.label')}
-                  placeholder={t('settings.azure.key.placeholder')}
-                  present={azureKey.present}
-                  editing={azureKey.editing}
-                  value={azureKey.value}
-                  saveState={azureKey.saveState}
-                  testIdInput="azure-openai-key"
-                  testIdSave="save-azure-key"
-                  testIdMissing="azure-key-missing"
-                  missingText={t('settings.azure.key.missing')}
-                  onChange={azureKey.change}
-                  onSave={() => {
-                    void azureKey.save(azureFields.keyRef)
-                  }}
-                  onReplace={azureKey.beginReplace}
-                  onCancel={azureKey.cancel}
-                />
-
-                <button
-                  type="button"
-                  data-testid="save-azure-openai"
-                  className="btn btn--primary"
-                  disabled={azureSaveState === 'saving' || !azureDirty}
-                  onClick={() => {
-                    void handleSaveAzureOpenAI()
-                  }}
-                >
-                  {azureSaveState === 'saved'
-                    ? t('settings.azure.saved')
-                    : t('settings.azure.save')}
-                </button>
-
-                <ProviderKeyHelp keyRef={azureFields.keyRef} testId="azure-key-help" />
-
-                <SharedKeyNotice
-                  settings={settings}
-                  keyRef={azureFields.keyRef}
-                  testId="shared-key-azure"
-                />
-
-                <TestConnectionButton role="extraction" testId="test-extraction-connection" />
-              </div>
+              <AzureExtractionCard
+                keyField={azureKey}
+                settings={settings}
+                initialFields={azureInitialFields(settings)}
+                initiallyDirty={azureInitiallyDirty}
+                onSave={persistAzure}
+              />
             ) : !isCustomOpenAI ? (
               /* Anthropic key entry */
               <ProviderKeyCard
