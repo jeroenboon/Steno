@@ -19,6 +19,7 @@
  * injected (defaulting to the real ones) so tests can feed fake providers.
  */
 
+import type { Meeting } from '@shared/domain'
 import { FakeASRProvider } from '@shared/providers'
 import type { Clock } from '@shared/providers'
 
@@ -186,14 +187,23 @@ export class LiveSessionController {
     this._currentBridge?.pushAudioFrame(frame)
   }
 
-  /** Pause the active runtime's live cadence. No-op when not started. */
-  pause(): void {
+  /**
+   * Pause the meeting: persist the `paused` flag through the single enforcer AND
+   * halt the active runtime's live cadence, then return the updated Meeting. The
+   * two steps used to be split across an index.ts closure (review item 6b); they
+   * belong together here, where both collaborators already live.
+   */
+  pause(meetingId: string): Meeting {
+    const meeting = this._meetingLifecycle.pauseMeeting(meetingId)
     this._activeRuntime?.pause()
+    return meeting
   }
 
-  /** Resume the active runtime's live cadence. No-op when not started. */
-  resume(): void {
+  /** Resume the meeting: persist the flag and resume the runtime cadence. */
+  resume(meetingId: string): Meeting {
+    const meeting = this._meetingLifecycle.resumeMeeting(meetingId)
     this._activeRuntime?.resume()
+    return meeting
   }
 
   // -------------------------------------------------------------------------

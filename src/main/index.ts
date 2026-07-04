@@ -465,16 +465,8 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
       return built.provider.inferContext({ source: { text: req.text } })
     },
     agendaItemRepo: aiRepo,
-    onMeetingPause: (meetingId) => {
-      const meeting = meetingLifecycle.pauseMeeting(meetingId)
-      liveSession.pause()
-      return meeting
-    },
-    onMeetingResume: (meetingId) => {
-      const meeting = meetingLifecycle.resumeMeeting(meetingId)
-      liveSession.resume()
-      return meeting
-    },
+    onMeetingPause: (meetingId) => liveSession.pause(meetingId),
+    onMeetingResume: (meetingId) => liveSession.resume(meetingId),
     meetingRepo: mRepo,
   })
 
