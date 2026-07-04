@@ -53,10 +53,22 @@ export type ItemRef = { kind: 'decision'; id: string } | { kind: 'action'; id: s
 export class ItemLifecycleService {
   private readonly decisions: ReturnType<typeof decisionRepo>
   private readonly actions: ReturnType<typeof actionRepo>
+  /**
+   * Optional notify seam fired after a {@link proposeItems} call that produced
+   * at least one item. The live runtime wires this to emit `items:changed`; it
+   * replaces the former `InterceptingItemLifecycleService` subclass, which only
+   * existed because this concrete class exposed no such hook (ADR 0033).
+   */
+  private readonly onProposed: ((result: ProposeItemsResult) => void) | undefined
 
-  constructor(decisions: ReturnType<typeof decisionRepo>, actions: ReturnType<typeof actionRepo>) {
+  constructor(
+    decisions: ReturnType<typeof decisionRepo>,
+    actions: ReturnType<typeof actionRepo>,
+    onProposed?: (result: ProposeItemsResult) => void,
+  ) {
     this.decisions = decisions
     this.actions = actions
+    this.onProposed = onProposed
   }
 
   // -------------------------------------------------------------------------
@@ -76,7 +88,11 @@ export class ItemLifecycleService {
       return item
     })
 
-    return { decisions, actions }
+    const result: ProposeItemsResult = { decisions, actions }
+    if (this.onProposed !== undefined && (decisions.length > 0 || actions.length > 0)) {
+      this.onProposed(result)
+    }
+    return result
   }
 
   // -------------------------------------------------------------------------
