@@ -16,10 +16,14 @@
  * `[Azure]`) so vendors are distinguishable without exposing content or keys.
  */
 
+import type { z } from 'zod'
+
 import { excludeCoveredAgendaItems } from '@shared/agenda/agendaTitle'
 import {
-  ExtractionResponseSchema,
   InferredContextSchema,
+  ProposedActionSchema,
+  ProposedDecisionSchema,
+  ProposedDiscussionSummarySchema,
   inferSourceToText,
   type ExtractionRequest,
   type ExtractionResponse,
@@ -102,16 +106,10 @@ export class ChatExtractionEngine {
     const content = await this._post(buildSystemPrompt(request), buildUserMessage(request))
     if (content === null) return null
 
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(content) as unknown
-    } catch {
-      return null
-    }
+    const parsed = parseJsonLoose(content)
+    if (parsed === null) return null
 
-    const validated = ExtractionResponseSchema.safeParse(parsed)
-    if (!validated.success) return null
-    return validated.data
+    return coerceExtractionResponse(parsed)
   }
 
   private async _callAndValidateInfer(
@@ -124,12 +122,8 @@ export class ChatExtractionEngine {
     )
     if (content === null) return null
 
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(content) as unknown
-    } catch {
-      return null
-    }
+    const parsed = parseJsonLoose(content)
+    if (parsed === null) return null
 
     const validated = InferredContextSchema.safeParse(parsed)
     if (!validated.success) return null
@@ -195,6 +189,80 @@ function stableHash(text: string): string {
     hash = Math.imul(hash, 0x01000193)
   }
   return (hash >>> 0).toString(16)
+}
+
+/**
+ * Parse JSON from a chat-completion message, tolerating endpoints that ignore
+ * `response_format: json_object` and wrap the object in a markdown code fence or
+ * surrounding prose. Tries, in order: the raw content, the contents of a
+ * ```json``` (or bare ```) fence, and the substring from the first `{` to the
+ * last `}`. Returns null when none parse. Never logs the content (privacy #12).
+ */
+function parseJsonLoose(content: string): unknown {
+  for (const candidate of jsonCandidates(content)) {
+    try {
+      return JSON.parse(candidate) as unknown
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  return null
+}
+
+/**
+ * Build an ExtractionResponse from an already-parsed object, leniently: a
+ * missing `proposedDecisions` / `proposedActions` becomes an empty array, and a
+ * single malformed item is dropped rather than failing the whole turn. Returns
+ * null only when the value is not a JSON object at all (→ retry). This is a
+ * deliberate softening of the strict all-or-nothing schema for LLM output: the
+ * items are Proposed and reviewed by the note-taker, so keeping the valid ones
+ * beats discarding a whole turn over one bad field.
+ */
+function coerceExtractionResponse(parsed: unknown): ExtractionResponse | null {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const obj = parsed as Record<string, unknown>
+
+  const response: ExtractionResponse = {
+    proposedDecisions: keepValid(obj.proposedDecisions, ProposedDecisionSchema),
+    proposedActions: keepValid(obj.proposedActions, ProposedActionSchema),
+  }
+
+  // discussionSummaries is present only on the final pass; keep it out of the
+  // object entirely when absent (exactOptionalPropertyTypes).
+  if (obj.discussionSummaries !== undefined) {
+    response.discussionSummaries = keepValid(
+      obj.discussionSummaries,
+      ProposedDiscussionSummarySchema,
+    )
+  }
+
+  return response
+}
+
+/** Validate each element against `schema`, keeping only the ones that pass. */
+function keepValid<S extends z.ZodTypeAny>(value: unknown, schema: S): z.infer<S>[] {
+  if (!Array.isArray(value)) return []
+  const out: z.infer<S>[] = []
+  for (const item of value) {
+    const result = schema.safeParse(item)
+    if (result.success) out.push(result.data as z.infer<S>)
+  }
+  return out
+}
+
+function jsonCandidates(content: string): string[] {
+  const trimmed = content.trim()
+  const candidates = [trimmed]
+
+  const fence = /```(?:json)?\s*\n?([\s\S]*?)\n?```/i.exec(trimmed)
+  if (fence?.[1] !== undefined) candidates.push(fence[1].trim())
+
+  // Prose around a JSON object: take the first `{` … last `}`.
+  const start = trimmed.indexOf('{')
+  const end = trimmed.lastIndexOf('}')
+  if (start !== -1 && end > start) candidates.push(trimmed.slice(start, end + 1))
+
+  return candidates
 }
 
 function extractContent(json: unknown): string | null {
