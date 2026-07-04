@@ -115,6 +115,20 @@ export function buildProviders(settings: AppSettings, storage: SecretStorage): B
 }
 
 /**
+ * Run a throwing builder and turn a thrown missing-key/not-implemented error
+ * into an `{ ok: false, error }` result. The single place the three non-throwing
+ * variants share; each just relabels the success value (`providers` vs
+ * `provider`) to keep its own result contract.
+ */
+function tryBuild<T>(build: () => T): { ok: true; value: T } | { ok: false; error: string } {
+  try {
+    return { ok: true, value: build() }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/**
  * Non-throwing variant of buildProviders.
  *
  * Returns a discriminated result type so callers can handle the missing-key
@@ -129,13 +143,8 @@ export function tryBuildProviders(
   settings: AppSettings,
   storage: SecretStorage,
 ): BuildProvidersResult {
-  try {
-    const providers = buildProviders(settings, storage)
-    return { ok: true, providers }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    return { ok: false, error: message }
-  }
+  const result = tryBuild(() => buildProviders(settings, storage))
+  return result.ok ? { ok: true, providers: result.value } : result
 }
 
 /**
@@ -148,11 +157,8 @@ export function tryBuildAsrProvider(
   storage: SecretStorage,
   usage: AsrUsage = 'live',
 ): BuildAsrResult {
-  try {
-    return { ok: true, provider: buildAsrProvider(settings, storage, usage) }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
-  }
+  const result = tryBuild(() => buildAsrProvider(settings, storage, usage))
+  return result.ok ? { ok: true, provider: result.value } : result
 }
 
 /**
@@ -163,11 +169,8 @@ export function tryBuildExtractionProvider(
   settings: AppSettings,
   storage: SecretStorage,
 ): BuildExtractionResult {
-  try {
-    return { ok: true, provider: buildExtractionProvider(settings, storage) }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
-  }
+  const result = tryBuild(() => buildExtractionProvider(settings, storage))
+  return result.ok ? { ok: true, provider: result.value } : result
 }
 
 // ---------------------------------------------------------------------------
