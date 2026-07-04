@@ -250,6 +250,67 @@ describe('ReviewScreen — Decisions and Actions', () => {
   })
 })
 
+describe('ReviewScreen — Proposed items', () => {
+  const PROPOSED_DECISION = {
+    id: 'd-p1',
+    rationale: 'Voorstel: release naar Q4',
+    agendaItemId: 'ai-1',
+    sourceSpanId: 'span-x',
+    state: 'proposed' as const,
+  }
+
+  const PROPOSED_ACTION = {
+    id: 'a-p1',
+    agendaItemId: 'ai-1',
+    sourceSpanId: 'span-x',
+    status: 'open' as const,
+    state: 'proposed' as const,
+  }
+
+  it('renders a proposed decision with confirm and dismiss controls', () => {
+    useAppStore.setState({ agendaItems: [AGENDA_1], proposedDecisions: [PROPOSED_DECISION] })
+    renderReview()
+
+    expect(screen.getByText('Voorstel: release naar Q4')).toBeInTheDocument()
+    expect(screen.getByTestId('review-confirm-decision-d-p1')).toBeInTheDocument()
+    expect(screen.getByTestId('review-dismiss-decision-d-p1')).toBeInTheDocument()
+  })
+
+  it('is not treated as an empty group when only proposed items exist', () => {
+    useAppStore.setState({ agendaItems: [AGENDA_1], proposedActions: [PROPOSED_ACTION] })
+    renderReview()
+
+    // The Off-agenda group is still empty, but the AGENDA_1 group is not.
+    expect(screen.getByTestId('review-action-a-p1')).toBeInTheDocument()
+  })
+
+  it('confirms a proposed decision via IPC and moves it into the confirmed lane', async () => {
+    useAppStore.setState({ agendaItems: [AGENDA_1], proposedDecisions: [PROPOSED_DECISION] })
+    renderReview()
+
+    fireEvent.click(screen.getByTestId('review-confirm-decision-d-p1'))
+
+    await waitFor(() => {
+      expect(mockApi.itemConfirm).toHaveBeenCalledWith({ kind: 'decision', id: 'd-p1' })
+    })
+    const s = useAppStore.getState()
+    expect(s.proposedDecisions).toHaveLength(0)
+    expect(s.confirmedDecisions.map((d) => d.id)).toContain('d-p1')
+  })
+
+  it('dismisses a proposed decision via IPC and removes it from the proposed lane', async () => {
+    useAppStore.setState({ agendaItems: [AGENDA_1], proposedDecisions: [PROPOSED_DECISION] })
+    renderReview()
+
+    fireEvent.click(screen.getByTestId('review-dismiss-decision-d-p1'))
+
+    await waitFor(() => {
+      expect(mockApi.itemDismiss).toHaveBeenCalledWith({ kind: 'decision', id: 'd-p1' })
+    })
+    expect(useAppStore.getState().proposedDecisions).toHaveLength(0)
+  })
+})
+
 describe('ReviewScreen — editing a decision', () => {
   it('opens an edit form when the edit button is clicked', () => {
     useAppStore.setState({

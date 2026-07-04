@@ -1920,8 +1920,23 @@ body::before {
   font-weight: 600;
 }
 
-.review-item-card__edit {
+/* Proposed items in Review: pencil-gray dashed border (tentative), matching the
+   Proposed treatment on the Live screen. Confirmed items keep the solid border. */
+.review-item-card--proposed {
+  border-style: dashed;
+  border-color: var(--color-proposed);
+}
+
+.review-item-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   align-self: flex-start;
+}
+
+.review-item-card__edit,
+.review-item-card__confirm,
+.review-item-card__dismiss {
   font-size: 12px;
 }
 
