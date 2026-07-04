@@ -25,6 +25,7 @@ import {
 } from '../screens/settingsValidation'
 import type { KeySaveState, SecretKeyField } from '../screens/useSecretKeyField'
 
+import { ConfigTextField } from './ConfigTextField'
 import { KeyField } from './KeyField'
 import { ProviderKeyHelp } from './ProviderKeyHelp'
 import { SharedKeyNotice } from './SharedKeyNotice'
@@ -41,36 +42,6 @@ export interface AzureExtractionCardProps {
   initiallyDirty: boolean
   /** Persist the validated config. The parent owns the AppSettings merge. */
   onSave: (fields: AzureFields) => Promise<void>
-}
-
-/** A labelled text/url input with inline validation error, for one Azure field. */
-function AzureField(props: {
-  field: keyof AzureValidationErrors
-  testId: string
-  type: 'text' | 'url'
-  value: string
-  error: string | undefined
-  onChange: (v: string) => void
-}): React.JSX.Element {
-  return (
-    <div className="form-group">
-      <label htmlFor={props.testId} className="form-label">
-        {t(`settings.azure.${props.field}.label`)}
-      </label>
-      <input
-        id={props.testId}
-        data-testid={props.testId}
-        type={props.type}
-        className={`form-input${props.error !== undefined ? ' form-input--error' : ''}`}
-        placeholder={t(`settings.azure.${props.field}.placeholder`)}
-        value={props.value}
-        onChange={(e) => {
-          props.onChange(e.currentTarget.value)
-        }}
-      />
-      {props.error !== undefined && <p className="form-error">{props.error}</p>}
-    </div>
-  )
 }
 
 export function AzureExtractionCard(props: AzureExtractionCardProps): React.JSX.Element {
@@ -106,9 +77,10 @@ export function AzureExtractionCard(props: AzureExtractionCardProps): React.JSX.
 
   return (
     <div className="settings-azure-openai">
-      <AzureField
-        field="endpoint"
+      <ConfigTextField
         testId="azure-openai-endpoint"
+        label={t('settings.azure.endpoint.label')}
+        placeholder={t('settings.azure.endpoint.placeholder')}
         type="url"
         value={fields.endpoint}
         error={errors.endpoint}
@@ -116,9 +88,10 @@ export function AzureExtractionCard(props: AzureExtractionCardProps): React.JSX.
           editField('endpoint', v)
         }}
       />
-      <AzureField
-        field="deployment"
+      <ConfigTextField
         testId="azure-openai-deployment"
+        label={t('settings.azure.deployment.label')}
+        placeholder={t('settings.azure.deployment.placeholder')}
         type="text"
         value={fields.deployment}
         error={errors.deployment}
@@ -126,9 +99,10 @@ export function AzureExtractionCard(props: AzureExtractionCardProps): React.JSX.
           editField('deployment', v)
         }}
       />
-      <AzureField
-        field="apiVersion"
+      <ConfigTextField
         testId="azure-openai-api-version"
+        label={t('settings.azure.apiVersion.label')}
+        placeholder={t('settings.azure.apiVersion.placeholder')}
         type="text"
         value={fields.apiVersion}
         error={errors.apiVersion}
@@ -136,9 +110,10 @@ export function AzureExtractionCard(props: AzureExtractionCardProps): React.JSX.
           editField('apiVersion', v)
         }}
       />
-      <AzureField
-        field="model"
+      <ConfigTextField
         testId="azure-openai-model"
+        label={t('settings.azure.model.label')}
+        placeholder={t('settings.azure.model.placeholder')}
         type="text"
         value={fields.model}
         error={errors.model}
@@ -146,9 +121,10 @@ export function AzureExtractionCard(props: AzureExtractionCardProps): React.JSX.
           editField('model', v)
         }}
       />
-      <AzureField
-        field="displayName"
+      <ConfigTextField
         testId="azure-openai-display-name"
+        label={t('settings.azure.displayName.label')}
+        placeholder={t('settings.azure.displayName.placeholder')}
         type="text"
         value={fields.displayName}
         error={errors.displayName}
