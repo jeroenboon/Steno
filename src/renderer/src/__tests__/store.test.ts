@@ -61,6 +61,62 @@ const _routeCheck: AppRoute[] = ['draft', 'live', 'review']
 void _routeCheck
 
 // ---------------------------------------------------------------------------
+// appStore — reconcileItems: authoritative wholesale reconcile, guarded by the
+// focused meeting (ADR 0033)
+// ---------------------------------------------------------------------------
+
+describe('appStore — reconcileItems', () => {
+  const decision = {
+    id: 'd-1',
+    rationale: 'Ship it',
+    agendaItemId: 'ai-1',
+    sourceSpanId: 'span-1',
+    state: 'proposed' as const,
+  }
+  const confirmedDecision = { ...decision, id: 'd-2', state: 'confirmed' as const }
+
+  beforeEach(() => {
+    useAppStore.setState({
+      activeMeeting: 'mtg-1',
+      proposedDecisions: [],
+      proposedActions: [],
+      confirmedDecisions: [],
+      confirmedActions: [],
+    })
+  })
+
+  it('splits the full set into the proposed and confirmed lanes for the focused meeting', () => {
+    useAppStore.getState().reconcileItems({
+      meetingId: 'mtg-1',
+      decisions: [decision, confirmedDecision],
+      actions: [],
+    })
+
+    const s = useAppStore.getState()
+    expect(s.proposedDecisions.map((d) => d.id)).toEqual(['d-1'])
+    expect(s.confirmedDecisions.map((d) => d.id)).toEqual(['d-2'])
+  })
+
+  it('replaces wholesale, so a removed item disappears', () => {
+    useAppStore.setState({ proposedDecisions: [decision] })
+    useAppStore.getState().reconcileItems({ meetingId: 'mtg-1', decisions: [], actions: [] })
+    expect(useAppStore.getState().proposedDecisions).toHaveLength(0)
+  })
+
+  it('ignores an event for a meeting other than the one in focus', () => {
+    useAppStore.setState({ proposedDecisions: [decision] })
+    useAppStore.getState().reconcileItems({
+      meetingId: 'some-other-meeting',
+      decisions: [confirmedDecision],
+      actions: [],
+    })
+    // Unchanged: the stale event is dropped.
+    expect(useAppStore.getState().proposedDecisions.map((d) => d.id)).toEqual(['d-1'])
+    expect(useAppStore.getState().confirmedDecisions).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // appStore — loadMeeting keeps Proposed items (Review must show them so the
 // note-taker can confirm the final pass's output, not just already-confirmed)
 // ---------------------------------------------------------------------------

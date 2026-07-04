@@ -20,7 +20,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   AgendaChangedPayloadSchema,
-  ItemsChangedPayloadSchema,
   ItemsSummariesPayloadSchema,
   NudgesChangedPayloadSchema,
   SummaryChangedPayloadSchema,
@@ -47,7 +46,6 @@ export function useLiveSession(liveMeetingId: string | null): UseLiveSessionResu
   const setMicPermission = useAppStore((s) => s.setMicPermission)
   const addTranscriptSpan = useAppStore((s) => s.addTranscriptSpan)
   const setLoopbackState = useAppStore((s) => s.setLoopbackState)
-  const mergeProposedItems = useAppStore((s) => s.mergeProposedItems)
   const setNudges = useAppStore((s) => s.setNudges)
   const setAgendaItems = useAppStore((s) => s.setAgendaItems)
   const setRunningSummary = useAppStore((s) => s.setRunningSummary)
@@ -79,14 +77,10 @@ export function useLiveSession(liveMeetingId: string | null): UseLiveSessionResu
       addTranscriptSpan(span)
     })
 
-    // Proposed items
-    const unsubItems = onValidated(
-      window.api.onItemsChanged,
-      ItemsChangedPayloadSchema,
-      (payload) => {
-        mergeProposedItems({ decisions: payload.decisions, actions: payload.actions })
-      },
-    )
+    // Items (Decisions/Actions) are reconciled app-wide from the authoritative
+    // items:changed event in App.tsx (ADR 0033), so this hook does not subscribe
+    // to them — that would double-apply. It handles only the capture-scoped
+    // streams below.
 
     // Nudges (item 0019)
     const unsubNudges = onValidated(
@@ -153,7 +147,6 @@ export function useLiveSession(liveMeetingId: string | null): UseLiveSessionResu
 
     return () => {
       unsubSpan()
-      unsubItems()
       unsubNudges()
       unsubAgenda()
       unsubSummary()
@@ -172,7 +165,6 @@ export function useLiveSession(liveMeetingId: string | null): UseLiveSessionResu
     addTranscriptSpan,
     setMicPermission,
     setLoopbackState,
-    mergeProposedItems,
     setNudges,
     setAgendaItems,
     setRunningSummary,

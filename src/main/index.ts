@@ -35,6 +35,7 @@ import { devlog, initDevlog } from './devlog'
 import { createIpcRegistry } from './ipc-registry'
 import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
+import { sendItemsChanged } from './services/itemsChangedNotifier'
 import { MeetingLifecycleService } from './services/meetingLifecycleService'
 import { ImportSessionController } from './session/ImportSessionController'
 import { LiveSessionController } from './session/LiveSessionController'
@@ -298,10 +299,14 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   const aiRepo = agendaItemRepo(db)
   const pRepo = participantRepo(db)
 
-  // Shared ItemLifecycleService for note-taker action IPC (item 0018).
-  // The LiveExtractionRuntime builds its own intercepting subclass from the same
-  // repos; this instance is for direct note-taker operations (confirm/dismiss/edit).
-  const itemService = new ItemLifecycleService(dRepo, aRepo)
+  // ItemLifecycleService for note-taker action IPC (item 0018). Its onItemsChanged
+  // seam pushes the authoritative full item set to the renderer so a confirm /
+  // dismiss / edit / create reconciles the same way an agent turn does — main is
+  // the single source of truth (ADR 0033). The LiveExtractionRuntime builds its
+  // own instance over the same repos for the agent path, wired identically.
+  const itemService = new ItemLifecycleService(dRepo, aRepo, (meetingId) => {
+    sendItemsChanged(mainWindow.webContents, meetingId, dRepo, aRepo)
+  })
 
   // ---------------------------------------------------------------------------
   // Extraction provider (item 0018 — wired into live extraction runtime)

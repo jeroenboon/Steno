@@ -89,9 +89,9 @@ describe('useLiveSession', () => {
     await waitFor(() => {
       expect(getUserMedia).toHaveBeenCalled()
     })
-    // All push channels are subscribed once the session starts.
+    // All capture-scoped push channels are subscribed once the session starts.
+    // Items are reconciled app-wide (App.tsx), not here (ADR 0033).
     expect(mockApi.onTranscriptSpan).toHaveBeenCalled()
-    expect(mockApi.onItemsChanged).toHaveBeenCalled()
     expect(mockApi.onNudgesChanged).toHaveBeenCalled()
     expect(mockApi.onAgendaChanged).toHaveBeenCalled()
     expect(mockApi.onSummaryChanged).toHaveBeenCalled()
@@ -109,7 +109,6 @@ describe('useLiveSession', () => {
     unmount()
 
     expect(unsubSpan).toHaveBeenCalledTimes(1)
-    expect(unsubItems).toHaveBeenCalledTimes(1)
     expect(unsubNudges).toHaveBeenCalledTimes(1)
     expect(unsubAgenda).toHaveBeenCalledTimes(1)
     expect(unsubSummary).toHaveBeenCalledTimes(1)

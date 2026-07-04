@@ -118,11 +118,20 @@ void _PROPOSED_ACTION
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Push items via the onItemsChanged callback (simulates main pushing items). */
-function pushItems(payload: Partial<ItemsChangedPayload>) {
-  const raw: unknown = mockApi.onItemsChanged.mock.calls[0]?.[0]
-  const cb = raw as ((p: ItemsChangedPayload) => void) | undefined
-  cb?.({ decisions: [], actions: [], ...payload })
+/**
+ * Simulate main pushing the authoritative item set for the focused meeting
+ * (ADR 0033): reconcile straight into the store, the way App's onItemsChanged
+ * subscription does. The meetingId matches activeMeeting so the guard passes.
+ */
+function pushItems(payload: Partial<Omit<ItemsChangedPayload, 'meetingId'>>) {
+  act(() => {
+    useAppStore.getState().reconcileItems({
+      meetingId: useAppStore.getState().activeMeeting ?? '',
+      decisions: [],
+      actions: [],
+      ...payload,
+    })
+  })
 }
 
 /** Push a transcript span via the onTranscriptSpan callback. */

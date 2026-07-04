@@ -9,7 +9,7 @@
  *   - Edits to decisions/actions persist via IPC (item:editAndConfirm)
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import React from 'react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
@@ -284,6 +284,9 @@ describe('ReviewScreen — Proposed items', () => {
     expect(screen.getByTestId('review-action-a-p1')).toBeInTheDocument()
   })
 
+  // The screen only dispatches the IPC; main is authoritative and pushes the
+  // reconciled set back (ADR 0033). The tests assert the dispatch, then simulate
+  // that authoritative items:changed to verify the resulting lane state.
   it('confirms a proposed decision via IPC and moves it into the confirmed lane', async () => {
     useAppStore.setState({ agendaItems: [AGENDA_1], proposedDecisions: [PROPOSED_DECISION] })
     renderReview()
@@ -292,6 +295,14 @@ describe('ReviewScreen — Proposed items', () => {
 
     await waitFor(() => {
       expect(mockApi.itemConfirm).toHaveBeenCalledWith({ kind: 'decision', id: 'd-p1' })
+    })
+
+    act(() => {
+      useAppStore.getState().reconcileItems({
+        meetingId: 'mtg-1',
+        decisions: [{ ...PROPOSED_DECISION, state: 'confirmed' }],
+        actions: [],
+      })
     })
     const s = useAppStore.getState()
     expect(s.proposedDecisions).toHaveLength(0)
@@ -306,6 +317,10 @@ describe('ReviewScreen — Proposed items', () => {
 
     await waitFor(() => {
       expect(mockApi.itemDismiss).toHaveBeenCalledWith({ kind: 'decision', id: 'd-p1' })
+    })
+
+    act(() => {
+      useAppStore.getState().reconcileItems({ meetingId: 'mtg-1', decisions: [], actions: [] })
     })
     expect(useAppStore.getState().proposedDecisions).toHaveLength(0)
   })

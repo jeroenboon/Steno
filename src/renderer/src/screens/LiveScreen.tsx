@@ -488,10 +488,6 @@ export function LiveScreen(): React.JSX.Element {
   const meetingTitle = useAppStore((s) => s.meetingTitle)
   const setRoute = useAppStore((s) => s.setRoute)
 
-  const confirmItem = useAppStore((s) => s.confirmItem)
-  const removeProposedItem = useAppStore((s) => s.removeProposedItem)
-  const addConfirmedItem = useAppStore((s) => s.addConfirmedItem)
-
   const nudges = useAppStore((s) => s.nudges)
   const dismissedNudgeIds = useAppStore((s) => s.dismissedNudgeIds)
   const dismissNudge = useAppStore((s) => s.dismissNudge)
@@ -535,29 +531,23 @@ export function LiveScreen(): React.JSX.Element {
   }, [participants])
 
   // --- Item actions ---
-  const handleConfirm = useCallback(
-    async (kind: ItemKind, id: string) => {
-      try {
-        await window.api.itemConfirm({ kind, id })
-        confirmItem(kind, id)
-      } catch (err) {
-        console.error('[LiveScreen] confirm failed:', err)
-      }
-    },
-    [confirmItem],
-  )
+  // Item mutations round-trip through main, which pushes the authoritative
+  // items:changed the store reconciles from (ADR 0033) — no optimistic update.
+  const handleConfirm = useCallback(async (kind: ItemKind, id: string) => {
+    try {
+      await window.api.itemConfirm({ kind, id })
+    } catch (err) {
+      console.error('[LiveScreen] confirm failed:', err)
+    }
+  }, [])
 
-  const handleDismiss = useCallback(
-    async (kind: ItemKind, id: string) => {
-      try {
-        await window.api.itemDismiss({ kind, id })
-        removeProposedItem(kind, id)
-      } catch (err) {
-        console.error('[LiveScreen] dismiss failed:', err)
-      }
-    },
-    [removeProposedItem],
-  )
+  const handleDismiss = useCallback(async (kind: ItemKind, id: string) => {
+    try {
+      await window.api.itemDismiss({ kind, id })
+    } catch (err) {
+      console.error('[LiveScreen] dismiss failed:', err)
+    }
+  }, [])
 
   const handleEditOpen = useCallback((kind: ItemKind, id: string, text: string, owner: string) => {
     setEditState({ id, kind, text, owner })
@@ -579,12 +569,11 @@ export function LiveScreen(): React.JSX.Element {
         if (owner.length > 0) updates.owner = owner
         await window.api.itemEditAndConfirm({ kind, id, updates })
       }
-      confirmItem(kind, id)
       setEditState(null)
     } catch (err) {
       console.error('[LiveScreen] editAndConfirm failed:', err)
     }
-  }, [editState, confirmItem])
+  }, [editState])
 
   const handleEditCancel = useCallback(() => {
     setEditState(null)
@@ -687,18 +676,17 @@ export function LiveScreen(): React.JSX.Element {
               status: 'open' as const,
             }
       try {
-        const result = await window.api.itemCreateConfirmed({
+        await window.api.itemCreateConfirmed({
           kind,
           meetingId: activeMeeting,
           item,
         })
-        addConfirmedItem(kind, result)
         setAddingKind(null)
       } catch (err) {
         console.error('[LiveScreen] createConfirmed failed:', err)
       }
     },
-    [activeMeeting, addConfirmedItem],
+    [activeMeeting],
   )
 
   // --- Grouping ---

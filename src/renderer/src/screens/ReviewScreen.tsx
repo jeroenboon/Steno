@@ -360,8 +360,6 @@ export function ReviewScreen(): React.JSX.Element {
   const proposedDecisions = useAppStore((s) => s.proposedDecisions)
   const proposedActions = useAppStore((s) => s.proposedActions)
   const discussionSummaries = useAppStore((s) => s.discussionSummaries)
-  const confirmItem = useAppStore((s) => s.confirmItem)
-  const removeProposedItem = useAppStore((s) => s.removeProposedItem)
   const meetingTitle = useAppStore((s) => s.meetingTitle)
   const meetingCreatedAt = useAppStore((s) => s.meetingCreatedAt)
   const meetingSource = useAppStore((s) => s.meetingSource)
@@ -396,81 +394,51 @@ export function ReviewScreen(): React.JSX.Element {
     setEditState((prev) => (prev !== null ? { ...prev, [field]: value } : null))
   }, [])
 
+  // Item mutations persist through main, which pushes the authoritative
+  // items:changed the store reconciles from (ADR 0033). An Ended meeting is
+  // still groomable and stays focused (activeMeeting), so the reconcile applies.
   const handleEditSave = useCallback(async () => {
     if (editState === null) return
 
     try {
       if (editState.kind === 'decision') {
-        const result = await window.api.itemEditAndConfirm({
+        await window.api.itemEditAndConfirm({
           kind: 'decision',
           id: editState.id,
           updates: { rationale: editState.text },
         })
-        const updated = result as ProposedDecision
-        useAppStore.setState((state) => ({
-          confirmedDecisions: state.confirmedDecisions.map((d) =>
-            d.id === editState.id ? { ...d, rationale: updated.rationale } : d,
-          ),
-        }))
-        confirmItem('decision', editState.id)
       } else {
         const updates: { description?: string; owner?: string } = {}
         if (editState.text.length > 0) updates.description = editState.text
         if (editState.owner !== '') updates.owner = editState.owner
-        await window.api.itemEditAndConfirm({
-          kind: 'action',
-          id: editState.id,
-          updates,
-        })
-        useAppStore.setState((state) => ({
-          confirmedActions: state.confirmedActions.map((a) =>
-            a.id === editState.id
-              ? {
-                  ...a,
-                  description: editState.text.length > 0 ? editState.text : a.description,
-                  owner: editState.owner !== '' ? editState.owner : a.owner,
-                }
-              : a,
-          ),
-        }))
-        confirmItem('action', editState.id)
+        await window.api.itemEditAndConfirm({ kind: 'action', id: editState.id, updates })
       }
     } catch (err) {
       console.error('[ReviewScreen] editAndConfirm failed:', err)
     } finally {
       setEditState(null)
     }
-  }, [editState, confirmItem])
+  }, [editState])
 
   const handleEditCancel = useCallback(() => {
     setEditState(null)
   }, [])
 
-  // Confirm / dismiss a Proposed item straight from Review (an Ended meeting is
-  // still groomable). Persist through IPC, then reflect it in the store.
-  const handleConfirm = useCallback(
-    async (kind: ItemKind, id: string) => {
-      try {
-        await window.api.itemConfirm({ kind, id })
-        confirmItem(kind, id)
-      } catch (err) {
-        console.error('[ReviewScreen] itemConfirm failed:', err)
-      }
-    },
-    [confirmItem],
-  )
+  const handleConfirm = useCallback(async (kind: ItemKind, id: string) => {
+    try {
+      await window.api.itemConfirm({ kind, id })
+    } catch (err) {
+      console.error('[ReviewScreen] itemConfirm failed:', err)
+    }
+  }, [])
 
-  const handleDismiss = useCallback(
-    async (kind: ItemKind, id: string) => {
-      try {
-        await window.api.itemDismiss({ kind, id })
-        removeProposedItem(kind, id)
-      } catch (err) {
-        console.error('[ReviewScreen] itemDismiss failed:', err)
-      }
-    },
-    [removeProposedItem],
-  )
+  const handleDismiss = useCallback(async (kind: ItemKind, id: string) => {
+    try {
+      await window.api.itemDismiss({ kind, id })
+    } catch (err) {
+      console.error('[ReviewScreen] itemDismiss failed:', err)
+    }
+  }, [])
 
   // ---------------------------------------------------------------------------
   // Export helpers (item 0022)

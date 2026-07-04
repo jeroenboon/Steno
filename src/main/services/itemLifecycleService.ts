@@ -54,21 +54,23 @@ export class ItemLifecycleService {
   private readonly decisions: ReturnType<typeof decisionRepo>
   private readonly actions: ReturnType<typeof actionRepo>
   /**
-   * Optional notify seam fired after a {@link proposeItems} call that produced
-   * at least one item. The live runtime wires this to emit `items:changed`; it
-   * replaces the former `InterceptingItemLifecycleService` subclass, which only
-   * existed because this concrete class exposed no such hook (ADR 0033).
+   * Optional notify seam fired with the affected meeting after any mutation that
+   * changes item data. Main wires this to emit the authoritative `items:changed`
+   * for that meeting (the full current item set), making main the single source
+   * of truth for both the agent and the note-taker IPC paths (ADR 0033). It
+   * replaced the former `InterceptingItemLifecycleService` subclass, which only
+   * existed because this concrete class exposed no such hook.
    */
-  private readonly onProposed: ((result: ProposeItemsResult) => void) | undefined
+  private readonly onItemsChanged: ((meetingId: MeetingId) => void) | undefined
 
   constructor(
     decisions: ReturnType<typeof decisionRepo>,
     actions: ReturnType<typeof actionRepo>,
-    onProposed?: (result: ProposeItemsResult) => void,
+    onItemsChanged?: (meetingId: MeetingId) => void,
   ) {
     this.decisions = decisions
     this.actions = actions
-    this.onProposed = onProposed
+    this.onItemsChanged = onItemsChanged
   }
 
   // -------------------------------------------------------------------------
@@ -89,8 +91,8 @@ export class ItemLifecycleService {
     })
 
     const result: ProposeItemsResult = { decisions, actions }
-    if (this.onProposed !== undefined && (decisions.length > 0 || actions.length > 0)) {
-      this.onProposed(result)
+    if (decisions.length > 0 || actions.length > 0) {
+      this.notify(meetingId)
     }
     return result
   }
@@ -104,6 +106,7 @@ export class ItemLifecycleService {
     this.guardProposed(item.state, 'decision', id)
     const updated: Decision = { ...item, ...updates, state: 'proposed' }
     this.decisions.update(updated)
+    this.notify(this.decisions.findMeetingId(id))
     return updated
   }
 
@@ -112,6 +115,7 @@ export class ItemLifecycleService {
     this.guardProposed(item.state, 'action', id)
     const updated: Action = { ...item, ...updates, state: 'proposed' }
     this.actions.update(updated)
+    this.notify(this.actions.findMeetingId(id))
     return updated
   }
 
@@ -120,6 +124,8 @@ export class ItemLifecycleService {
   // -------------------------------------------------------------------------
 
   retractProposed(ref: ItemRef): void {
+    // Resolve the meeting before the delete removes the row.
+    const meetingId = this.meetingIdOf(ref)
     if (ref.kind === 'decision') {
       const item = this.loadDecision(ref.id)
       this.guardProposed(item.state, 'decision', ref.id)
@@ -129,6 +135,7 @@ export class ItemLifecycleService {
       this.guardProposed(item.state, 'action', ref.id)
       this.actions.delete(ref.id)
     }
+    this.notify(meetingId)
   }
 
   // -------------------------------------------------------------------------
@@ -140,11 +147,13 @@ export class ItemLifecycleService {
       const item = this.loadDecision(ref.id)
       const updated: Decision = { ...item, state: 'confirmed' }
       this.decisions.update(updated)
+      this.notify(this.decisions.findMeetingId(ref.id))
       return updated
     } else {
       const item = this.loadAction(ref.id)
       const updated: Action = { ...item, state: 'confirmed' }
       this.actions.update(updated)
+      this.notify(this.actions.findMeetingId(ref.id))
       return updated
     }
   }
@@ -157,6 +166,7 @@ export class ItemLifecycleService {
     const item = this.loadDecision(id)
     const updated: Decision = { ...item, ...updates, state: 'confirmed' }
     this.decisions.update(updated)
+    this.notify(this.decisions.findMeetingId(id))
     return updated
   }
 
@@ -164,6 +174,7 @@ export class ItemLifecycleService {
     const item = this.loadAction(id)
     const updated: Action = { ...item, ...updates, state: 'confirmed' }
     this.actions.update(updated)
+    this.notify(this.actions.findMeetingId(id))
     return updated
   }
 
@@ -172,6 +183,8 @@ export class ItemLifecycleService {
   // -------------------------------------------------------------------------
 
   dismiss(ref: ItemRef): void {
+    // Resolve the meeting before the delete removes the row.
+    const meetingId = this.meetingIdOf(ref)
     if (ref.kind === 'decision') {
       const item = this.loadDecision(ref.id)
       this.guardProposed(item.state, 'decision', ref.id)
@@ -181,6 +194,7 @@ export class ItemLifecycleService {
       this.guardProposed(item.state, 'action', ref.id)
       this.actions.delete(ref.id)
     }
+    this.notify(meetingId)
   }
 
   // -------------------------------------------------------------------------
@@ -190,12 +204,14 @@ export class ItemLifecycleService {
   createConfirmedDecision(meetingId: MeetingId, input: NewDecisionInput): Decision {
     const item: Decision = { ...input, state: 'confirmed' }
     this.decisions.insert(item, meetingId)
+    this.notify(meetingId)
     return item
   }
 
   createConfirmedAction(meetingId: MeetingId, input: NewActionInput): Action {
     const item: Action = { ...input, state: 'confirmed' }
     this.actions.insert(item, meetingId)
+    this.notify(meetingId)
     return item
   }
 
@@ -211,6 +227,7 @@ export class ItemLifecycleService {
     this.guardConfirmed(item.state, 'decision', id)
     const updated: Decision = { ...item, ...updates, state: 'confirmed' }
     this.decisions.update(updated)
+    this.notify(this.decisions.findMeetingId(id))
     return updated
   }
 
@@ -219,12 +236,27 @@ export class ItemLifecycleService {
     this.guardConfirmed(item.state, 'action', id)
     const updated: Action = { ...item, ...updates, state: 'confirmed' }
     this.actions.update(updated)
+    this.notify(this.actions.findMeetingId(id))
     return updated
   }
 
   // -------------------------------------------------------------------------
   // Private helpers
   // -------------------------------------------------------------------------
+
+  /** Fire the notify seam with the meeting, unless the meeting is unknown. */
+  private notify(meetingId: MeetingId | null): void {
+    if (this.onItemsChanged !== undefined && meetingId !== null) {
+      this.onItemsChanged(meetingId)
+    }
+  }
+
+  /** Resolve the meeting an item ref belongs to, or null when unknown. */
+  private meetingIdOf(ref: ItemRef): MeetingId | null {
+    return ref.kind === 'decision'
+      ? this.decisions.findMeetingId(ref.id)
+      : this.actions.findMeetingId(ref.id)
+  }
 
   private loadDecision(id: string): Decision {
     const item = this.decisions.findById(id)

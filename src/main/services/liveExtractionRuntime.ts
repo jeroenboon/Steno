@@ -32,7 +32,7 @@
  *
  * ## IPC channel design (follows ADR 0013 streaming-event pattern)
  *
- *   'items:changed'   → ItemsChangedPayload { decisions, actions }
+ *   'items:changed'   → ItemsChangedPayload { meetingId, decisions, actions }
  *   'items:summaries' → ItemsSummariesPayload { summaries }
  *
  * These channels are documented in src/shared/ipc.ts (event-only, no invoke).
@@ -69,13 +69,18 @@ import {
   type ExtractionLoopSchedulerDeps,
 } from './extractionLoopScheduler'
 import { ItemLifecycleService } from './itemLifecycleService'
+import { sendItemsChanged } from './itemsChangedNotifier'
 
 // ---------------------------------------------------------------------------
 // Public payload types — cross the IPC boundary, Zod-validated in ipc.ts
 // ---------------------------------------------------------------------------
 
 export interface ItemsChangedPayload {
+  /** The meeting these items belong to. */
+  meetingId: MeetingId
+  /** Full current decisions for the meeting (both Proposed and Confirmed). */
   decisions: Decision[]
+  /** Full current actions for the meeting (both Proposed and Confirmed). */
   actions: Action[]
 }
 
@@ -182,17 +187,14 @@ export class LiveExtractionRuntime {
       // Store provider reference for summarise/query
       this._provider = opts.schedulerDeps.provider
 
-      // Build the item lifecycle service with the onProposed seam wired to emit
-      // 'items:changed' whenever proposeItems produces items (ADR 0033). This is
+      // Build the item lifecycle service with the onItemsChanged seam wired to
+      // push the authoritative full item set for the meeting (ADR 0033). This is
       // the same callback idiom AgendaInferenceScheduler uses below.
       const itemService = new ItemLifecycleService(
         opts.decisionsRepo,
         opts.actionsRepo,
-        (result) => {
-          this._sender.send('items:changed', {
-            decisions: result.decisions,
-            actions: result.actions,
-          } satisfies ItemsChangedPayload)
+        (meetingId) => {
+          sendItemsChanged(this._sender, meetingId, opts.decisionsRepo, opts.actionsRepo)
           this._emitNudges()
         },
       )
