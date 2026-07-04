@@ -19,7 +19,7 @@ import type { OpenAIRealtimeAsrProvider } from './OpenAIRealtimeAsrProvider'
 class FakeWebSocket {
   readyState = 1
   onopen: (() => void) | null = null
-  onmessage: ((event: { data: string }) => void) | null = null
+  onmessage: ((event: { data: unknown }) => void) | null = null
   onerror: ((event: { message: string }) => void) | null = null
   onclose: (() => void) | null = null
   sentText: string[] = []

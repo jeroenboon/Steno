@@ -11,10 +11,12 @@
  *   - logs carry the vendor displayName and never the key or transcript content.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { TranscriptSpan } from '@shared/domain/types'
 import type { ExtractionRequest } from '@shared/providers'
+
+import { initDevlog, resetDevlog } from '../devlog'
 
 import { OpenAICompatibleExtractionProvider } from './OpenAICompatibleExtractionProvider'
 
@@ -118,6 +120,62 @@ describe('OpenAICompatibleExtractionProvider.extract', () => {
     )
   })
 
+  it('parses a fenced ```json code block (endpoint ignored json_object mode)', async () => {
+    const fenced = '```json\n' + JSON.stringify(validExtraction) + '\n```'
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(fenced))
+    const provider = makeProvider(fetchMock)
+
+    const result = await provider.extract(extractionRequest)
+
+    expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
+    expect(result.proposedActions[0]?.description).toBe('Begroting publiceren')
+    // Recovered on the first call — no wasteful retry.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('parses a bare ``` fenced block with surrounding prose', async () => {
+    const wrapped = `Hier is het resultaat:\n\`\`\`\n${JSON.stringify(validExtraction)}\n\`\`\`\nKlaar.`
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(wrapped))
+    const provider = makeProvider(fetchMock)
+
+    const result = await provider.extract(extractionRequest)
+
+    expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps decisions when the endpoint omits an empty proposedActions array', async () => {
+    const partial = {
+      proposedDecisions: [{ rationale: 'Begroting goedgekeurd', sourceSpanId: 'span-1' }],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(partial)))
+    const provider = makeProvider(fetchMock)
+
+    const result = await provider.extract(extractionRequest)
+
+    expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
+    expect(result.proposedActions).toEqual([])
+    // A missing empty array is not a reason to retry or drop the turn.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops only the malformed item, keeping the rest of the turn', async () => {
+    const mixed = {
+      // Invalid: empty sourceSpanId (min 1).
+      proposedDecisions: [{ rationale: 'Ongeldig besluit', sourceSpanId: '' }],
+      // Valid.
+      proposedActions: [{ description: 'Begroting publiceren', sourceSpanId: 'span-1' }],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(mixed)))
+    const provider = makeProvider(fetchMock)
+
+    const result = await provider.extract(extractionRequest)
+
+    expect(result.proposedDecisions).toEqual([])
+    expect(result.proposedActions[0]?.description).toBe('Begroting publiceren')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('retries once on invalid JSON, then degrades to empty proposals', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse('not json'))
     const provider = makeProvider(fetchMock)
@@ -213,6 +271,64 @@ describe('OpenAICompatibleExtractionProvider.extract', () => {
     expect(allLogs).not.toContain('test-key')
 
     errorSpy.mockRestore()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// devlog wiring
+// ---------------------------------------------------------------------------
+
+describe('OpenAICompatibleExtractionProvider — devlog', () => {
+  interface Line {
+    category: string
+    event: string
+    meta?: { decisions?: string; actions?: string; dropped?: string[] }
+    content?: { request?: string; response?: string }
+  }
+
+  afterEach(() => {
+    resetDevlog()
+  })
+
+  function startDevlog(includeContent: boolean): Line[] {
+    const lines: Line[] = []
+    initDevlog({
+      enabled: true,
+      includeContent,
+      write: (line) => lines.push(JSON.parse(line) as Line),
+      now: () => 0,
+    })
+    return lines
+  }
+
+  it('logs a turn with kept/raw counts (metadata mode, no content)', async () => {
+    const lines = startDevlog(false)
+    const dropped = {
+      proposedDecisions: [{ rationale: 'Geldig', sourceSpanId: 'span-1' }],
+      proposedActions: [{ description: 'X', sourceSpanId: '' }], // invalid → dropped
+    }
+    await makeProvider(vi.fn().mockResolvedValue(okResponse(JSON.stringify(dropped)))).extract(
+      extractionRequest,
+    )
+
+    const turn = lines.find((l) => l.event === 'turn')
+    expect(turn?.meta?.decisions).toBe('1/1')
+    expect(turn?.meta?.actions).toBe('0/1')
+    expect(turn?.meta?.dropped).toContain('action.sourceSpanId')
+    // Metadata mode: no content bucket, no transcript.
+    expect(turn?.content).toBeUndefined()
+  })
+
+  it('records the LLM request and response in content mode', async () => {
+    const lines = startDevlog(true)
+    await makeProvider(
+      vi.fn().mockResolvedValue(okResponse(JSON.stringify(validExtraction))),
+    ).extract(extractionRequest)
+
+    const turn = lines.find((l) => l.event === 'turn')
+    // The request carries the transcript; the response carries the model output.
+    expect(turn?.content?.request).toContain('begroting')
+    expect(turn?.content?.response).toContain('Begroting goedgekeurd')
   })
 })
 

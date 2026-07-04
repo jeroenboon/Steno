@@ -4,23 +4,24 @@
  * Live streaming cloud ASR adapter behind the ASRProvider port, using Mistral's
  * Voxtral Realtime WebSocket API directly. This is a distinct wire from OpenAI
  * Realtime and Deepgram (ADR 0028: ASR has no shared realtime protocol across
- * vendors), so it is its own adapter rather than a reuse.
+ * vendors), so it is its own {@link RealtimeAsrWire} rather than a reuse.
  *
  * ## Wire
  * - Connect with a Bearer Authorization header.
  * - On open, send a session config message ({ model, language }).
  * - Audio is sent as raw binary PCM frames (no base64 wrapping).
  * - Transcription events come back as JSON:
- *     { type: 'transcript.delta', text }                      → interim span
- *     { type: 'transcript.final', text, start?, end?, speaker? } → final span
+ *     { type: 'transcript.delta', text }                      -> interim span
+ *     { type: 'transcript.final', text, start?, end?, speaker? } -> final span
  *   Voxtral carries diarization, so `speaker` maps onto TranscriptSpan
- *   `speakerLabel` (Speaker N), lighting up the Speaker-label → Participant flow.
+ *   `speakerLabel` (Speaker N), lighting up the Speaker-label -> Participant flow.
  *   Segment timing uses the event's start/end seconds when present, else the
  *   injected Clock's elapsed time.
  *
- * ## Reconnect / backoff
- * On socket close/error the provider reconnects with exponential backoff; the
- * span queue + iterator survive reconnects. `sleep` is injected for tests.
+ * ## Shared transport plumbing
+ * The generic realtime machinery (span queue + async-iterator, reconnect with
+ * backoff, frame decode) lives in {@link RealtimeSpanStream}; this adapter only
+ * supplies the Voxtral connection, session config, frame encoding and parse.
  *
  * ## Privacy (principle #12)
  * The API key travels only in the connection header; audio, transcript text and
@@ -36,7 +37,7 @@ import { CAPTURE_SAMPLE_RATE, resamplePcm16 } from '@shared/audio/pcmResampler'
 import { TranscriptSpanSchema, type TranscriptSpan } from '@shared/domain/types'
 import { RealClock, type ASRProvider, type Clock } from '@shared/providers'
 
-import type { WebSocketLike } from './DeepgramAsrProvider'
+import { RealtimeSpanStream, type RealtimeAsrWire, type WebSocketLike } from './realtimeSpanStream'
 
 // ---------------------------------------------------------------------------
 // WebSocket abstraction (Bearer header auth — needs header options)
@@ -50,8 +51,6 @@ export type MistralRealtimeWebSocketFactory = (
   url: string,
   options?: MistralRealtimeWebSocketOptions,
 ) => WebSocketLike
-
-const WS_OPEN = 1
 
 const VOXTRAL_REALTIME_URL = 'wss://api.mistral.ai/v1/audio/transcriptions/realtime'
 const DEFAULT_MODEL = 'voxtral-mini-2507'
@@ -101,9 +100,6 @@ export interface MistralVoxtralRealtimeAsrProviderOptions {
   webSocketFactory?: MistralRealtimeWebSocketFactory
 }
 
-const INITIAL_BACKOFF_MS = 1_000
-const BACKOFF_MULTIPLIER = 2
-
 // ---------------------------------------------------------------------------
 // Adapter
 // ---------------------------------------------------------------------------
@@ -112,25 +108,19 @@ export class MistralVoxtralRealtimeAsrProvider implements ASRProvider {
   private readonly _apiKey: string
   private readonly _model: string
   private readonly _language: string
-  private readonly _sleep: (ms: number) => Promise<void>
-  private readonly _maxBackoffMs: number
   private readonly _clock: Clock
   private readonly _wsFactory: MistralRealtimeWebSocketFactory
+  private readonly _stream: RealtimeSpanStream
 
-  private _socket: WebSocketLike | null = null
-  private _stopped = false
+  // Per-session span timing, reset on start(); used when an event carries no
+  // start/end seconds.
   private _startedAtMs = 0
   private _lastEndMs = 0
-
-  private _queue: TranscriptSpan[] = []
-  private _waiters: ((result: IteratorResult<TranscriptSpan>) => void)[] = []
 
   constructor(options: MistralVoxtralRealtimeAsrProviderOptions) {
     this._apiKey = options.apiKey
     this._model = options.model ?? DEFAULT_MODEL
     this._language = options.language ?? 'nl'
-    this._sleep = options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)))
-    this._maxBackoffMs = options.maxBackoffMs ?? 30_000
     this._clock = options.clock ?? new RealClock()
     this._wsFactory =
       options.webSocketFactory ??
@@ -140,162 +130,89 @@ export class MistralVoxtralRealtimeAsrProvider implements ASRProvider {
           undefined,
           opts?.headers ? { headers: opts.headers } : undefined,
         ) as unknown as WebSocketLike)
+
+    const wire: RealtimeAsrWire = {
+      name: 'MistralVoxtralRealtimeAsrProvider',
+      connect: () =>
+        this._wsFactory(VOXTRAL_REALTIME_URL, {
+          headers: { Authorization: `Bearer ${this._apiKey}` },
+        }),
+      reset: () => {
+        this._startedAtMs = this._clock.now()
+        this._lastEndMs = 0
+      },
+      onOpen: (socket) => {
+        socket.send(
+          JSON.stringify({ type: 'session.start', model: this._model, language: this._language }),
+        )
+      },
+      encodeFrame: (chunk) =>
+        resamplePcm16(chunk, CAPTURE_SAMPLE_RATE, VOXTRAL_REALTIME_SAMPLE_RATE),
+      parseMessage: (message) => this._parseMessage(message),
+    }
+
+    const streamOptions: { sleep?: (ms: number) => Promise<void>; maxBackoffMs?: number } = {}
+    if (options.sleep !== undefined) streamOptions.sleep = options.sleep
+    if (options.maxBackoffMs !== undefined) streamOptions.maxBackoffMs = options.maxBackoffMs
+    this._stream = new RealtimeSpanStream(wire, streamOptions)
   }
 
   // -------------------------------------------------------------------------
-  // ASRProvider interface
+  // ASRProvider interface — delegates to the shared stream
   // -------------------------------------------------------------------------
 
   start(): void {
-    this._stopped = false
-    this._startedAtMs = this._clock.now()
-    this._lastEndMs = 0
-    this._connect(0)
+    this._stream.start()
   }
 
   stop(): void {
-    this._stopped = true
-    this._socket?.close()
-    this._socket = null
-    const done: IteratorReturnResult<undefined> = { value: undefined, done: true }
-    for (const resolve of this._waiters) {
-      resolve(done)
-    }
-    this._waiters = []
+    this._stream.stop()
   }
 
   pushAudioFrame(chunk: Uint8Array): void {
-    if (this._socket?.readyState === WS_OPEN) {
-      this._socket.send(resamplePcm16(chunk, CAPTURE_SAMPLE_RATE, VOXTRAL_REALTIME_SAMPLE_RATE))
-    }
+    this._stream.pushAudioFrame(chunk)
   }
 
   spans(): AsyncIterable<TranscriptSpan> {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const self = this
-
-    return {
-      [Symbol.asyncIterator](): AsyncIterator<TranscriptSpan> {
-        return {
-          next(): Promise<IteratorResult<TranscriptSpan>> {
-            if (self._stopped && self._queue.length === 0) {
-              return Promise.resolve({ value: undefined, done: true })
-            }
-
-            const queued = self._queue.shift()
-            if (queued !== undefined) {
-              return Promise.resolve({ value: queued, done: false })
-            }
-
-            if (self._stopped) {
-              return Promise.resolve({ value: undefined, done: true })
-            }
-
-            return new Promise<IteratorResult<TranscriptSpan>>((resolve) => {
-              self._waiters.push(resolve)
-            })
-          },
-        }
-      },
-    }
+    return this._stream.spans()
   }
 
   // -------------------------------------------------------------------------
-  // Internal: connect + reconnect
+  // Internal: parse Voxtral payload -> TranscriptSpan(s)
   // -------------------------------------------------------------------------
 
-  private _connect(backoffMs: number): void {
-    if (this._stopped) return
-
-    const socket = this._wsFactory(VOXTRAL_REALTIME_URL, {
-      headers: { Authorization: `Bearer ${this._apiKey}` },
-    })
-    this._socket = socket
-
-    socket.onopen = () => {
-      console.info('[MistralVoxtralRealtimeAsrProvider] Socket opened')
-      this._configureSession()
-    }
-
-    socket.onmessage = (event: { data: unknown }) => {
-      this._handleMessage(event.data)
-    }
-
-    socket.onerror = () => {
-      console.error('[MistralVoxtralRealtimeAsrProvider] Socket error — will reconnect')
-    }
-
-    socket.onclose = (event) => {
-      if (this._stopped) return
-      const code = event?.code !== undefined ? String(event.code) : 'unknown'
-      const nextBackoff = Math.min(
-        backoffMs === 0 ? INITIAL_BACKOFF_MS : backoffMs * BACKOFF_MULTIPLIER,
-        this._maxBackoffMs,
-      )
-      console.info(
-        `[MistralVoxtralRealtimeAsrProvider] Socket closed (code ${code}) — reconnecting in ${String(nextBackoff)}ms`,
-      )
-      void this._reconnectAfterDelay(nextBackoff)
-    }
-  }
-
-  private async _reconnectAfterDelay(backoffMs: number): Promise<void> {
-    await this._sleep(backoffMs)
-    if (this._stopped) return
-    this._connect(backoffMs)
-  }
-
-  private _configureSession(): void {
-    this._socket?.send(
-      JSON.stringify({ type: 'session.start', model: this._model, language: this._language }),
-    )
-  }
-
-  // -------------------------------------------------------------------------
-  // Internal: parse Voxtral payload → TranscriptSpan
-  // -------------------------------------------------------------------------
-
-  private _handleMessage(raw: unknown): void {
-    let text: string
-    if (typeof raw === 'string') {
-      text = raw
-    } else if (raw instanceof ArrayBuffer) {
-      text = Buffer.from(raw).toString('utf8')
-    } else if (raw instanceof Uint8Array) {
-      text = Buffer.from(raw).toString('utf8')
-    } else {
-      text = String(raw)
-    }
-
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(text) as unknown
-    } catch {
-      return
-    }
-
-    const delta = DeltaEventSchema.safeParse(parsed)
+  private _parseMessage(message: unknown): TranscriptSpan[] {
+    const delta = DeltaEventSchema.safeParse(message)
     if (delta.success) {
-      this._emitInterim(delta.data.text)
-      return
+      const span = this._toInterim(delta.data.text)
+      return span === null ? [] : [span]
     }
 
-    const final = FinalEventSchema.safeParse(parsed)
+    const final = FinalEventSchema.safeParse(message)
     if (final.success) {
-      this._emitFinal(final.data)
+      const span = this._toFinal(final.data)
+      return span === null ? [] : [span]
     }
+
+    return []
   }
 
-  private _emitInterim(rawText: string): void {
+  private _toInterim(rawText: string): TranscriptSpan | null {
     const text = rawText.trim()
-    if (text.length === 0) return
+    if (text.length === 0) return null
     const nowMs = Math.max(0, this._clock.now() - this._startedAtMs)
-    this._push({ id: randomUUID(), text, startMs: this._lastEndMs, endMs: nowMs, isFinal: false })
+    return parseSpan({
+      id: randomUUID(),
+      text,
+      startMs: this._lastEndMs,
+      endMs: nowMs,
+      isFinal: false,
+    })
   }
 
-  private _emitFinal(data: z.infer<typeof FinalEventSchema>): void {
+  private _toFinal(data: z.infer<typeof FinalEventSchema>): TranscriptSpan | null {
     const text = data.text.trim()
-    if (text.length === 0) return
+    if (text.length === 0) return null
 
     const nowMs = Math.max(0, this._clock.now() - this._startedAtMs)
     const startMs = data.start !== undefined ? Math.round(data.start * 1000) : this._lastEndMs
@@ -310,19 +227,13 @@ export class MistralVoxtralRealtimeAsrProvider implements ASRProvider {
     }
     if (data.speaker !== undefined) raw.speakerLabel = `Speaker ${String(data.speaker)}`
 
-    this._lastEndMs = endMs
-    this._push(raw)
+    const span = parseSpan(raw)
+    if (span !== null) this._lastEndMs = endMs
+    return span
   }
+}
 
-  private _push(raw: Record<string, unknown>): void {
-    const parsed = TranscriptSpanSchema.safeParse(raw)
-    if (!parsed.success) return
-
-    const waiter = this._waiters.shift()
-    if (waiter !== undefined) {
-      waiter({ value: parsed.data, done: false })
-    } else {
-      this._queue.push(parsed.data)
-    }
-  }
+function parseSpan(raw: Record<string, unknown>): TranscriptSpan | null {
+  const parsed = TranscriptSpanSchema.safeParse(raw)
+  return parsed.success ? parsed.data : null
 }

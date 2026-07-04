@@ -25,12 +25,10 @@
  * ## How 'items:changed' is triggered
  *
  * The ExtractionLoopScheduler calls ItemLifecycleService.proposeItems()
- * synchronously during each turn. To intercept the result without modifying
- * either of those existing services, the runtime wraps ItemLifecycleService
- * in an InterceptingItemLifecycleService whose proposeItems fires a callback
- * with the result. The scheduler is constructed with this wrapped service.
- * Both the wrapped service and the scheduler are created inside the runtime
- * so the interceptor is always in place.
+ * synchronously during each turn. The runtime constructs the service with its
+ * `onProposed` seam wired to fire the callback with the result (ADR 0033), then
+ * builds the scheduler over that same service, so the IPC push is always in
+ * place. This is the callback idiom AgendaInferenceScheduler already uses.
  *
  * ## IPC channel design (follows ADR 0013 streaming-event pattern)
  *
@@ -70,11 +68,7 @@ import {
   type MeetingContext,
   type ExtractionLoopSchedulerDeps,
 } from './extractionLoopScheduler'
-import {
-  ItemLifecycleService,
-  type ProposeItemsInput,
-  type ProposeItemsResult,
-} from './itemLifecycleService'
+import { ItemLifecycleService } from './itemLifecycleService'
 
 // ---------------------------------------------------------------------------
 // Public payload types — cross the IPC boundary, Zod-validated in ipc.ts
@@ -90,51 +84,13 @@ export interface ItemsSummariesPayload {
 }
 
 // ---------------------------------------------------------------------------
-// InterceptingItemLifecycleService
-// ---------------------------------------------------------------------------
-
-/**
- * Subclass of ItemLifecycleService that fires `onProposed` after each
- * proposeItems call that returns ≥1 item.
- *
- * Extends (not wraps) because ItemLifecycleService is a concrete class with
- * private members; TypeScript's `implements` cannot satisfy those. The
- * override is minimal: call super.proposeItems(), check the result, fire
- * the callback when items were proposed. All other public methods are
- * inherited from the base class unchanged.
- *
- * The caller passes the same repos it would pass to ItemLifecycleService
- * directly, so the base-class DB wiring is identical to a plain service.
- */
-class InterceptingItemLifecycleService extends ItemLifecycleService {
-  private readonly _onProposed: (result: ProposeItemsResult) => void
-
-  constructor(
-    decisionsRepo: ReturnType<typeof decisionRepo>,
-    actionsRepo: ReturnType<typeof actionRepo>,
-    onProposed: (result: ProposeItemsResult) => void,
-  ) {
-    super(decisionsRepo, actionsRepo)
-    this._onProposed = onProposed
-  }
-
-  override proposeItems(meetingId: MeetingId, input: ProposeItemsInput): ProposeItemsResult {
-    const result = super.proposeItems(meetingId, input)
-    if (result.decisions.length > 0 || result.actions.length > 0) {
-      this._onProposed(result)
-    }
-    return result
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Runtime options
 // ---------------------------------------------------------------------------
 
 /**
  * Deps for building the internal ExtractionLoopScheduler.
- * `itemLifecycleService` is omitted because the runtime builds the
- * intercepting variant internally from the repos below.
+ * `itemLifecycleService` is omitted because the runtime builds the service
+ * internally from the repos below (wiring its onProposed seam).
  */
 export type SchedulerDeps = Omit<ExtractionLoopSchedulerDeps, 'itemLifecycleService'>
 
@@ -143,16 +99,15 @@ export interface LiveExtractionRuntimeOptions {
   context: MeetingContext
   /**
    * Deps to construct the scheduler. The runtime builds the scheduler
-   * internally so it can wire in the intercepting item service.
+   * internally so it can wire the item service's onProposed seam.
    * Pass null when no extraction provider is configured (degraded path).
    */
   schedulerDeps: SchedulerDeps | null
   /**
-   * Decision and Action repos used to build the intercepting item lifecycle
-   * service. The runtime constructs the service (and its intercepting subclass)
-   * from these repos rather than accepting a pre-built service, because
-   * ItemLifecycleService is a concrete class that cannot be extended via
-   * composition (its private members are not accessible externally).
+   * Decision and Action repos used to build the item lifecycle service. The
+   * runtime constructs the service from these repos (wiring its onProposed seam
+   * to emit `items:changed`) rather than accepting a pre-built one, so the
+   * scheduler and the IPC push share a single service instance.
    */
   decisionsRepo: ReturnType<typeof decisionRepo>
   actionsRepo: ReturnType<typeof actionRepo>
@@ -227,9 +182,10 @@ export class LiveExtractionRuntime {
       // Store provider reference for summarise/query
       this._provider = opts.schedulerDeps.provider
 
-      // Build the intercepting item service from the repos.
-      // The interceptor fires 'items:changed' whenever proposeItems produces items.
-      const wrappedService = new InterceptingItemLifecycleService(
+      // Build the item lifecycle service with the onProposed seam wired to emit
+      // 'items:changed' whenever proposeItems produces items (ADR 0033). This is
+      // the same callback idiom AgendaInferenceScheduler uses below.
+      const itemService = new ItemLifecycleService(
         opts.decisionsRepo,
         opts.actionsRepo,
         (result) => {
@@ -242,7 +198,7 @@ export class LiveExtractionRuntime {
       )
       this._scheduler = new ExtractionLoopScheduler({
         ...opts.schedulerDeps,
-        itemLifecycleService: wrappedService,
+        itemLifecycleService: itemService,
       })
 
       // Arm the slow live agenda inference scheduler when an agenda repo is
@@ -339,7 +295,7 @@ export class LiveExtractionRuntime {
   /**
    * Drive one scheduler tick. No-op when stopped or no scheduler configured.
    * If the tick produces proposed items, 'items:changed' is emitted via the
-   * intercepting item service inside the scheduler.
+   * item service's onProposed seam inside the scheduler.
    *
    * Also triggers the running summary update when the scheduler fired a turn.
    */

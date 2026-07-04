@@ -16,16 +16,22 @@
  * `[Azure]`) so vendors are distinguishable without exposing content or keys.
  */
 
+import type { z } from 'zod'
+
 import { excludeCoveredAgendaItems } from '@shared/agenda/agendaTitle'
 import {
-  ExtractionResponseSchema,
   InferredContextSchema,
+  ProposedActionSchema,
+  ProposedDecisionSchema,
+  ProposedDiscussionSummarySchema,
   inferSourceToText,
   type ExtractionRequest,
   type ExtractionResponse,
   type InferContextInput,
   type InferredContext,
 } from '@shared/providers'
+
+import { devlog } from '../devlog'
 
 // ---------------------------------------------------------------------------
 // Target + engine options
@@ -99,19 +105,47 @@ export class ChatExtractionEngine {
   }
 
   private async _callAndValidate(request: ExtractionRequest): Promise<ExtractionResponse | null> {
-    const content = await this._post(buildSystemPrompt(request), buildUserMessage(request))
-    if (content === null) return null
+    const systemPrompt = buildSystemPrompt(request)
+    const userMessage = buildUserMessage(request)
+    const content = await this._post(systemPrompt, userMessage)
 
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(content) as unknown
-    } catch {
+    // The request (agenda + participants + transcript) is content; it is only
+    // written when the --debug opt-in is on. meta stays non-sensitive.
+    const meta = { tag: this._logTag, model: this._model, isFinalPass: request.isFinalPass }
+    const reqContent = { request: JSON.stringify({ system: systemPrompt, user: userMessage }) }
+
+    if (content === null) {
+      devlog('extraction', 'post-failed', meta, reqContent)
       return null
     }
 
-    const validated = ExtractionResponseSchema.safeParse(parsed)
-    if (!validated.success) return null
-    return validated.data
+    const parsed = parseJsonLoose(content)
+    if (parsed === null) {
+      devlog('extraction', 'parse-failed', meta, { ...reqContent, response: content })
+      return null
+    }
+
+    const coerced = coerceExtractionResponse(parsed)
+    if (coerced === null) {
+      devlog('extraction', 'not-an-object', meta, { ...reqContent, response: content })
+      return null
+    }
+
+    const { decisionsKept, decisionsRaw, actionsKept, actionsRaw, droppedPaths } =
+      coerced.diagnostics
+    devlog(
+      'extraction',
+      'turn',
+      {
+        ...meta,
+        decisions: `${String(decisionsKept)}/${String(decisionsRaw)}`,
+        actions: `${String(actionsKept)}/${String(actionsRaw)}`,
+        ...(droppedPaths.length > 0 ? { dropped: droppedPaths } : {}),
+      },
+      { ...reqContent, response: content },
+    )
+
+    return coerced.response
   }
 
   private async _callAndValidateInfer(
@@ -124,12 +158,8 @@ export class ChatExtractionEngine {
     )
     if (content === null) return null
 
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(content) as unknown
-    } catch {
-      return null
-    }
+    const parsed = parseJsonLoose(content)
+    if (parsed === null) return null
 
     const validated = InferredContextSchema.safeParse(parsed)
     if (!validated.success) return null
@@ -195,6 +225,126 @@ function stableHash(text: string): string {
     hash = Math.imul(hash, 0x01000193)
   }
   return (hash >>> 0).toString(16)
+}
+
+/**
+ * Parse JSON from a chat-completion message, tolerating endpoints that ignore
+ * `response_format: json_object` and wrap the object in a markdown code fence or
+ * surrounding prose. Tries, in order: the raw content, the contents of a
+ * ```json``` (or bare ```) fence, and the substring from the first `{` to the
+ * last `}`. Returns null when none parse. Never logs the content (privacy #12).
+ */
+function parseJsonLoose(content: string): unknown {
+  for (const candidate of jsonCandidates(content)) {
+    try {
+      return JSON.parse(candidate) as unknown
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  return null
+}
+
+/**
+ * Build an ExtractionResponse from an already-parsed object, leniently: a
+ * missing `proposedDecisions` / `proposedActions` becomes an empty array, and a
+ * single malformed item is dropped rather than failing the whole turn. Returns
+ * null only when the value is not a JSON object at all (→ retry). This is a
+ * deliberate softening of the strict all-or-nothing schema for LLM output: the
+ * items are Proposed and reviewed by the note-taker, so keeping the valid ones
+ * beats discarding a whole turn over one bad field.
+ */
+interface ExtractionDiagnostics {
+  decisionsKept: number
+  decisionsRaw: number
+  actionsKept: number
+  actionsRaw: number
+  /** Dedup'd `decision.<field>` / `action.<field>` paths of dropped items. */
+  droppedPaths: string[]
+}
+
+interface CoercedExtraction {
+  response: ExtractionResponse
+  diagnostics: ExtractionDiagnostics
+}
+
+function coerceExtractionResponse(parsed: unknown): CoercedExtraction | null {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const obj = parsed as Record<string, unknown>
+
+  const decisions = validateArray(obj.proposedDecisions, ProposedDecisionSchema)
+  const actions = validateArray(obj.proposedActions, ProposedActionSchema)
+
+  const response: ExtractionResponse = {
+    proposedDecisions: decisions.items,
+    proposedActions: actions.items,
+  }
+
+  // discussionSummaries is present only on the final pass; keep it out of the
+  // object entirely when absent (exactOptionalPropertyTypes).
+  if (obj.discussionSummaries !== undefined) {
+    response.discussionSummaries = validateArray(
+      obj.discussionSummaries,
+      ProposedDiscussionSummarySchema,
+    ).items
+  }
+
+  const droppedPaths = [
+    ...new Set([
+      ...decisions.droppedPaths.map((p) => `decision.${p}`),
+      ...actions.droppedPaths.map((p) => `action.${p}`),
+    ]),
+  ]
+
+  return {
+    response,
+    diagnostics: {
+      decisionsKept: decisions.items.length,
+      decisionsRaw: decisions.rawCount,
+      actionsKept: actions.items.length,
+      actionsRaw: actions.rawCount,
+      droppedPaths,
+    },
+  }
+}
+
+interface ValidatedArray<T> {
+  items: T[]
+  /** How many elements the model returned (0 when the key was absent). */
+  rawCount: number
+  /** Field paths of the items that failed validation (no values). */
+  droppedPaths: string[]
+}
+
+/** Validate each element against `schema`, keeping the valid ones and recording why the rest dropped. */
+function validateArray<S extends z.ZodTypeAny>(
+  value: unknown,
+  schema: S,
+): ValidatedArray<z.infer<S>> {
+  if (!Array.isArray(value)) return { items: [], rawCount: 0, droppedPaths: [] }
+  const items: z.infer<S>[] = []
+  const droppedPaths: string[] = []
+  for (const item of value) {
+    const result = schema.safeParse(item)
+    if (result.success) items.push(result.data as z.infer<S>)
+    else droppedPaths.push(...result.error.issues.map((i) => i.path.join('.') || '(root)'))
+  }
+  return { items, rawCount: value.length, droppedPaths }
+}
+
+function jsonCandidates(content: string): string[] {
+  const trimmed = content.trim()
+  const candidates = [trimmed]
+
+  const fence = /```(?:json)?\s*\n?([\s\S]*?)\n?```/i.exec(trimmed)
+  if (fence?.[1] !== undefined) candidates.push(fence[1].trim())
+
+  // Prose around a JSON object: take the first `{` … last `}`.
+  const start = trimmed.indexOf('{')
+  const end = trimmed.lastIndexOf('}')
+  if (start !== -1 && end > start) candidates.push(trimmed.slice(start, end + 1))
+
+  return candidates
 }
 
 function extractContent(json: unknown): string | null {

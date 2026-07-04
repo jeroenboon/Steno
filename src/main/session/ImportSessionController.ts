@@ -37,6 +37,7 @@ import type { meetingRepo } from '../db/repos/meetingRepo'
 import type { participantRepo } from '../db/repos/participantRepo'
 import type { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
 import { LiveExtractionRuntime } from '../services/liveExtractionRuntime'
+import { MeetingLifecycleService } from '../services/meetingLifecycleService'
 import { tryBuildAsrProvider, tryBuildExtractionProvider } from '../settings/providerFactory'
 import type { SecretStorage } from '../settings/SecretStorage'
 import type { SettingsStore } from '../settings/SettingsStore'
@@ -75,6 +76,11 @@ export interface ImportSessionControllerDeps {
   buildAsr?: typeof tryBuildAsrProvider
   /** Injected so tests can supply fake providers. Defaults to the real factory. */
   buildExtraction?: typeof tryBuildExtractionProvider
+  /**
+   * The single enforcer of Live → Ended. Optional so tests get one built from
+   * meetingRepo + clock; production injects the shared instance.
+   */
+  meetingLifecycle?: MeetingLifecycleService
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +101,7 @@ export class ImportSessionController {
   private readonly _clock: Clock
   private readonly _buildAsr: typeof tryBuildAsrProvider
   private readonly _buildExtraction: typeof tryBuildExtractionProvider
+  private readonly _meetingLifecycle: MeetingLifecycleService
 
   private _asrProvider: ASRProvider | null = null
   /** Decoded PCM frames accumulated from the renderer, transcribed in one batch on finish. */
@@ -115,6 +122,8 @@ export class ImportSessionController {
     this._clock = deps.clock
     this._buildAsr = deps.buildAsr ?? tryBuildAsrProvider
     this._buildExtraction = deps.buildExtraction ?? tryBuildExtractionProvider
+    this._meetingLifecycle =
+      deps.meetingLifecycle ?? new MeetingLifecycleService(deps.meetingRepo, deps.clock)
   }
 
   /**
@@ -223,11 +232,11 @@ export class ImportSessionController {
     this._emitProgress('extracting')
     await this._runFinalPass(extractionProvider, meetingId)
 
-    // Mark the meeting Ended.
-    const meeting = this._meetingRepo.findById(meetingId)
-    if (meeting !== null) {
-      const endedAt = new Date(this._clock.now()).toISOString()
-      this._meetingRepo.update({ ...meeting, state: 'ended', endedAt, updatedAt: endedAt })
+    // Mark the meeting Ended through the single enforcer (Live → Ended), which
+    // sets state + endedAt and guards a double-end. The import row is inserted
+    // Live in start(), so it transitions here.
+    if (this._meetingRepo.findById(meetingId)?.state === 'live') {
+      this._meetingLifecycle.endMeeting(meetingId)
     }
 
     this._emitProgress('done')

@@ -17,6 +17,9 @@ test-output.txt
 # OS
 Thumbs.db
 
+# Dev-only debug log (main process; may contain content in --debug mode)
+logs/
+
 # Local-only session artefacts (never commit these)
 design_todo.md
 docs/handoff-*.md
