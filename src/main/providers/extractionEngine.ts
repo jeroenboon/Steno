@@ -1,19 +1,25 @@
 /**
- * Shared extraction engine for OpenAI-compatible chat-completions endpoints.
+ * Vendor-neutral extraction engine (arch review item 3, ADR 0034).
  *
- * OpenAI, Mistral and Azure OpenAI all speak the same `chat/completions` wire
- * with JSON mode (`response_format: { type: "json_object" }`). They differ only
- * in the request URL and the auth header (OpenAI/Mistral use
- * `Authorization: Bearer`, Azure uses `api-key`). That difference is captured by
- * the injected `ChatCompletionsTarget`; everything else — prompt building,
- * response parsing, Zod validation, and the one-retry-then-degrade strategy
- * (mirroring AnthropicExtractionProvider) — lives here, so the per-vendor
- * adapters stay thin.
+ * The engine owns the whole extraction contract — prompt building, per-item Zod
+ * coercion, the one-retry-then-degrade strategy, devlog, and the inferContext
+ * flow — independent of transport. It talks to an `ExtractionWire` seam that,
+ * given the prompts, returns a parsed candidate object (or null on a
+ * transport/HTTP/shape failure). Each vendor supplies only that wire:
+ *
+ *  - the OpenAI-compatible family via `openAiJsonWire.ts` (fetch + json_object,
+ *    then `parseJsonLoose` to a candidate object);
+ *  - Anthropic via `anthropicToolWire.ts` (SDK forced tool use; the tool input
+ *    is already an object). [commit 2]
+ *
+ * The seam sits at the one point where both families become identical: a parsed
+ * candidate object. `parseJsonLoose` stays in the OpenAI wire; the SDK tool-use
+ * decode stays in the Anthropic wire.
  *
  * ## Privacy (principle #12)
- * The API key only ever appears inside the injected `target.headers`; it is
- * never logged. Logs carry the non-sensitive `logTag` (e.g. `[OpenAI]`,
- * `[Azure]`) so vendors are distinguishable without exposing content or keys.
+ * The engine never sees the API key (it lives inside the wire). Logs carry the
+ * non-sensitive `logTag`; transcript content is written only under the devlog
+ * content opt-in.
  */
 
 import type { z } from 'zod'
@@ -34,53 +40,64 @@ import {
 import { devlog } from '../devlog'
 
 // ---------------------------------------------------------------------------
-// Target + engine options
+// Wire seam
 // ---------------------------------------------------------------------------
 
 /**
- * How to reach a specific chat-completions endpoint: the fully resolved URL and
- * the request headers (including the vendor-specific auth header). Computed once
- * by the adapter, since neither changes per request.
+ * What the engine is asking the wire to do. `kind` selects the structured-output
+ * mechanism (extract vs infer); `isFinalPass` lets a wire pick a different model
+ * for the final pass (Anthropic uses sonnet there). OpenAI-compatible wires
+ * ignore `isFinalPass` — one model, and the final-pass difference is entirely in
+ * the prompt the engine builds.
  */
-export interface ChatCompletionsTarget {
-  url: string
-  headers: Record<string, string>
+export type ExtractionCall =
+  | { readonly kind: 'extract'; readonly isFinalPass: boolean }
+  | { readonly kind: 'infer' }
+
+/**
+ * The per-vendor transport seam. Given the fully built system + user prompts,
+ * return a parsed candidate object, or null on a transport/HTTP/shape failure.
+ * The wire owns everything vendor-specific: the connection, auth, the
+ * structured-output mechanism, and getting from the raw response to a parsed
+ * object. It never validates the domain shape — the engine coerces.
+ *
+ * Returns `null` on failure. (`unknown` already includes `null`, so the type is
+ * just `Promise<unknown>`; the convention is that `null` means "no candidate".)
+ */
+export interface ExtractionWire {
+  callStructured(call: ExtractionCall, system: string, user: string): Promise<unknown>
 }
 
-export interface ChatExtractionEngineOptions {
-  /** Model identifier sent in the request body. */
-  model: string
+export interface ExtractionEngineOptions {
+  /** The per-vendor transport. */
+  wire: ExtractionWire
   /** Non-sensitive log tag, e.g. `[OpenAI]` or `[Azure]`. */
   logTag: string
-  /** Resolved URL + headers (carries the auth header — never logged). */
-  target: ChatCompletionsTarget
-  /** Injected for testability. */
-  fetch: typeof globalThis.fetch
+  /** Model identifier, for non-sensitive devlog metadata. */
+  model: string
 }
 
 // ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
 
-export class ChatExtractionEngine {
-  private readonly _model: string
+export class ExtractionEngine {
+  private readonly _wire: ExtractionWire
   private readonly _logTag: string
-  private readonly _target: ChatCompletionsTarget
-  private readonly _fetch: typeof globalThis.fetch
+  private readonly _model: string
 
-  constructor(opts: ChatExtractionEngineOptions) {
-    this._model = opts.model
+  constructor(opts: ExtractionEngineOptions) {
+    this._wire = opts.wire
     this._logTag = opts.logTag
-    this._target = opts.target
-    this._fetch = opts.fetch
+    this._model = opts.model
   }
 
   async extract(request: ExtractionRequest): Promise<ExtractionResponse> {
-    const first = await this._callAndValidate(request)
+    const first = await this._callAndCoerce(request)
     if (first !== null) return first
 
     console.error(`${this._logTag} Validation failed, retrying`)
-    const retry = await this._callAndValidate(request)
+    const retry = await this._callAndCoerce(request)
     if (retry !== null) return retry
 
     console.error(`${this._logTag} Retry failed, skipping turn`)
@@ -104,30 +121,31 @@ export class ChatExtractionEngine {
     return { agendaItems: [], participants: [] }
   }
 
-  private async _callAndValidate(request: ExtractionRequest): Promise<ExtractionResponse | null> {
+  private async _callAndCoerce(request: ExtractionRequest): Promise<ExtractionResponse | null> {
     const systemPrompt = buildSystemPrompt(request)
     const userMessage = buildUserMessage(request)
-    const content = await this._post(systemPrompt, userMessage)
+    const candidate = await this._wire.callStructured(
+      { kind: 'extract', isFinalPass: request.isFinalPass },
+      systemPrompt,
+      userMessage,
+    )
 
     // The request (agenda + participants + transcript) is content; it is only
     // written when the --debug opt-in is on. meta stays non-sensitive.
     const meta = { tag: this._logTag, model: this._model, isFinalPass: request.isFinalPass }
     const reqContent = { request: JSON.stringify({ system: systemPrompt, user: userMessage }) }
 
-    if (content === null) {
-      devlog('extraction', 'post-failed', meta, reqContent)
+    if (candidate === null) {
+      devlog('extraction', 'call-failed', meta, reqContent)
       return null
     }
 
-    const parsed = parseJsonLoose(content)
-    if (parsed === null) {
-      devlog('extraction', 'parse-failed', meta, { ...reqContent, response: content })
-      return null
-    }
-
-    const coerced = coerceExtractionResponse(parsed)
+    const coerced = coerceExtractionResponse(candidate)
     if (coerced === null) {
-      devlog('extraction', 'not-an-object', meta, { ...reqContent, response: content })
+      devlog('extraction', 'not-an-object', meta, {
+        ...reqContent,
+        response: JSON.stringify(candidate),
+      })
       return null
     }
 
@@ -142,7 +160,7 @@ export class ChatExtractionEngine {
         actions: `${String(actionsKept)}/${String(actionsRaw)}`,
         ...(droppedPaths.length > 0 ? { dropped: droppedPaths } : {}),
       },
-      { ...reqContent, response: content },
+      { ...reqContent, response: JSON.stringify(candidate) },
     )
 
     return coerced.response
@@ -152,98 +170,22 @@ export class ChatExtractionEngine {
     sourceText: string,
     knownAgendaItems: readonly { title: string; topic: string }[],
   ): Promise<InferredContext | null> {
-    const content = await this._post(
+    const candidate = await this._wire.callStructured(
+      { kind: 'infer' },
       buildInferSystemPrompt(knownAgendaItems),
       `Transcript:\n${sourceText}`,
     )
-    if (content === null) return null
+    if (candidate === null) return null
 
-    const parsed = parseJsonLoose(content)
-    if (parsed === null) return null
-
-    const validated = InferredContextSchema.safeParse(parsed)
+    const validated = InferredContextSchema.safeParse(candidate)
     if (!validated.success) return null
     return validated.data
   }
-
-  /**
-   * POST one chat-completions request and return the message content string, or
-   * null on a transport/HTTP/shape failure. Never logs the key, the transcript,
-   * or the raw response body (principle #12).
-   */
-  private async _post(systemPrompt: string, userMessage: string): Promise<string | null> {
-    const body = JSON.stringify({
-      model: this._model,
-      response_format: { type: 'json_object' },
-      // Route identical prefixes to the same cache. The rolling cadence sends a
-      // byte-identical system prompt (agenda + participants + instructions) every
-      // 15-30s, so a stable key derived from it maximises OpenAI/Azure prompt-cache
-      // hits on the dominant rolling cost (Phase 5.4). The key is non-sensitive
-      // (a hash of the prompt, never the transcript or the API key).
-      prompt_cache_key: `${this._model}:${stableHash(systemPrompt)}`,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-    })
-
-    const response = await this._fetch(this._target.url, {
-      method: 'POST',
-      headers: this._target.headers,
-      body,
-    })
-
-    if (!response.ok) {
-      console.error(`${this._logTag} HTTP ${String(response.status)}`)
-      return null
-    }
-
-    const json: unknown = await response.json()
-    const content = extractContent(json)
-    if (content === null) {
-      console.error(`${this._logTag} No content in response`)
-      return null
-    }
-    return content
-  }
 }
 
 // ---------------------------------------------------------------------------
-// Helpers (shared prompt building + response parsing)
+// Response coercion (shared)
 // ---------------------------------------------------------------------------
-
-/**
- * Deterministic, non-cryptographic hash (FNV-1a, 32-bit) of a string, as hex.
- * Used only to derive a stable, non-sensitive prompt_cache_key from the system
- * prompt — never for security. Identical prompts hash identically, so rolling
- * ticks within a meeting share a cache route.
- */
-function stableHash(text: string): string {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(16)
-}
-
-/**
- * Parse JSON from a chat-completion message, tolerating endpoints that ignore
- * `response_format: json_object` and wrap the object in a markdown code fence or
- * surrounding prose. Tries, in order: the raw content, the contents of a
- * ```json``` (or bare ```) fence, and the substring from the first `{` to the
- * last `}`. Returns null when none parse. Never logs the content (privacy #12).
- */
-function parseJsonLoose(content: string): unknown {
-  for (const candidate of jsonCandidates(content)) {
-    try {
-      return JSON.parse(candidate) as unknown
-    } catch {
-      // Try the next candidate.
-    }
-  }
-  return null
-}
 
 /**
  * Build an ExtractionResponse from an already-parsed object, leniently: a
@@ -268,7 +210,7 @@ interface CoercedExtraction {
   diagnostics: ExtractionDiagnostics
 }
 
-function coerceExtractionResponse(parsed: unknown): CoercedExtraction | null {
+export function coerceExtractionResponse(parsed: unknown): CoercedExtraction | null {
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
   const obj = parsed as Record<string, unknown>
 
@@ -332,33 +274,9 @@ function validateArray<S extends z.ZodTypeAny>(
   return { items, rawCount: value.length, droppedPaths }
 }
 
-function jsonCandidates(content: string): string[] {
-  const trimmed = content.trim()
-  const candidates = [trimmed]
-
-  const fence = /```(?:json)?\s*\n?([\s\S]*?)\n?```/i.exec(trimmed)
-  if (fence?.[1] !== undefined) candidates.push(fence[1].trim())
-
-  // Prose around a JSON object: take the first `{` … last `}`.
-  const start = trimmed.indexOf('{')
-  const end = trimmed.lastIndexOf('}')
-  if (start !== -1 && end > start) candidates.push(trimmed.slice(start, end + 1))
-
-  return candidates
-}
-
-function extractContent(json: unknown): string | null {
-  if (json === null || typeof json !== 'object') return null
-  const obj = json as Record<string, unknown>
-  const choices = obj.choices
-  if (!Array.isArray(choices) || choices.length === 0) return null
-  const first: unknown = choices[0]
-  if (first === null || typeof first !== 'object') return null
-  const message = (first as Record<string, unknown>).message
-  if (message === null || typeof message !== 'object') return null
-  const content = (message as Record<string, unknown>).content
-  return typeof content === 'string' ? content : null
-}
+// ---------------------------------------------------------------------------
+// Prompt builders (shared) — never logged outside the devlog content opt-in
+// ---------------------------------------------------------------------------
 
 function buildSystemPrompt(request: ExtractionRequest): string {
   const agendaLines =
