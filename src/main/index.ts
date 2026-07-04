@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'path'
 
 import Database from 'better-sqlite3'
@@ -31,6 +31,7 @@ import { discussionSummaryRepo } from './db/repos/discussionSummaryRepo'
 import { meetingRepo } from './db/repos/meetingRepo'
 import { participantRepo } from './db/repos/participantRepo'
 import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
+import { devlog, initDevlog } from './devlog'
 import { createIpcRegistry } from './ipc-registry'
 import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
@@ -56,6 +57,44 @@ import { createWindowOptions } from './window-options'
 // The policy is dev-aware (see csp.ts): strict in production, relaxed in dev so
 // the Vite dev server's inline Fast-Refresh script and HMR websocket can run.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Dev-only debug log (main process)
+//
+// Initialised ONLY on the dev path (electron-vite sets ELECTRON_RENDERER_URL),
+// so a packaged build never logs. Default is metadata-only; `npm run dev:debug`
+// (or --debug / STENO_DEBUG=1) additionally records the LLM request/response so
+// a developer can see exactly what a provider sends and returns. The file is a
+// fresh JSONL per session under logs/ (gitignored). See devlog.ts + ADR 0003.
+// ---------------------------------------------------------------------------
+
+function initDevLogging(): void {
+  const isDev = process.env.ELECTRON_RENDERER_URL !== undefined
+  if (!isDev) return
+
+  const includeContent = process.argv.includes('--debug') || process.env.STENO_DEBUG === '1'
+  const logDir = join(process.cwd(), 'logs')
+  const logPath = join(logDir, 'steno-dev.jsonl')
+
+  try {
+    mkdirSync(logDir, { recursive: true })
+    writeFileSync(logPath, '') // fresh per session so we only ever read the current run
+    initDevlog({
+      enabled: true,
+      includeContent,
+      write: (line) => {
+        appendFileSync(logPath, `${line}\n`)
+      },
+      now: () => Date.now(),
+    })
+    devlog('app', 'session-start', { includeContent, logPath })
+    console.info(
+      `[devlog] dev debug log → ${logPath}${includeContent ? ' (content mode ON)' : ' (metadata only)'}`,
+    )
+  } catch (err) {
+    console.error('[devlog] init failed:', err instanceof Error ? err.message : String(err))
+  }
+}
 
 function applyContentSecurityPolicy(): void {
   const isDev = process.env.ELECTRON_RENDERER_URL !== undefined
@@ -470,6 +509,7 @@ function loadRenderer(mainWindow: BrowserWindow): void {
 app
   .whenReady()
   .then(async () => {
+    initDevLogging()
     applyContentSecurityPolicy()
     registerMediaPermissionHandlers()
     registerDisplayMediaHandler()

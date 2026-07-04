@@ -31,6 +31,8 @@ import {
   type InferredContext,
 } from '@shared/providers'
 
+import { devlog } from '../devlog'
+
 // ---------------------------------------------------------------------------
 // Target + engine options
 // ---------------------------------------------------------------------------
@@ -103,13 +105,47 @@ export class ChatExtractionEngine {
   }
 
   private async _callAndValidate(request: ExtractionRequest): Promise<ExtractionResponse | null> {
-    const content = await this._post(buildSystemPrompt(request), buildUserMessage(request))
-    if (content === null) return null
+    const systemPrompt = buildSystemPrompt(request)
+    const userMessage = buildUserMessage(request)
+    const content = await this._post(systemPrompt, userMessage)
+
+    // The request (agenda + participants + transcript) is content; it is only
+    // written when the --debug opt-in is on. meta stays non-sensitive.
+    const meta = { tag: this._logTag, model: this._model, isFinalPass: request.isFinalPass }
+    const reqContent = { request: JSON.stringify({ system: systemPrompt, user: userMessage }) }
+
+    if (content === null) {
+      devlog('extraction', 'post-failed', meta, reqContent)
+      return null
+    }
 
     const parsed = parseJsonLoose(content)
-    if (parsed === null) return null
+    if (parsed === null) {
+      devlog('extraction', 'parse-failed', meta, { ...reqContent, response: content })
+      return null
+    }
 
-    return coerceExtractionResponse(parsed)
+    const coerced = coerceExtractionResponse(parsed)
+    if (coerced === null) {
+      devlog('extraction', 'not-an-object', meta, { ...reqContent, response: content })
+      return null
+    }
+
+    const { decisionsKept, decisionsRaw, actionsKept, actionsRaw, droppedPaths } =
+      coerced.diagnostics
+    devlog(
+      'extraction',
+      'turn',
+      {
+        ...meta,
+        decisions: `${String(decisionsKept)}/${String(decisionsRaw)}`,
+        actions: `${String(actionsKept)}/${String(actionsRaw)}`,
+        ...(droppedPaths.length > 0 ? { dropped: droppedPaths } : {}),
+      },
+      { ...reqContent, response: content },
+    )
+
+    return coerced.response
   }
 
   private async _callAndValidateInfer(
@@ -218,36 +254,82 @@ function parseJsonLoose(content: string): unknown {
  * items are Proposed and reviewed by the note-taker, so keeping the valid ones
  * beats discarding a whole turn over one bad field.
  */
-function coerceExtractionResponse(parsed: unknown): ExtractionResponse | null {
+interface ExtractionDiagnostics {
+  decisionsKept: number
+  decisionsRaw: number
+  actionsKept: number
+  actionsRaw: number
+  /** Dedup'd `decision.<field>` / `action.<field>` paths of dropped items. */
+  droppedPaths: string[]
+}
+
+interface CoercedExtraction {
+  response: ExtractionResponse
+  diagnostics: ExtractionDiagnostics
+}
+
+function coerceExtractionResponse(parsed: unknown): CoercedExtraction | null {
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
   const obj = parsed as Record<string, unknown>
 
+  const decisions = validateArray(obj.proposedDecisions, ProposedDecisionSchema)
+  const actions = validateArray(obj.proposedActions, ProposedActionSchema)
+
   const response: ExtractionResponse = {
-    proposedDecisions: keepValid(obj.proposedDecisions, ProposedDecisionSchema),
-    proposedActions: keepValid(obj.proposedActions, ProposedActionSchema),
+    proposedDecisions: decisions.items,
+    proposedActions: actions.items,
   }
 
   // discussionSummaries is present only on the final pass; keep it out of the
   // object entirely when absent (exactOptionalPropertyTypes).
   if (obj.discussionSummaries !== undefined) {
-    response.discussionSummaries = keepValid(
+    response.discussionSummaries = validateArray(
       obj.discussionSummaries,
       ProposedDiscussionSummarySchema,
-    )
+    ).items
   }
 
-  return response
+  const droppedPaths = [
+    ...new Set([
+      ...decisions.droppedPaths.map((p) => `decision.${p}`),
+      ...actions.droppedPaths.map((p) => `action.${p}`),
+    ]),
+  ]
+
+  return {
+    response,
+    diagnostics: {
+      decisionsKept: decisions.items.length,
+      decisionsRaw: decisions.rawCount,
+      actionsKept: actions.items.length,
+      actionsRaw: actions.rawCount,
+      droppedPaths,
+    },
+  }
 }
 
-/** Validate each element against `schema`, keeping only the ones that pass. */
-function keepValid<S extends z.ZodTypeAny>(value: unknown, schema: S): z.infer<S>[] {
-  if (!Array.isArray(value)) return []
-  const out: z.infer<S>[] = []
+interface ValidatedArray<T> {
+  items: T[]
+  /** How many elements the model returned (0 when the key was absent). */
+  rawCount: number
+  /** Field paths of the items that failed validation (no values). */
+  droppedPaths: string[]
+}
+
+/** Validate each element against `schema`, keeping the valid ones and recording why the rest dropped. */
+function validateArray<S extends z.ZodTypeAny>(
+  value: unknown,
+  schema: S,
+): ValidatedArray<z.infer<S>> {
+  if (!Array.isArray(value)) return { items: [], rawCount: 0, droppedPaths: [] }
+  const items: z.infer<S>[] = []
+  const droppedPaths: string[] = []
   for (const item of value) {
     const result = schema.safeParse(item)
-    if (result.success) out.push(result.data as z.infer<S>)
+    if (result.success) items.push(result.data as z.infer<S>)
+    else droppedPaths.push(...result.error.issues.map((i) => i.path.join('.') || '(root)'))
   }
-  return out
+  return { items, rawCount: value.length, droppedPaths }
 }
 
 function jsonCandidates(content: string): string[] {

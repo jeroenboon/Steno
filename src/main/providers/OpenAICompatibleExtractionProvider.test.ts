@@ -11,10 +11,12 @@
  *   - logs carry the vendor displayName and never the key or transcript content.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { TranscriptSpan } from '@shared/domain/types'
 import type { ExtractionRequest } from '@shared/providers'
+
+import { initDevlog, resetDevlog } from '../devlog'
 
 import { OpenAICompatibleExtractionProvider } from './OpenAICompatibleExtractionProvider'
 
@@ -269,6 +271,64 @@ describe('OpenAICompatibleExtractionProvider.extract', () => {
     expect(allLogs).not.toContain('test-key')
 
     errorSpy.mockRestore()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// devlog wiring
+// ---------------------------------------------------------------------------
+
+describe('OpenAICompatibleExtractionProvider — devlog', () => {
+  interface Line {
+    category: string
+    event: string
+    meta?: { decisions?: string; actions?: string; dropped?: string[] }
+    content?: { request?: string; response?: string }
+  }
+
+  afterEach(() => {
+    resetDevlog()
+  })
+
+  function startDevlog(includeContent: boolean): Line[] {
+    const lines: Line[] = []
+    initDevlog({
+      enabled: true,
+      includeContent,
+      write: (line) => lines.push(JSON.parse(line) as Line),
+      now: () => 0,
+    })
+    return lines
+  }
+
+  it('logs a turn with kept/raw counts (metadata mode, no content)', async () => {
+    const lines = startDevlog(false)
+    const dropped = {
+      proposedDecisions: [{ rationale: 'Geldig', sourceSpanId: 'span-1' }],
+      proposedActions: [{ description: 'X', sourceSpanId: '' }], // invalid → dropped
+    }
+    await makeProvider(vi.fn().mockResolvedValue(okResponse(JSON.stringify(dropped)))).extract(
+      extractionRequest,
+    )
+
+    const turn = lines.find((l) => l.event === 'turn')
+    expect(turn?.meta?.decisions).toBe('1/1')
+    expect(turn?.meta?.actions).toBe('0/1')
+    expect(turn?.meta?.dropped).toContain('action.sourceSpanId')
+    // Metadata mode: no content bucket, no transcript.
+    expect(turn?.content).toBeUndefined()
+  })
+
+  it('records the LLM request and response in content mode', async () => {
+    const lines = startDevlog(true)
+    await makeProvider(
+      vi.fn().mockResolvedValue(okResponse(JSON.stringify(validExtraction))),
+    ).extract(extractionRequest)
+
+    const turn = lines.find((l) => l.event === 'turn')
+    // The request carries the transcript; the response carries the model output.
+    expect(turn?.content?.request).toContain('begroting')
+    expect(turn?.content?.response).toContain('Begroting goedgekeurd')
   })
 })
 
