@@ -70,7 +70,7 @@ export class MeetingQueryService {
     return {
       meeting,
       decisions: this._decisions.listByMeeting(meetingId),
-      actions: this._actions.listActionsByMeeting(meetingId),
+      actions: this._actions.listByMeeting(meetingId),
       agendaItems: this._agenda.listByMeeting(meetingId),
       participants: this._participants.listByMeeting(meetingId),
       summaries: this._summaries.listByMeeting(meetingId),

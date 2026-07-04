@@ -71,7 +71,7 @@ export function actionRepo(db: Database.Database) {
       return rowToDomain(row)
     },
 
-    listActionsByMeeting(meetingId: string): Action[] {
+    listByMeeting(meetingId: string): Action[] {
       const rows = db
         .prepare('SELECT * FROM actions WHERE meeting_id = ?')
         .all(meetingId) as ActionRow[]

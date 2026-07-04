@@ -178,7 +178,7 @@ describe('proposeItems integration', () => {
     clock.tick(20_000)
     await scheduler.tick(MTG_ID, CONTEXT)
 
-    const actions = actionRepo(db).listActionsByMeeting(MTG_ID)
+    const actions = actionRepo(db).listByMeeting(MTG_ID)
     expect(actions).toHaveLength(1)
     expect(actions[0]?.state).toBe('proposed')
   })
@@ -442,7 +442,7 @@ describe('final pass', () => {
     await scheduler.runFinalPass(endedMeeting, CONTEXT)
 
     expect(decisionRepo(db).listByMeeting(MTG_ID)).toHaveLength(1)
-    expect(actionRepo(db).listActionsByMeeting(MTG_ID)).toHaveLength(1)
+    expect(actionRepo(db).listByMeeting(MTG_ID)).toHaveLength(1)
   })
 })
 
@@ -547,7 +547,7 @@ describe('owner and agenda-item assignment (0009)', () => {
     clock.tick(20_000)
     await scheduler.tick(MTG_ID, CONTEXT)
 
-    const actions = actionRepo(db).listActionsByMeeting(MTG_ID)
+    const actions = actionRepo(db).listByMeeting(MTG_ID)
     expect(actions).toHaveLength(1)
     expect(actions[0]?.owner).toBe('p-1')
   })
@@ -566,7 +566,7 @@ describe('owner and agenda-item assignment (0009)', () => {
     clock.tick(20_000)
     await scheduler.tick(MTG_ID, CONTEXT)
 
-    const actions = actionRepo(db).listActionsByMeeting(MTG_ID)
+    const actions = actionRepo(db).listByMeeting(MTG_ID)
     expect(actions).toHaveLength(1)
     expect(actions[0]?.owner).toBeUndefined()
   })
@@ -583,7 +583,7 @@ describe('owner and agenda-item assignment (0009)', () => {
     clock.tick(20_000)
     await scheduler.tick(MTG_ID, CONTEXT)
 
-    const actions = actionRepo(db).listActionsByMeeting(MTG_ID)
+    const actions = actionRepo(db).listByMeeting(MTG_ID)
     expect(actions).toHaveLength(1)
     expect(actions[0]?.owner).toBeUndefined()
   })
@@ -663,7 +663,7 @@ describe('owner and agenda-item assignment (0009)', () => {
     clock.tick(20_000)
     await scheduler.tick(MTG_ID, CONTEXT)
 
-    const actions = actionRepo(db).listActionsByMeeting(MTG_ID)
+    const actions = actionRepo(db).listByMeeting(MTG_ID)
     expect(actions).toHaveLength(1)
     // Topic match → ai-1
     expect(actions[0]?.agendaItemId).toBe('ai-1')
