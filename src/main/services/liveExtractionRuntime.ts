@@ -70,6 +70,7 @@ import {
 import { persistInferredContext } from './inferredContextPersistence'
 import { ItemLifecycleService } from './itemLifecycleService'
 import { sendItemsChanged } from './itemsChangedNotifier'
+import { MeetingContextOwner } from './meetingContextOwner'
 
 // ---------------------------------------------------------------------------
 // Public payload types — cross the IPC boundary, Zod-validated in ipc.ts
@@ -146,8 +147,8 @@ export interface LiveExtractionRuntimeOptions {
 
 export class LiveExtractionRuntime {
   private readonly _meetingId: MeetingId
-  /** Mutable: the final pass may enrich it with an inferred agenda (ADR 0029). */
-  private _context: MeetingContext
+  /** Owns the MeetingContext: current, Confirmed-only routing view, and enrich. */
+  private readonly _contextOwner: MeetingContextOwner
   /** Null when no extraction provider configured (degraded path). */
   private readonly _scheduler: ExtractionLoopScheduler | null
   /** Slow live agenda inference scheduler; null when not armed (ADR 0029). */
@@ -172,7 +173,7 @@ export class LiveExtractionRuntime {
 
   constructor(opts: LiveExtractionRuntimeOptions) {
     this._meetingId = opts.meetingId
-    this._context = opts.context
+    this._contextOwner = new MeetingContextOwner(opts.context, opts.meetingId, opts.agendaItemRepo)
     this._spanRepo = opts.spanRepo
     this._dsRepo = opts.dsRepo
     this._decisionsRepo = opts.decisionsRepo
@@ -250,12 +251,13 @@ export class LiveExtractionRuntime {
     const decisions = this._decisionsRepo.listByMeeting(this._meetingId)
     const actions = this._actionsRepo.listActionsByMeeting(this._meetingId)
     const spans = this._spanRepo.listByMeeting(this._meetingId)
+    const context = this._contextOwner.current()
     const nudges = deriveNudges(
       {
         decisions,
         actions,
-        agendaItems: this._context.agendaItems,
-        participants: this._context.participants,
+        agendaItems: context.agendaItems,
+        participants: context.participants,
         transcriptSpans: spans,
         meetingStartedAt: this._meetingStartedAt,
       },
@@ -305,7 +307,7 @@ export class LiveExtractionRuntime {
     if (this._stopped || this._paused) return
     if (this._scheduler === null) return
 
-    await this._scheduler.tick(this._meetingId, this._liveRoutingContext())
+    await this._scheduler.tick(this._meetingId, this._contextOwner.routingContext())
     await this._agendaScheduler?.tick(this._meetingId)
     await this._runSummary()
   }
@@ -324,22 +326,6 @@ export class LiveExtractionRuntime {
   resume(): void {
     this._paused = false
     this._agendaScheduler?.resume()
-  }
-
-  /**
-   * Context for a live rolling turn. Decisions/Actions may route only to
-   * Confirmed agenda items + the Off-agenda bucket during Live, so the candidate
-   * agenda is the Confirmed items from the repo; Proposed items the agent has
-   * inferred are not yet routing targets (ADR 0029). The final pass keeps using
-   * the full agenda (it does not call this). Falls back to the static context
-   * when no agenda repo is wired.
-   */
-  private _liveRoutingContext(): MeetingContext {
-    if (this._agendaItemRepo === undefined) return this._context
-    const confirmed = this._agendaItemRepo
-      .listByMeeting(this._meetingId)
-      .filter((a) => a.state === 'confirmed')
-    return { ...this._context, agendaItems: confirmed }
   }
 
   // -------------------------------------------------------------------------
@@ -419,7 +405,7 @@ export class LiveExtractionRuntime {
     // The scheduler's runFinalPass persists Discussion Summaries to dsRepo
     // and calls proposeItems (which triggers items:changed via the interceptor
     // if items were proposed).
-    await this._scheduler.runFinalPass(meeting, this._context)
+    await this._scheduler.runFinalPass(meeting, this._contextOwner.current())
 
     // Read back the summaries the scheduler persisted and emit items:summaries.
     const summaries = this._dsRepo.listByMeeting(this._meetingId)
@@ -439,7 +425,7 @@ export class LiveExtractionRuntime {
    */
   private async _inferContextOnEnd(meeting: Meeting): Promise<void> {
     if (meeting.source !== 'live') return
-    if (this._context.agendaItems.length > 0) return
+    if (this._contextOwner.current().agendaItems.length > 0) return
     if (
       this._provider?.inferContext === undefined ||
       this._agendaItemRepo === undefined ||
@@ -463,11 +449,7 @@ export class LiveExtractionRuntime {
 
     // Enrich the context so the final pass routes into the inferred agenda and
     // nudges reflect it.
-    this._context = {
-      ...this._context,
-      agendaItems: newAgenda,
-      participants: newParticipants,
-    }
+    this._contextOwner.enrich({ agendaItems: newAgenda, participants: newParticipants })
 
     // Replace an auto-generated placeholder title with the inferred one, then
     // clear the flag so it is never overwritten again. A user-set title (flag
