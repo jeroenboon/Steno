@@ -47,7 +47,12 @@ import { OpenAIRealtimeAsrProvider } from '../providers/OpenAIRealtimeAsrProvide
 import { ModelDownloader } from '../providers/sherpa/ModelDownloader'
 
 import type { SecretStorage } from './SecretStorage'
-import type { AppSettings } from './settingsSchema'
+import type {
+  AppSettings,
+  AzureSpeechConfig,
+  MistralVoxtralConfig,
+  OpenAIAudioConfig,
+} from './settingsSchema'
 
 // ---------------------------------------------------------------------------
 // Output types
@@ -210,52 +215,84 @@ function buildAsrProvider(
     case 'openai-audio': {
       const cfg = settings.openaiAudio
       const apiKey = requireKey(storage, cfg.keyRef)
-      const language = cfg.language ?? settings.primaryLanguage
-      if (usage === 'live') {
-        return new OpenAIRealtimeAsrProvider({ apiKey, model: cfg.model, language })
-      }
-      return new OpenAIBatchAsrProvider({
+      return buildOpenAiAudioAsr(cfg, apiKey, cfg.language ?? settings.primaryLanguage, usage)
+    }
+
+    case 'mistral-voxtral': {
+      const cfg = settings.mistralVoxtral
+      const apiKey = requireKey(storage, cfg.keyRef)
+      return buildMistralVoxtralAsr(cfg, apiKey, cfg.language ?? settings.primaryLanguage, usage)
+    }
+
+    case 'azure-speech': {
+      const cfg = settings.azureSpeech
+      const apiKey = requireKey(storage, cfg.keyRef)
+      return buildAzureSpeechAsr(cfg, apiKey, cfg.language ?? settings.primaryLanguage, usage)
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Per-vendor ASR builders: the live/import fork, once each
+//
+// OpenAI, Mistral and Azure each ship two adapters — a realtime streaming one
+// for `'live'` and a batch one for `'import'`. The choice between them is the
+// one genuine branch these vendors have, so each owns it explicitly rather than
+// burying three copies inside the buildAsrProvider switch.
+// ---------------------------------------------------------------------------
+
+function buildOpenAiAudioAsr(
+  cfg: OpenAIAudioConfig,
+  apiKey: string,
+  language: string,
+  usage: AsrUsage,
+): ASRProvider {
+  return usage === 'live'
+    ? new OpenAIRealtimeAsrProvider({ apiKey, model: cfg.model, language })
+    : new OpenAIBatchAsrProvider({
         apiKey,
         baseUrl: OPENAI_AUDIO_BASE_URL,
         model: cfg.model,
         displayName: cfg.displayName,
         language,
       })
-    }
+}
 
-    case 'mistral-voxtral': {
-      const cfg = settings.mistralVoxtral
-      const apiKey = requireKey(storage, cfg.keyRef)
-      const language = cfg.language ?? settings.primaryLanguage
-      if (usage === 'live') {
-        return new MistralVoxtralRealtimeAsrProvider({ apiKey, model: cfg.model, language })
-      }
-      return new MistralVoxtralBatchAsrProvider({
+function buildMistralVoxtralAsr(
+  cfg: MistralVoxtralConfig,
+  apiKey: string,
+  language: string,
+  usage: AsrUsage,
+): ASRProvider {
+  return usage === 'live'
+    ? new MistralVoxtralRealtimeAsrProvider({ apiKey, model: cfg.model, language })
+    : new MistralVoxtralBatchAsrProvider({
         apiKey,
         baseUrl: MISTRAL_AUDIO_BASE_URL,
         model: cfg.model,
         displayName: cfg.displayName,
         language,
       })
-    }
+}
 
-    case 'azure-speech': {
-      const cfg = settings.azureSpeech
-      const apiKey = requireKey(storage, cfg.keyRef)
-      const language = cfg.language ?? settings.primaryLanguage
-      if (usage === 'live') {
-        // Azure reuses the OpenAI Realtime wire (Phase 4.2); the same deployment
-        // config drives the realtime URL with a preview api-version default.
-        return createAzureOpenAIRealtimeAsrProvider({
-          apiKey,
-          endpoint: cfg.endpoint,
-          deployment: cfg.deployment,
-          apiVersion: cfg.apiVersion ?? DEFAULT_AZURE_REALTIME_API_VERSION,
-          model: cfg.model,
-          language,
-        })
-      }
-      return new AzureWhisperBatchAsrProvider({
+function buildAzureSpeechAsr(
+  cfg: AzureSpeechConfig,
+  apiKey: string,
+  language: string,
+  usage: AsrUsage,
+): ASRProvider {
+  // Azure reuses the OpenAI Realtime wire (Phase 4.2); the same deployment
+  // config drives the realtime URL with a preview api-version default.
+  return usage === 'live'
+    ? createAzureOpenAIRealtimeAsrProvider({
+        apiKey,
+        endpoint: cfg.endpoint,
+        deployment: cfg.deployment,
+        apiVersion: cfg.apiVersion ?? DEFAULT_AZURE_REALTIME_API_VERSION,
+        model: cfg.model,
+        language,
+      })
+    : new AzureWhisperBatchAsrProvider({
         apiKey,
         endpoint: cfg.endpoint,
         deployment: cfg.deployment,
@@ -264,8 +301,6 @@ function buildAsrProvider(
         displayName: cfg.displayName,
         language,
       })
-    }
-  }
 }
 
 /** Look up a required secret by keyRef, throwing a clear error when absent. */

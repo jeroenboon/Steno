@@ -13,5 +13,8 @@ export {
   CustomOpenAIConfigSchema,
   DEFAULT_SETTINGS,
   type AppSettings,
+  type AzureSpeechConfig,
   type CustomOpenAIConfig,
+  type MistralVoxtralConfig,
+  type OpenAIAudioConfig,
 } from '@shared/settings/settingsSchema'
