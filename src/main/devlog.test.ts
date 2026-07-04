@@ -108,7 +108,11 @@ describe('devlog()', () => {
     devlog('asr', 'socket-open', { vendor: 'deepgram' }, { url: 'wss://secret' })
     expect(lines).toHaveLength(1)
     const parsed = parse(lines[0])
-    expect(parsed).toMatchObject({ category: 'asr', event: 'socket-open', meta: { vendor: 'deepgram' } })
+    expect(parsed).toMatchObject({
+      category: 'asr',
+      event: 'socket-open',
+      meta: { vendor: 'deepgram' },
+    })
     expect(lines[0]).not.toContain('wss://secret')
   })
 
