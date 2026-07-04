@@ -33,41 +33,20 @@ import { SharedKeyNotice } from '../components/SharedKeyNotice'
 import { TestConnectionButton } from '../components/TestConnectionButton'
 import { t } from '../i18n'
 
+import {
+  isValidUrl,
+  validateAzureFields,
+  validateCustomFields,
+  type AzureFields,
+  type AzureValidationErrors,
+  type CustomFields,
+  type CustomValidationErrors,
+} from './settingsValidation'
 import { useSecretKeyField, type KeySaveState } from './useSecretKeyField'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface CustomFields {
-  baseUrl: string
-  model: string
-  displayName: string
-  keyRef: string
-}
-
-interface CustomValidationErrors {
-  baseUrl?: string
-  model?: string
-  displayName?: string
-}
-
-interface AzureFields {
-  endpoint: string
-  deployment: string
-  apiVersion: string
-  model: string
-  displayName: string
-  keyRef: string
-}
-
-interface AzureValidationErrors {
-  endpoint?: string
-  deployment?: string
-  apiVersion?: string
-  model?: string
-  displayName?: string
-}
 
 /**
  * Fields for the import-only cloud ASR providers (Phase 3.4). One object serves
@@ -98,53 +77,6 @@ function keyForProvider(
   provider: 'openai-audio' | 'mistral-voxtral',
 ): 'openaiAudio' | 'mistralVoxtral' {
   return provider === 'openai-audio' ? 'openaiAudio' : 'mistralVoxtral'
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function isValidUrl(s: string): boolean {
-  try {
-    new URL(s)
-    return true
-  } catch {
-    return false
-  }
-}
-
-function validateCustomFields(fields: CustomFields): CustomValidationErrors {
-  const errors: CustomValidationErrors = {}
-  if (!isValidUrl(fields.baseUrl)) {
-    errors.baseUrl = t('settings.validation.baseUrl')
-  }
-  if (fields.model.trim().length === 0) {
-    errors.model = t('settings.validation.model')
-  }
-  if (fields.displayName.trim().length === 0) {
-    errors.displayName = t('settings.validation.displayName')
-  }
-  return errors
-}
-
-function validateAzureFields(fields: AzureFields): AzureValidationErrors {
-  const errors: AzureValidationErrors = {}
-  if (!isValidUrl(fields.endpoint)) {
-    errors.endpoint = t('settings.validation.endpoint')
-  }
-  if (fields.deployment.trim().length === 0) {
-    errors.deployment = t('settings.validation.deployment')
-  }
-  if (fields.apiVersion.trim().length === 0) {
-    errors.apiVersion = t('settings.validation.apiVersion')
-  }
-  if (fields.model.trim().length === 0) {
-    errors.model = t('settings.validation.model')
-  }
-  if (fields.displayName.trim().length === 0) {
-    errors.displayName = t('settings.validation.displayName')
-  }
-  return errors
 }
 
 // ---------------------------------------------------------------------------
