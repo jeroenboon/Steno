@@ -118,6 +118,30 @@ describe('OpenAICompatibleExtractionProvider.extract', () => {
     )
   })
 
+  it('parses a fenced ```json code block (endpoint ignored json_object mode)', async () => {
+    const fenced = '```json\n' + JSON.stringify(validExtraction) + '\n```'
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(fenced))
+    const provider = makeProvider(fetchMock)
+
+    const result = await provider.extract(extractionRequest)
+
+    expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
+    expect(result.proposedActions[0]?.description).toBe('Begroting publiceren')
+    // Recovered on the first call — no wasteful retry.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('parses a bare ``` fenced block with surrounding prose', async () => {
+    const wrapped = `Hier is het resultaat:\n\`\`\`\n${JSON.stringify(validExtraction)}\n\`\`\`\nKlaar.`
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(wrapped))
+    const provider = makeProvider(fetchMock)
+
+    const result = await provider.extract(extractionRequest)
+
+    expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('retries once on invalid JSON, then degrades to empty proposals', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse('not json'))
     const provider = makeProvider(fetchMock)
