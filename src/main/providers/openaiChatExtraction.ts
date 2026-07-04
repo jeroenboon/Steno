@@ -16,10 +16,14 @@
  * `[Azure]`) so vendors are distinguishable without exposing content or keys.
  */
 
+import type { z } from 'zod'
+
 import { excludeCoveredAgendaItems } from '@shared/agenda/agendaTitle'
 import {
-  ExtractionResponseSchema,
   InferredContextSchema,
+  ProposedActionSchema,
+  ProposedDecisionSchema,
+  ProposedDiscussionSummarySchema,
   inferSourceToText,
   type ExtractionRequest,
   type ExtractionResponse,
@@ -105,9 +109,7 @@ export class ChatExtractionEngine {
     const parsed = parseJsonLoose(content)
     if (parsed === null) return null
 
-    const validated = ExtractionResponseSchema.safeParse(parsed)
-    if (!validated.success) return null
-    return validated.data
+    return coerceExtractionResponse(parsed)
   }
 
   private async _callAndValidateInfer(
@@ -205,6 +207,47 @@ function parseJsonLoose(content: string): unknown {
     }
   }
   return null
+}
+
+/**
+ * Build an ExtractionResponse from an already-parsed object, leniently: a
+ * missing `proposedDecisions` / `proposedActions` becomes an empty array, and a
+ * single malformed item is dropped rather than failing the whole turn. Returns
+ * null only when the value is not a JSON object at all (→ retry). This is a
+ * deliberate softening of the strict all-or-nothing schema for LLM output: the
+ * items are Proposed and reviewed by the note-taker, so keeping the valid ones
+ * beats discarding a whole turn over one bad field.
+ */
+function coerceExtractionResponse(parsed: unknown): ExtractionResponse | null {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const obj = parsed as Record<string, unknown>
+
+  const response: ExtractionResponse = {
+    proposedDecisions: keepValid(obj.proposedDecisions, ProposedDecisionSchema),
+    proposedActions: keepValid(obj.proposedActions, ProposedActionSchema),
+  }
+
+  // discussionSummaries is present only on the final pass; keep it out of the
+  // object entirely when absent (exactOptionalPropertyTypes).
+  if (obj.discussionSummaries !== undefined) {
+    response.discussionSummaries = keepValid(
+      obj.discussionSummaries,
+      ProposedDiscussionSummarySchema,
+    )
+  }
+
+  return response
+}
+
+/** Validate each element against `schema`, keeping only the ones that pass. */
+function keepValid<S extends z.ZodTypeAny>(value: unknown, schema: S): z.infer<S>[] {
+  if (!Array.isArray(value)) return []
+  const out: z.infer<S>[] = []
+  for (const item of value) {
+    const result = schema.safeParse(item)
+    if (result.success) out.push(result.data as z.infer<S>)
+  }
+  return out
 }
 
 function jsonCandidates(content: string): string[] {

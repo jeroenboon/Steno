@@ -142,6 +142,38 @@ describe('OpenAICompatibleExtractionProvider.extract', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps decisions when the endpoint omits an empty proposedActions array', async () => {
+    const partial = {
+      proposedDecisions: [{ rationale: 'Begroting goedgekeurd', sourceSpanId: 'span-1' }],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(partial)))
+    const provider = makeProvider(fetchMock)
+
+    const result = await provider.extract(extractionRequest)
+
+    expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
+    expect(result.proposedActions).toEqual([])
+    // A missing empty array is not a reason to retry or drop the turn.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops only the malformed item, keeping the rest of the turn', async () => {
+    const mixed = {
+      // Invalid: empty sourceSpanId (min 1).
+      proposedDecisions: [{ rationale: 'Ongeldig besluit', sourceSpanId: '' }],
+      // Valid.
+      proposedActions: [{ description: 'Begroting publiceren', sourceSpanId: 'span-1' }],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(mixed)))
+    const provider = makeProvider(fetchMock)
+
+    const result = await provider.extract(extractionRequest)
+
+    expect(result.proposedDecisions).toEqual([])
+    expect(result.proposedActions[0]?.description).toBe('Begroting publiceren')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('retries once on invalid JSON, then degrades to empty proposals', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse('not json'))
     const provider = makeProvider(fetchMock)
