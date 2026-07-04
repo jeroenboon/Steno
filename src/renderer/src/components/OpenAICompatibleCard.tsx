@@ -24,6 +24,7 @@ import {
 } from '../screens/settingsValidation'
 import type { KeySaveState, SecretKeyField } from '../screens/useSecretKeyField'
 
+import { ConfigTextField } from './ConfigTextField'
 import { KeyField } from './KeyField'
 import { ProviderKeyHelp } from './ProviderKeyHelp'
 import { SharedKeyNotice } from './SharedKeyNotice'
@@ -40,36 +41,6 @@ export interface OpenAICompatibleCardProps {
   initiallyDirty: boolean
   /** Persist the validated config. The parent maps keyRef → preset + merges. */
   onSave: (fields: CustomFields) => Promise<void>
-}
-
-/** A labelled text/url input with inline validation error, for one custom field. */
-function CustomField(props: {
-  field: keyof CustomValidationErrors
-  testId: string
-  type: 'text' | 'url'
-  value: string
-  error: string | undefined
-  onChange: (v: string) => void
-}): React.JSX.Element {
-  return (
-    <div className="form-group">
-      <label htmlFor={props.testId} className="form-label">
-        {t(`settings.custom.${props.field}.label`)}
-      </label>
-      <input
-        id={props.testId}
-        data-testid={props.testId}
-        type={props.type}
-        className={`form-input${props.error !== undefined ? ' form-input--error' : ''}`}
-        placeholder={t(`settings.custom.${props.field}.placeholder`)}
-        value={props.value}
-        onChange={(e) => {
-          props.onChange(e.currentTarget.value)
-        }}
-      />
-      {props.error !== undefined && <p className="form-error">{props.error}</p>}
-    </div>
-  )
 }
 
 export function OpenAICompatibleCard(props: OpenAICompatibleCardProps): React.JSX.Element {
@@ -105,9 +76,10 @@ export function OpenAICompatibleCard(props: OpenAICompatibleCardProps): React.JS
 
   return (
     <div className="settings-custom-openai">
-      <CustomField
-        field="baseUrl"
+      <ConfigTextField
         testId="custom-openai-base-url"
+        label={t('settings.custom.baseUrl.label')}
+        placeholder={t('settings.custom.baseUrl.placeholder')}
         type="url"
         value={fields.baseUrl}
         error={errors.baseUrl}
@@ -115,9 +87,10 @@ export function OpenAICompatibleCard(props: OpenAICompatibleCardProps): React.JS
           editField('baseUrl', v)
         }}
       />
-      <CustomField
-        field="model"
+      <ConfigTextField
         testId="custom-openai-model"
+        label={t('settings.custom.model.label')}
+        placeholder={t('settings.custom.model.placeholder')}
         type="text"
         value={fields.model}
         error={errors.model}
@@ -125,9 +98,10 @@ export function OpenAICompatibleCard(props: OpenAICompatibleCardProps): React.JS
           editField('model', v)
         }}
       />
-      <CustomField
-        field="displayName"
+      <ConfigTextField
         testId="custom-openai-display-name"
+        label={t('settings.custom.displayName.label')}
+        placeholder={t('settings.custom.displayName.placeholder')}
         type="text"
         value={fields.displayName}
         error={errors.displayName}

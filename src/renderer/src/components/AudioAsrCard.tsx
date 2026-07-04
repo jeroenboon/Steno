@@ -25,6 +25,7 @@ import {
 } from '../screens/settingsValidation'
 import type { KeySaveState, SecretKeyField } from '../screens/useSecretKeyField'
 
+import { ConfigTextField } from './ConfigTextField'
 import { KeyField } from './KeyField'
 import { ProviderKeyHelp } from './ProviderKeyHelp'
 import { SharedKeyNotice } from './SharedKeyNotice'
@@ -45,37 +46,6 @@ export interface AudioAsrCardProps {
   initiallyDirty: boolean
   /** Persist the validated config. The parent owns the AppSettings merge. */
   onSave: (provider: AudioAsrProvider, fields: AudioAsrFields) => Promise<void>
-}
-
-/** A labelled text/url input with an optional inline validation error. */
-function Field(props: {
-  testId: string
-  label: string
-  placeholder: string
-  type: 'text' | 'url'
-  value: string
-  error?: string | undefined
-  onChange: (v: string) => void
-}): React.JSX.Element {
-  return (
-    <div className="form-group">
-      <label htmlFor={props.testId} className="form-label">
-        {props.label}
-      </label>
-      <input
-        id={props.testId}
-        data-testid={props.testId}
-        type={props.type}
-        className={`form-input${props.error !== undefined ? ' form-input--error' : ''}`}
-        placeholder={props.placeholder}
-        value={props.value}
-        onChange={(e) => {
-          props.onChange(e.currentTarget.value)
-        }}
-      />
-      {props.error !== undefined && <p className="form-error">{props.error}</p>}
-    </div>
-  )
 }
 
 export function AudioAsrCard(props: AudioAsrCardProps): React.JSX.Element {
@@ -115,7 +85,7 @@ export function AudioAsrCard(props: AudioAsrCardProps): React.JSX.Element {
     <div className="settings-audio-asr">
       {provider === 'azure-speech' && (
         <>
-          <Field
+          <ConfigTextField
             testId="azure-speech-endpoint"
             label={t('settings.asr.azure.endpoint.label')}
             placeholder={t('settings.asr.azure.endpoint.placeholder')}
@@ -126,7 +96,7 @@ export function AudioAsrCard(props: AudioAsrCardProps): React.JSX.Element {
               edit('endpoint', v, 'endpoint')
             }}
           />
-          <Field
+          <ConfigTextField
             testId="azure-speech-deployment"
             label={t('settings.asr.azure.deployment.label')}
             placeholder={t('settings.asr.azure.deployment.placeholder')}
@@ -137,7 +107,7 @@ export function AudioAsrCard(props: AudioAsrCardProps): React.JSX.Element {
               edit('deployment', v, 'deployment')
             }}
           />
-          <Field
+          <ConfigTextField
             testId="azure-speech-api-version"
             label={t('settings.asr.azure.apiVersion.label')}
             placeholder={t('settings.asr.azure.apiVersion.placeholder')}
@@ -150,7 +120,7 @@ export function AudioAsrCard(props: AudioAsrCardProps): React.JSX.Element {
         </>
       )}
 
-      <Field
+      <ConfigTextField
         testId="audio-model"
         label={t('settings.asr.audio.model.label')}
         placeholder={props.modelPlaceholder}
