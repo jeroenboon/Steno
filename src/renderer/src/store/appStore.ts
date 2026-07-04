@@ -469,9 +469,11 @@ export const useAppStore = create<AppState>()((set) => ({
       meetingTitle: payload.meeting.title,
       meetingCreatedAt: payload.meeting.createdAt,
       meetingSource: payload.meeting.source,
-      // Only confirmed items matter in Review; clear proposed from any prior session.
-      proposedDecisions: [],
-      proposedActions: [],
+      // Review must surface Proposed items too: the final pass and any un-confirmed
+      // live proposals are Proposed, and the note-taker confirms/dismisses them
+      // here. Split by state so each renders in its own lane.
+      proposedDecisions: payload.decisions.filter((d) => d.state === 'proposed'),
+      proposedActions: payload.actions.filter((a) => a.state === 'proposed'),
       confirmedDecisions: payload.decisions.filter((d) => d.state === 'confirmed'),
       confirmedActions: payload.actions.filter((a) => a.state === 'confirmed'),
       agendaItems: payload.agendaItems,

@@ -47,6 +47,13 @@ interface ReviewItemCardProps {
   text: string
   ownerName: string | undefined
   onEdit: (kind: ItemKind, id: string, text: string, owner: string) => void
+  /**
+   * When set, the item is Proposed: render Confirm + Dismiss controls instead of
+   * the Edit button. The note-taker grooms the final pass's output here (an Ended
+   * meeting stays fully editable). Confirmed items keep the Edit affordance.
+   */
+  onConfirm?: (kind: ItemKind, id: string) => void
+  onDismiss?: (kind: ItemKind, id: string) => void
 }
 
 function ReviewItemCard({
@@ -55,10 +62,14 @@ function ReviewItemCard({
   text,
   ownerName,
   onEdit,
+  onConfirm,
+  onDismiss,
 }: ReviewItemCardProps): React.JSX.Element {
+  const proposed = onConfirm !== undefined && onDismiss !== undefined
+
   return (
     <div
-      className={`review-item-card review-item-card--${kind}`}
+      className={`review-item-card review-item-card--${kind}${proposed ? ' review-item-card--proposed' : ''}`}
       data-testid={`review-${kind}-${id}`}
     >
       <p className="review-item-card__text">{text}</p>
@@ -68,16 +79,43 @@ function ReviewItemCard({
           {ownerName}
         </p>
       )}
-      <button
-        type="button"
-        className="btn btn--secondary review-item-card__edit"
-        data-testid={`review-edit-${kind}-${id}`}
-        onClick={() => {
-          onEdit(kind, id, text, ownerName ?? '')
-        }}
-      >
-        {t('review.items.edit')}
-      </button>
+      <div className="review-item-card__actions">
+        {proposed ? (
+          <>
+            <button
+              type="button"
+              className="btn review-item-card__confirm"
+              data-testid={`review-confirm-${kind}-${id}`}
+              onClick={() => {
+                onConfirm(kind, id)
+              }}
+            >
+              {t('review.items.confirm')}
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary review-item-card__dismiss"
+              data-testid={`review-dismiss-${kind}-${id}`}
+              onClick={() => {
+                onDismiss(kind, id)
+              }}
+            >
+              {t('review.items.dismiss')}
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="btn btn--secondary review-item-card__edit"
+            data-testid={`review-edit-${kind}-${id}`}
+            onClick={() => {
+              onEdit(kind, id, text, ownerName ?? '')
+            }}
+          >
+            {t('review.items.edit')}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -161,13 +199,30 @@ interface ReviewGroupProps {
   summary: DiscussionSummary | undefined
   decisions: ProposedDecision[]
   actions: ProposedAction[]
+  proposedDecisions: ProposedDecision[]
+  proposedActions: ProposedAction[]
   participantMap: Map<string, string>
   participants: { id: string; name: string }[]
   editState: EditState | null
   onEdit: (kind: ItemKind, id: string, text: string, owner: string) => void
+  onConfirm: (kind: ItemKind, id: string) => void
+  onDismiss: (kind: ItemKind, id: string) => void
   onEditChange: (field: 'text' | 'owner', value: string) => void
   onEditSave: () => void
   onEditCancel: () => void
+}
+
+function actionText(a: ProposedAction): string {
+  return a.description !== undefined && a.description.length > 0
+    ? a.description
+    : t('live.items.action.untitled')
+}
+
+function actionOwnerName(
+  a: ProposedAction,
+  participantMap: Map<string, string>,
+): string | undefined {
+  return a.owner !== undefined ? (participantMap.get(a.owner) ?? a.owner) : undefined
 }
 
 function ReviewGroup({
@@ -176,15 +231,23 @@ function ReviewGroup({
   summary,
   decisions,
   actions,
+  proposedDecisions,
+  proposedActions,
   participantMap,
   participants,
   editState,
   onEdit,
+  onConfirm,
+  onDismiss,
   onEditChange,
   onEditSave,
   onEditCancel,
 }: ReviewGroupProps): React.JSX.Element {
-  const hasItems = decisions.length > 0 || actions.length > 0
+  const hasItems =
+    decisions.length > 0 ||
+    actions.length > 0 ||
+    proposedDecisions.length > 0 ||
+    proposedActions.length > 0
 
   return (
     <section className="review-group" data-testid={`review-group-${agendaId}`}>
@@ -204,9 +267,21 @@ function ReviewGroup({
         </p>
       )}
 
-      {decisions.length > 0 && (
+      {(proposedDecisions.length > 0 || decisions.length > 0) && (
         <div className="review-items-section">
           <h3 className="review-items-section__heading">{t('review.items.decisions.heading')}</h3>
+          {proposedDecisions.map((d) => (
+            <ReviewItemCard
+              key={d.id}
+              id={d.id}
+              kind="decision"
+              text={d.rationale}
+              ownerName={undefined}
+              onEdit={onEdit}
+              onConfirm={onConfirm}
+              onDismiss={onDismiss}
+            />
+          ))}
           {decisions.map((d) => (
             <React.Fragment key={d.id}>
               {editState?.id === d.id && editState.kind === 'decision' ? (
@@ -231,9 +306,21 @@ function ReviewGroup({
         </div>
       )}
 
-      {actions.length > 0 && (
+      {(proposedActions.length > 0 || actions.length > 0) && (
         <div className="review-items-section">
           <h3 className="review-items-section__heading">{t('review.items.actions.heading')}</h3>
+          {proposedActions.map((a) => (
+            <ReviewItemCard
+              key={a.id}
+              id={a.id}
+              kind="action"
+              text={actionText(a)}
+              ownerName={actionOwnerName(a, participantMap)}
+              onEdit={onEdit}
+              onConfirm={onConfirm}
+              onDismiss={onDismiss}
+            />
+          ))}
           {actions.map((a) => (
             <React.Fragment key={a.id}>
               {editState?.id === a.id && editState.kind === 'action' ? (
@@ -248,14 +335,8 @@ function ReviewGroup({
                 <ReviewItemCard
                   id={a.id}
                   kind="action"
-                  text={
-                    a.description !== undefined && a.description.length > 0
-                      ? a.description
-                      : t('live.items.action.untitled')
-                  }
-                  ownerName={
-                    a.owner !== undefined ? (participantMap.get(a.owner) ?? a.owner) : undefined
-                  }
+                  text={actionText(a)}
+                  ownerName={actionOwnerName(a, participantMap)}
                   onEdit={onEdit}
                 />
               )}
@@ -276,8 +357,11 @@ export function ReviewScreen(): React.JSX.Element {
   const participants = useAppStore((s) => s.participants)
   const confirmedDecisions = useAppStore((s) => s.confirmedDecisions)
   const confirmedActions = useAppStore((s) => s.confirmedActions)
+  const proposedDecisions = useAppStore((s) => s.proposedDecisions)
+  const proposedActions = useAppStore((s) => s.proposedActions)
   const discussionSummaries = useAppStore((s) => s.discussionSummaries)
   const confirmItem = useAppStore((s) => s.confirmItem)
+  const removeProposedItem = useAppStore((s) => s.removeProposedItem)
   const meetingTitle = useAppStore((s) => s.meetingTitle)
   const meetingCreatedAt = useAppStore((s) => s.meetingCreatedAt)
   const meetingSource = useAppStore((s) => s.meetingSource)
@@ -361,6 +445,32 @@ export function ReviewScreen(): React.JSX.Element {
   const handleEditCancel = useCallback(() => {
     setEditState(null)
   }, [])
+
+  // Confirm / dismiss a Proposed item straight from Review (an Ended meeting is
+  // still groomable). Persist through IPC, then reflect it in the store.
+  const handleConfirm = useCallback(
+    async (kind: ItemKind, id: string) => {
+      try {
+        await window.api.itemConfirm({ kind, id })
+        confirmItem(kind, id)
+      } catch (err) {
+        console.error('[ReviewScreen] itemConfirm failed:', err)
+      }
+    },
+    [confirmItem],
+  )
+
+  const handleDismiss = useCallback(
+    async (kind: ItemKind, id: string) => {
+      try {
+        await window.api.itemDismiss({ kind, id })
+        removeProposedItem(kind, id)
+      } catch (err) {
+        console.error('[ReviewScreen] itemDismiss failed:', err)
+      }
+    },
+    [removeProposedItem],
+  )
 
   // ---------------------------------------------------------------------------
   // Export helpers (item 0022)
@@ -484,6 +594,10 @@ export function ReviewScreen(): React.JSX.Element {
           const summary = discussionSummaries.find((s) => s.agendaItemId === group.id)
           const groupDecisions = confirmedDecisions.filter((d) => d.agendaItemId === group.id)
           const groupActions = confirmedActions.filter((a) => a.agendaItemId === group.id)
+          const groupProposedDecisions = proposedDecisions.filter(
+            (d) => d.agendaItemId === group.id,
+          )
+          const groupProposedActions = proposedActions.filter((a) => a.agendaItemId === group.id)
 
           return (
             <ReviewGroup
@@ -493,10 +607,14 @@ export function ReviewScreen(): React.JSX.Element {
               summary={summary}
               decisions={groupDecisions}
               actions={groupActions}
+              proposedDecisions={groupProposedDecisions}
+              proposedActions={groupProposedActions}
               participantMap={participantMap}
               participants={participants}
               editState={editState}
               onEdit={handleEdit}
+              onConfirm={(kind, id) => void handleConfirm(kind, id)}
+              onDismiss={(kind, id) => void handleDismiss(kind, id)}
               onEditChange={handleEditChange}
               onEditSave={() => {
                 void handleEditSave()
