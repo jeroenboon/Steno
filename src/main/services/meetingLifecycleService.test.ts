@@ -7,7 +7,7 @@
  * DB assertions go through the repo (same public surface as production code).
  */
 import Database from 'better-sqlite3'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 
 import type { Meeting, MeetingId } from '@shared/domain'
 import { FakeClock } from '@shared/providers'
@@ -246,67 +246,20 @@ describe('endMeeting', () => {
 })
 
 // ===========================================================================
-// MeetingEnded event
+// Ending a paused meeting
 // ===========================================================================
 
-describe('MeetingEnded event', () => {
+describe('ending a paused meeting', () => {
   beforeEach(() => {
     repo.insert(makeMeeting('m1'))
     svc.startMeeting('m1')
   })
 
-  it('emits MeetingEnded exactly once when a meeting ends', () => {
-    const listener = vi.fn()
-    svc.on('MeetingEnded', listener)
-    svc.endMeeting('m1')
-    expect(listener).toHaveBeenCalledTimes(1)
-  })
-
-  it('passes the ended Meeting to the listener', () => {
-    const listener = vi.fn()
-    svc.on('MeetingEnded', listener)
-    svc.endMeeting('m1')
-    const called = listener.mock.calls[0]?.[0] as Meeting
-    expect(called.id).toBe('m1')
-    expect(called.state).toBe('ended')
-  })
-
-  it('does NOT re-emit if endMeeting is called a second time', () => {
-    const listener = vi.fn()
-    svc.on('MeetingEnded', listener)
-    svc.endMeeting('m1')
-    // Second call should throw (terminal state) and not emit again
-    try {
-      svc.endMeeting('m1')
-    } catch {
-      // expected
-    }
-    expect(listener).toHaveBeenCalledTimes(1)
-  })
-
-  it('supports multiple listeners', () => {
-    const a = vi.fn()
-    const b = vi.fn()
-    svc.on('MeetingEnded', a)
-    svc.on('MeetingEnded', b)
-    svc.endMeeting('m1')
-    expect(a).toHaveBeenCalledTimes(1)
-    expect(b).toHaveBeenCalledTimes(1)
-  })
-
-  it('off() unregisters a listener — does not fire after removal', () => {
-    const listener = vi.fn()
-    svc.on('MeetingEnded', listener)
-    svc.off('MeetingEnded', listener)
-    svc.endMeeting('m1')
-    expect(listener).not.toHaveBeenCalled()
-  })
-
-  it('emits MeetingEnded even when the meeting was paused at end time', () => {
-    const listener = vi.fn()
-    svc.on('MeetingEnded', listener)
+  it('transitions a paused Live meeting to Ended (clears the paused flag)', () => {
     svc.pauseMeeting('m1')
-    svc.endMeeting('m1')
-    expect(listener).toHaveBeenCalledTimes(1)
+    const ended = svc.endMeeting('m1')
+    expect(ended.state).toBe('ended')
+    expect(ended.paused).toBe(false)
+    expect(repo.findById('m1')?.state).toBe('ended')
   })
 })

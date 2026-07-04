@@ -9,8 +9,10 @@
  * for the lifecycle (items remain editable — that's the item lifecycle
  * service's concern, not ours).
  *
- * Emits `MeetingEnded` so the extraction loop (item 0008) can trigger the
- * final pass by subscribing.
+ * This is the single enforcer of the transitions: the session controllers route
+ * Draft → Live and Live → Ended through it, and the IPC layer routes
+ * pause/resume through it. The final extraction pass runs via a direct call from
+ * the controller (LiveSessionController.endMeeting), not a subscription.
  */
 
 import type { Meeting, MeetingId } from '@shared/domain'
@@ -19,53 +21,16 @@ import type { Clock } from '@shared/providers'
 import type { meetingRepo } from '../db/repos/meetingRepo'
 
 // ---------------------------------------------------------------------------
-// Typed event map — no `any`
-// ---------------------------------------------------------------------------
-
-export interface MeetingLifecycleEvents {
-  MeetingEnded: (meeting: Meeting) => void
-}
-
-// ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
 
 export class MeetingLifecycleService {
   private readonly repo: ReturnType<typeof meetingRepo>
   private readonly clock: Clock
-  private readonly listeners: {
-    [K in keyof MeetingLifecycleEvents]: MeetingLifecycleEvents[K][]
-  } = {
-    MeetingEnded: [],
-  }
 
   constructor(repo: ReturnType<typeof meetingRepo>, clock: Clock) {
     this.repo = repo
     this.clock = clock
-  }
-
-  // -------------------------------------------------------------------------
-  // Event subscription
-  // -------------------------------------------------------------------------
-
-  on<K extends keyof MeetingLifecycleEvents>(event: K, listener: MeetingLifecycleEvents[K]): void {
-    this.listeners[event].push(listener)
-  }
-
-  off<K extends keyof MeetingLifecycleEvents>(event: K, listener: MeetingLifecycleEvents[K]): void {
-    const arr = this.listeners[event] as MeetingLifecycleEvents[K][]
-    const idx = arr.indexOf(listener)
-    if (idx !== -1) arr.splice(idx, 1)
-  }
-
-  private emit<K extends keyof MeetingLifecycleEvents>(
-    event: K,
-    ...args: Parameters<MeetingLifecycleEvents[K]>
-  ): void {
-    for (const listener of this.listeners[event]) {
-      // Cast is safe: args matches the signature for event K by construction.
-      ;(listener as (...a: Parameters<MeetingLifecycleEvents[K]>) => void)(...args)
-    }
   }
 
   // -------------------------------------------------------------------------
@@ -154,7 +119,7 @@ export class MeetingLifecycleService {
   /**
    * Live → Ended (terminal).
    * Works whether the meeting is paused or not.
-   * Sets endedAt from the injected clock and emits MeetingEnded.
+   * Sets endedAt from the injected clock.
    */
   endMeeting(meetingId: MeetingId): Meeting {
     const meeting = this.load(meetingId)
@@ -175,7 +140,6 @@ export class MeetingLifecycleService {
     }
 
     this.repo.update(updated)
-    this.emit('MeetingEnded', updated)
     return updated
   }
 
