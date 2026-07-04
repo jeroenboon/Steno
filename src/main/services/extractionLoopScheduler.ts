@@ -244,7 +244,15 @@ export class ExtractionLoopScheduler {
     // still-Proposed rolling items so the same content can't appear twice (e.g.
     // once under Off-agenda from a live turn, once under its agenda item here).
     // Confirmed items the note-taker already curated are left untouched (ADR 0035).
-    this._itemService.retractAllProposed(meeting.id)
+    //
+    // Guard: only supersede when the final pass actually produced replacements. A
+    // degraded/empty final response must NOT wipe the live proposals — that would
+    // leave the meeting with empty notes (ADR 0035 risk, seen in the field).
+    const hasFinalItems =
+      response.proposedDecisions.length > 0 || response.proposedActions.length > 0
+    if (hasFinalItems) {
+      this._itemService.retractAllProposed(meeting.id)
+    }
 
     // Propose decisions/actions from the final pass
     this._proposeItems(meeting.id, response.proposedDecisions, response.proposedActions, context)

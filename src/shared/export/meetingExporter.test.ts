@@ -111,6 +111,26 @@ describe('toMarkdown', () => {
     expect(md).toContain('## Q3 Planning')
   })
 
+  it('surfaces an item with an unknown agenda item under Off-agenda (never dropped)', () => {
+    const orphan: Decision = {
+      id: 'd-orphan',
+      rationale: 'Wees-besluit.',
+      agendaItemId: 'ghost-agenda',
+      sourceSpanId: 'span-9',
+      state: 'confirmed',
+    }
+    const md = toMarkdown({
+      title: 'Test',
+      agendaItems: [AGENDA_Q3],
+      participants: [],
+      decisions: [orphan],
+      actions: [],
+      summaries: [],
+    })
+    expect(md).toContain('## Off-agenda')
+    expect(md).toContain('- Wees-besluit.')
+  })
+
   it('includes decision rationale as a list item', () => {
     const md = toMarkdown({
       title: 'Test',

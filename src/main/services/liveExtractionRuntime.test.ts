@@ -365,6 +365,31 @@ describe('meeting end', () => {
     expect(summaryEvents[0]?.summaries[0]?.text).toBe('Q3 was solid.')
   })
 
+  it("emits 'agenda:changed' with the full agenda on end so Review can group final items", async () => {
+    // The final pass routes its items onto the (possibly newly inferred) agenda.
+    // Review reads the agenda from the store, so the runtime must push it or the
+    // routed items land under groups the renderer doesn't have and vanish.
+    const h = buildHarness({ context: EMPTY_CONTEXT })
+    agendaItemRepo(h.db).insert(
+      { id: 'a-1', title: 'Begroting', topic: 'Q3', state: 'proposed' },
+      MTG_ID,
+    )
+    h.provider.scriptInferContextResponse({ agendaItems: [], participants: [] })
+    h.provider.scriptFinalPassResponse({
+      proposedDecisions: [{ rationale: 'X', sourceSpanId: 's1', agendaItemHint: 'Begroting' }],
+      proposedActions: [],
+      discussionSummaries: [],
+    })
+
+    h.runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    await h.runtime.endMeeting({ ...MEETING, state: 'ended' })
+
+    const events = h.sender.sentOn('agenda:changed') as { agendaItems: { id: string }[] }[]
+    expect(events.length).toBeGreaterThan(0)
+    const last = events[events.length - 1]
+    expect(last?.agendaItems.map((a) => a.id)).toContain('a-1')
+  })
+
   it('calling endMeeting a second time does not trigger a second final pass', async () => {
     const { provider, runtime } = buildHarness()
 

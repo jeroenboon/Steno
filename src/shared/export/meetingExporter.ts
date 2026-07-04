@@ -77,10 +77,18 @@ export function toMarkdown(input: ExportInput): string {
     { id: OffAgenda.id, title: OffAgenda.title },
   ]
 
+  const knownAgendaIds = new Set(agendaItems.map((a) => a.id))
+  // Off-agenda also catches orphans: an item whose agenda item isn't in the list
+  // surfaces here instead of being silently dropped from the export.
+  const belongsToGroup = (itemAgendaId: string, groupId: string): boolean =>
+    groupId === OffAgenda.id
+      ? itemAgendaId === OffAgenda.id || !knownAgendaIds.has(itemAgendaId)
+      : itemAgendaId === groupId
+
   for (const group of groups) {
-    const groupDecisions = decisions.filter((d) => d.agendaItemId === group.id)
-    const groupActions = actions.filter((a) => a.agendaItemId === group.id)
-    const summary = summaries.find((s) => s.agendaItemId === group.id)
+    const groupDecisions = decisions.filter((d) => belongsToGroup(d.agendaItemId, group.id))
+    const groupActions = actions.filter((a) => belongsToGroup(a.agendaItemId, group.id))
+    const summary = summaries.find((s) => belongsToGroup(s.agendaItemId, group.id))
 
     // Omit off-agenda section when there is nothing in it
     if (group.id === OffAgenda.id && groupDecisions.length === 0 && groupActions.length === 0) {

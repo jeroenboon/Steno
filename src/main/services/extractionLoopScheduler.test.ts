@@ -495,6 +495,30 @@ describe('final pass', () => {
     expect(decisions).toHaveLength(2)
   })
 
+  it('does NOT supersede live proposals when the final pass returns empty', async () => {
+    const { db, provider, scheduler } = buildHarness()
+
+    provider.scriptRollingResponse({
+      proposedDecisions: [{ rationale: 'Rolling proposed', sourceSpanId: 's1' }],
+      proposedActions: [],
+    })
+    scheduler.addSpan(span('s1', 0, 1000), MTG_ID)
+    await scheduler.notifyPaused(MTG_ID, CONTEXT)
+    expect(decisionRepo(db).listByMeeting(MTG_ID)).toHaveLength(1)
+
+    // A degraded/empty final response must not wipe the live notes.
+    provider.scriptFinalPassResponse({
+      proposedDecisions: [],
+      proposedActions: [],
+      discussionSummaries: [],
+    })
+    await scheduler.runFinalPass({ ...MEETING, state: 'ended' }, CONTEXT)
+
+    const decisions = decisionRepo(db).listByMeeting(MTG_ID)
+    expect(decisions).toHaveLength(1)
+    expect(decisions[0]?.rationale).toBe('Rolling proposed')
+  })
+
   it('final pass also proposes decisions and actions', async () => {
     const { db, provider, scheduler } = buildHarness()
 

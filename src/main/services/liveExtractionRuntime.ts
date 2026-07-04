@@ -408,6 +408,17 @@ export class LiveExtractionRuntime {
     // if items were proposed).
     await this._scheduler.runFinalPass(meeting, this._contextOwner.current())
 
+    // Push the authoritative agenda to the renderer. The final pass routes its
+    // items (and summaries) onto the agenda it inferred/enriched, but the live
+    // agenda:changed stream stopped when the meeting ended — without this, Review
+    // reads a stale/empty agenda from the store and the routed items land under
+    // groups the renderer doesn't have, so they silently vanish.
+    if (this._agendaItemRepo !== undefined) {
+      this._sender.send('agenda:changed', {
+        agendaItems: this._agendaItemRepo.listByMeeting(this._meetingId),
+      } satisfies AgendaChangedPayload)
+    }
+
     // Read back the summaries the scheduler persisted and emit items:summaries.
     const summaries = this._dsRepo.listByMeeting(this._meetingId)
     this._sender.send('items:summaries', { summaries } satisfies ItemsSummariesPayload)
