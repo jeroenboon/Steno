@@ -26,9 +26,10 @@
  *
  * The ExtractionLoopScheduler calls ItemLifecycleService.proposeItems()
  * synchronously during each turn. The runtime constructs the service with its
- * `onProposed` seam wired to fire the callback with the result (ADR 0033), then
- * builds the scheduler over that same service, so the IPC push is always in
- * place. This is the callback idiom AgendaInferenceScheduler already uses.
+ * `onItemsChanged` seam wired to push the authoritative full item set for the
+ * meeting (ADR 0033), then builds the scheduler over that same service, so the
+ * IPC push is always in place. This is the callback idiom AgendaInferenceScheduler
+ * already uses.
  *
  * ## IPC channel design (follows ADR 0013 streaming-event pattern)
  *
@@ -94,7 +95,7 @@ export interface ItemsSummariesPayload {
 /**
  * Deps for building the internal ExtractionLoopScheduler.
  * `itemLifecycleService` is omitted because the runtime builds the service
- * internally from the repos below (wiring its onProposed seam).
+ * internally from the repos below (wiring its onItemsChanged seam).
  */
 export type SchedulerDeps = Omit<ExtractionLoopSchedulerDeps, 'itemLifecycleService'>
 
@@ -103,14 +104,14 @@ export interface LiveExtractionRuntimeOptions {
   context: MeetingContext
   /**
    * Deps to construct the scheduler. The runtime builds the scheduler
-   * internally so it can wire the item service's onProposed seam.
+   * internally so it can wire the item service's onItemsChanged seam.
    * Pass null when no extraction provider is configured (degraded path).
    */
   schedulerDeps: SchedulerDeps | null
   /**
    * Decision and Action repos used to build the item lifecycle service. The
-   * runtime constructs the service from these repos (wiring its onProposed seam
-   * to emit `items:changed`) rather than accepting a pre-built one, so the
+   * runtime constructs the service from these repos (wiring its onItemsChanged
+   * seam to emit `items:changed`) rather than accepting a pre-built one, so the
    * scheduler and the IPC push share a single service instance.
    */
   decisionsRepo: ReturnType<typeof decisionRepo>
@@ -296,7 +297,7 @@ export class LiveExtractionRuntime {
   /**
    * Drive one scheduler tick. No-op when stopped or no scheduler configured.
    * If the tick produces proposed items, 'items:changed' is emitted via the
-   * item service's onProposed seam inside the scheduler.
+   * item service's onItemsChanged seam inside the scheduler.
    *
    * Also triggers the running summary update when the scheduler fired a turn.
    */
