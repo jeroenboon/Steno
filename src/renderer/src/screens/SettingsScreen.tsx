@@ -25,6 +25,8 @@ import React, { useEffect, useState } from 'react'
 import { extractionPresets } from '../../../shared/providers'
 import { buildDisclosureCopy, computeEgressState } from '../../../shared/settings/egressState'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
+import { KeyField } from '../components/KeyField'
+import { ProviderKeyCard } from '../components/ProviderKeyCard'
 import { ProviderKeyHelp } from '../components/ProviderKeyHelp'
 import { ProviderRoleCard, type ProviderGroup } from '../components/ProviderRoleCard'
 import { SharedKeyNotice } from '../components/SharedKeyNotice'
@@ -143,96 +145,6 @@ function validateAzureFields(fields: AzureFields): AzureValidationErrors {
     errors.displayName = t('settings.validation.displayName')
   }
   return errors
-}
-
-// ---------------------------------------------------------------------------
-// KeyField — a single API-key entry with a saved/replace status
-// ---------------------------------------------------------------------------
-
-interface KeyFieldProps {
-  idBase: string
-  label: string
-  placeholder: string
-  present: boolean
-  editing: boolean
-  value: string
-  saveState: KeySaveState
-  testIdInput: string
-  testIdSave: string
-  testIdMissing: string
-  missingText: string
-  onChange: (v: string) => void
-  onSave: () => void
-  onReplace: () => void
-  onCancel: () => void
-}
-
-function KeyField(props: KeyFieldProps): React.JSX.Element {
-  const showInput = !props.present || props.editing
-
-  return (
-    <div className="form-group">
-      <label htmlFor={props.testIdInput} className="form-label">
-        {props.label}
-      </label>
-
-      {!props.present && (
-        <p data-testid={props.testIdMissing} className="settings-key-missing" role="alert">
-          {props.missingText}
-        </p>
-      )}
-
-      {props.present && !props.editing ? (
-        <div className="settings-key-status" data-testid={`${props.idBase}-key-status`}>
-          <span className="settings-key-status__badge">{t('settings.key.saved.status')}</span>
-          <button
-            type="button"
-            className="btn btn--secondary btn--sm"
-            data-testid={`replace-${props.idBase}-key`}
-            onClick={props.onReplace}
-          >
-            {t('settings.key.replace')}
-          </button>
-        </div>
-      ) : null}
-
-      {showInput && (
-        <div className="settings-key-row">
-          <input
-            id={props.testIdInput}
-            data-testid={props.testIdInput}
-            type="password"
-            className="form-input"
-            placeholder={props.placeholder}
-            value={props.value}
-            autoComplete="off"
-            onChange={(e) => {
-              props.onChange(e.currentTarget.value)
-            }}
-          />
-          <button
-            type="button"
-            data-testid={props.testIdSave}
-            className="btn btn--secondary"
-            disabled={props.saveState === 'saving' || props.value.trim().length === 0}
-            onClick={props.onSave}
-          >
-            {props.saveState === 'saved' ? t('settings.asr.key.saved') : t('settings.asr.key.save')}
-          </button>
-          {props.present && (
-            <button
-              type="button"
-              className="btn btn--secondary"
-              data-testid={`cancel-${props.idBase}-key`}
-              onClick={props.onCancel}
-            >
-              {t('settings.key.cancel')}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------------------
@@ -945,31 +857,14 @@ export function SettingsScreen(): React.JSX.Element {
               </div>
             ) : (
               /* Deepgram key entry */
-              <>
-                <KeyField
-                  idBase="deepgram"
-                  label={t('settings.asr.key.label')}
-                  placeholder={t('settings.asr.key.placeholder')}
-                  present={deepgramKey.present}
-                  editing={deepgramKey.editing}
-                  value={deepgramKey.value}
-                  saveState={deepgramKey.saveState}
-                  testIdInput="deepgram-key-input"
-                  testIdSave="save-deepgram-key"
-                  testIdMissing="deepgram-key-missing"
-                  missingText={t('settings.asr.key.missing')}
-                  onChange={deepgramKey.change}
-                  onSave={() => {
-                    void deepgramKey.save('deepgram')
-                  }}
-                  onReplace={deepgramKey.beginReplace}
-                  onCancel={deepgramKey.cancel}
-                />
-
-                <ProviderKeyHelp keyRef="deepgram" testId="deepgram-key-help" />
-
-                <TestConnectionButton role="asr" testId="test-asr-connection" />
-              </>
+              <ProviderKeyCard
+                keyField={deepgramKey}
+                keyRef="deepgram"
+                role="asr"
+                label={t('settings.asr.key.label')}
+                placeholder={t('settings.asr.key.placeholder')}
+                missingText={t('settings.asr.key.missing')}
+              />
             )
           }
           disclosure={
@@ -1218,31 +1113,14 @@ export function SettingsScreen(): React.JSX.Element {
               </div>
             ) : !isCustomOpenAI ? (
               /* Anthropic key entry */
-              <>
-                <KeyField
-                  idBase="anthropic"
-                  label={t('settings.extraction.anthropic.key.label')}
-                  placeholder={t('settings.extraction.anthropic.key.placeholder')}
-                  present={anthropicKey.present}
-                  editing={anthropicKey.editing}
-                  value={anthropicKey.value}
-                  saveState={anthropicKey.saveState}
-                  testIdInput="anthropic-key-input"
-                  testIdSave="save-anthropic-key"
-                  testIdMissing="anthropic-key-missing"
-                  missingText={t('settings.extraction.anthropic.key.missing')}
-                  onChange={anthropicKey.change}
-                  onSave={() => {
-                    void anthropicKey.save('anthropic')
-                  }}
-                  onReplace={anthropicKey.beginReplace}
-                  onCancel={anthropicKey.cancel}
-                />
-
-                <ProviderKeyHelp keyRef="anthropic" testId="anthropic-key-help" />
-
-                <TestConnectionButton role="extraction" testId="test-extraction-connection" />
-              </>
+              <ProviderKeyCard
+                keyField={anthropicKey}
+                keyRef="anthropic"
+                role="extraction"
+                label={t('settings.extraction.anthropic.key.label')}
+                placeholder={t('settings.extraction.anthropic.key.placeholder')}
+                missingText={t('settings.extraction.anthropic.key.missing')}
+              />
             ) : (
               /* Custom OpenAI fields */
               <div className="settings-custom-openai">
