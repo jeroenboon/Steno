@@ -617,6 +617,40 @@ describe('final pass — infer agenda/participants/title for un-prepared live me
     expect(decisions[0]?.agendaItemId).toBe(inferredItem?.id)
   })
 
+  it('does not duplicate an agenda item live inference already added', async () => {
+    // Un-prepared meeting (empty seed context) whose live agenda inference has
+    // already persisted a Proposed agenda item. The final pass must ground its
+    // inference on it and not append a second copy.
+    const h = buildHarness({ context: EMPTY_CONTEXT })
+    agendaItemRepo(h.db).insert(
+      { id: 'live-1', title: 'Begroting', topic: 'Q3-begroting', state: 'proposed' },
+      MTG_ID,
+    )
+    h.provider.scriptInferContextResponse({
+      agendaItems: [{ title: 'Begroting', topic: 'Q3-begroting' }],
+      participants: [],
+    })
+    h.provider.scriptFinalPassResponse({
+      proposedDecisions: [
+        { rationale: 'Begroting rond', sourceSpanId: 's1', agendaItemHint: 'Begroting' },
+      ],
+      proposedActions: [],
+      discussionSummaries: [],
+    })
+
+    h.runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    await h.runtime.endMeeting({ ...MEETING, state: 'ended' })
+
+    const begroting = agendaItemRepo(h.db)
+      .listByMeeting(MTG_ID)
+      .filter((a) => a.title === 'Begroting')
+    expect(begroting).toHaveLength(1)
+
+    // The final-pass decision routes onto the existing (live-inferred) item.
+    const decisions = decisionRepo(h.db).listByMeeting(MTG_ID)
+    expect(decisions[0]?.agendaItemId).toBe('live-1')
+  })
+
   it('does not infer when the agenda already has items', async () => {
     const h = buildHarness() // default CONTEXT has a confirmed agenda item
     h.provider.scriptInferContextResponse({

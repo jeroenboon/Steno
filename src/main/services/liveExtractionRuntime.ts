@@ -39,6 +39,7 @@
  * These channels are documented in src/shared/ipc.ts (event-only, no invoke).
  */
 
+import { isTitleCovered } from '@shared/agenda/agendaTitle'
 import type {
   Action,
   Decision,
@@ -437,19 +438,44 @@ export class LiveExtractionRuntime {
     const spans = this._spanRepo.listByMeeting(this._meetingId)
     if (spans.length === 0) return
 
-    const inferred = await this._provider.inferContext({ source: { spans } })
+    // Ground the inference on what the repo already holds — the agenda items live
+    // inference proposed during the meeting, and any participants. Without this,
+    // `excludeCoveredAgendaItems` has nothing to exclude and the final pass appends
+    // a second copy of the whole live-inferred agenda (the "agenda 2x" bug).
+    const existingAgenda = this._agendaItemRepo.listByMeeting(this._meetingId)
+    const existingParticipants = this._participantRepo.listByMeeting(this._meetingId)
 
-    // Persist the inferred agenda as Proposed + participants (the shared rule),
-    // reusing the created rows to enrich the in-memory context below.
+    const inferred = await this._provider.inferContext({
+      source: { spans },
+      knownAgendaItems: existingAgenda.map((a) => ({ title: a.title, topic: a.topic })),
+    })
+
+    // Drop anything the repo already holds. The real engine already strips
+    // covered agenda titles, but the runtime must not depend on the provider for
+    // correctness — filter here too (idempotent) so a provider that echoes the
+    // known agenda can never double it. Participants have no such engine step.
+    const knownNames = new Set(existingParticipants.map((p) => p.name.trim().toLowerCase()))
+    const contextToPersist = {
+      agendaItems: inferred.agendaItems.filter((a) => !isTitleCovered(a.title, existingAgenda)),
+      participants: inferred.participants.filter(
+        (p) => !knownNames.has(p.name.trim().toLowerCase()),
+      ),
+    }
+
+    // Persist the genuinely-new inferred agenda as Proposed + new participants
+    // (the shared rule), reusing the created rows to enrich the context below.
     const { agendaItems: newAgenda, participants: newParticipants } = persistInferredContext(
       { agendaItemRepo: this._agendaItemRepo, participantRepo: this._participantRepo },
       this._meetingId,
-      inferred,
+      contextToPersist,
     )
 
-    // Enrich the context so the final pass routes into the inferred agenda and
-    // nudges reflect it.
-    this._contextOwner.enrich({ agendaItems: newAgenda, participants: newParticipants })
+    // Enrich the context with the full agenda (existing + newly inferred) so the
+    // final pass routes decisions/actions onto the real items and nudges reflect them.
+    this._contextOwner.enrich({
+      agendaItems: [...existingAgenda, ...newAgenda],
+      participants: [...existingParticipants, ...newParticipants],
+    })
 
     // Replace an auto-generated placeholder title with the inferred one, then
     // clear the flag so it is never overwritten again. A user-set title (flag
