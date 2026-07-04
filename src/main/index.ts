@@ -14,7 +14,6 @@ import {
   clipboard,
 } from 'electron'
 
-import { toTranscriptText } from '@shared/export/meetingExporter'
 import type { IpcChannel } from '@shared/ipc'
 import { RealClock } from '@shared/providers'
 
@@ -37,6 +36,7 @@ import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
 import { sendItemsChanged } from './services/itemsChangedNotifier'
 import { MeetingLifecycleService } from './services/meetingLifecycleService'
+import { MeetingQueryService } from './services/meetingQueryService'
 import { ImportSessionController } from './session/ImportSessionController'
 import { LiveSessionController } from './session/LiveSessionController'
 import { testProviderConnection } from './settings/connectionTest'
@@ -299,6 +299,18 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   const aiRepo = agendaItemRepo(db)
   const pRepo = participantRepo(db)
 
+  // Read-only meeting-history queries (list / load / delete / transcript) behind
+  // one testable module instead of inline closures here (review item 6a).
+  const meetingQuery = new MeetingQueryService({
+    meetingRepo: mRepo,
+    decisionRepo: dRepo,
+    actionRepo: aRepo,
+    agendaItemRepo: aiRepo,
+    participantRepo: pRepo,
+    discussionSummaryRepo: dsRepo,
+    transcriptSpanRepo: spanRepo,
+  })
+
   // ItemLifecycleService for note-taker action IPC (item 0018). Its onItemsChanged
   // seam pushes the authoritative full item set to the renderer so a confirm /
   // dismiss / edit / create reconciles the same way an agent turn does — main is
@@ -423,26 +435,12 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
       clipboard.writeText(content)
     },
     onCopyTranscript: (meetingId) => {
-      const spans = spanRepo.listByMeeting(meetingId)
-      clipboard.writeText(toTranscriptText(spans))
+      clipboard.writeText(meetingQuery.transcriptText(meetingId))
     },
-    meetingList: () => {
-      return mRepo.list().filter((m) => m.state !== 'draft')
-    },
-    meetingLoad: (meetingId) => {
-      const meeting = mRepo.findById(meetingId)
-      if (meeting === null) return null
-      return {
-        meeting,
-        decisions: dRepo.listByMeeting(meetingId),
-        actions: aRepo.listActionsByMeeting(meetingId),
-        agendaItems: aiRepo.listByMeeting(meetingId),
-        participants: pRepo.listByMeeting(meetingId),
-        summaries: dsRepo.listByMeeting(meetingId),
-      }
-    },
+    meetingList: () => meetingQuery.list(),
+    meetingLoad: (meetingId) => meetingQuery.load(meetingId),
     meetingDelete: (meetingId) => {
-      mRepo.delete(meetingId)
+      meetingQuery.delete(meetingId)
     },
     modelDownloader: new ModelDownloader(join(userData, 'models', 'whisper-small-sherpa')),
     pushModelProgress: (evt) => {
