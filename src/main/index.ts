@@ -289,6 +289,11 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   // Extracted out of this function so the lifecycle (where the audio start/stop
   // bugs hid) has locality and a unit-test surface — no Electron dependency.
   // ---------------------------------------------------------------------------
+  // Single enforcer of Draft → Live → Ended (and the paused sub-state). Shared
+  // across the session controllers (start/end) and the pause/resume IPC path so
+  // every transition goes through one place.
+  const meetingLifecycle = new MeetingLifecycleService(mRepo, new RealClock())
+
   const liveSession = new LiveSessionController({
     settingsStore,
     secretStorage,
@@ -301,10 +306,8 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     participantRepo: pRepo,
     sender: mainWindow.webContents,
     clock: new RealClock(),
+    meetingLifecycle,
   })
-
-  // Pause/resume enforcer: persists the paused sub-state on the Meeting.
-  const meetingLifecycle = new MeetingLifecycleService(mRepo, new RealClock())
 
   // ---------------------------------------------------------------------------
   // Import session controller (item 0026)
@@ -326,6 +329,7 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     discussionSummaryRepo: dsRepo,
     sender: mainWindow.webContents,
     clock: new RealClock(),
+    meetingLifecycle,
   })
 
   // One-way channel: renderer sends PCM frames; no invoke/response.
