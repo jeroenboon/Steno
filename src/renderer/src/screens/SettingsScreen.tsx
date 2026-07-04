@@ -27,6 +27,7 @@ import { buildDisclosureCopy, computeEgressState } from '../../../shared/setting
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
 import { AzureExtractionCard } from '../components/AzureExtractionCard'
 import { KeyField } from '../components/KeyField'
+import { OpenAICompatibleCard } from '../components/OpenAICompatibleCard'
 import { ProviderKeyCard } from '../components/ProviderKeyCard'
 import { ProviderKeyHelp } from '../components/ProviderKeyHelp'
 import { ProviderRoleCard, type ProviderGroup } from '../components/ProviderRoleCard'
@@ -34,14 +35,8 @@ import { SharedKeyNotice } from '../components/SharedKeyNotice'
 import { TestConnectionButton } from '../components/TestConnectionButton'
 import { t } from '../i18n'
 
-import {
-  isValidUrl,
-  validateCustomFields,
-  type AzureFields,
-  type CustomFields,
-  type CustomValidationErrors,
-} from './settingsValidation'
-import { useSecretKeyField, type KeySaveState } from './useSecretKeyField'
+import { isValidUrl, type AzureFields, type CustomFields } from './settingsValidation'
+import { useSecretKeyField } from './useSecretKeyField'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -83,6 +78,21 @@ function azureInitialFields(settings: AppSettings): AzureFields {
     displayName: c.displayName,
     keyRef: c.keyRef,
   }
+}
+
+/** Empty OpenAI-compatible extraction form (used until a config is persisted). */
+const CUSTOM_DEFAULT_FIELDS: CustomFields = {
+  baseUrl: '',
+  model: '',
+  displayName: '',
+  keyRef: 'openai-custom',
+}
+
+/** Seed values for the OpenAI-compatible card: the persisted config, else defaults. */
+function customInitialFields(settings: AppSettings): CustomFields {
+  if (settings.extractionProvider !== 'openai-compatible') return CUSTOM_DEFAULT_FIELDS
+  const c = settings.openaiCompatible
+  return { baseUrl: c.baseUrl, model: c.model, displayName: c.displayName, keyRef: c.keyRef }
 }
 
 /** Default model id per cloud audio vendor (user-overridable). */
@@ -158,16 +168,10 @@ export function SettingsScreen(): React.JSX.Element {
   const azureKey = useSecretKeyField()
   const audioKey = useSecretKeyField()
 
-  // ---- custom OpenAI fields ----
-  const [customFields, setCustomFields] = useState<CustomFields>({
-    baseUrl: '',
-    model: '',
-    displayName: '',
-    keyRef: 'openai-custom',
-  })
-  const [customErrors, setCustomErrors] = useState<CustomValidationErrors>({})
-  const [customOpenAISaveState, setCustomOpenAISaveState] = useState<KeySaveState>('idle')
-  const [customDirty, setCustomDirty] = useState(false)
+  // ---- OpenAI-compatible extraction — form state lives in OpenAICompatibleCard.
+  // Only the reveal-dirty flag stays here (true once the panel is revealed via a
+  // preset/custom switch); the card re-seeds from settings on a preset switch.
+  const [customInitiallyDirty, setCustomInitiallyDirty] = useState(false)
 
   // ---- Azure OpenAI (Phase 2.2) — form state lives in AzureExtractionCard ----
   // Only the reveal-dirty flag stays here: true once the user switches to Azure,
@@ -198,16 +202,8 @@ export function SettingsScreen(): React.JSX.Element {
       }
       setSettings(s)
 
-      if (s.extractionProvider === 'openai-compatible') {
-        setCustomFields({
-          baseUrl: s.openaiCompatible.baseUrl,
-          model: s.openaiCompatible.model,
-          displayName: s.openaiCompatible.displayName,
-          keyRef: s.openaiCompatible.keyRef,
-        })
-      }
-
-      // Azure form values are seeded by AzureExtractionCard from settings itself.
+      // OpenAI-compatible and Azure form values are seeded by their cards from
+      // settings itself; no separate mount seed needed.
 
       if (s.asrProvider === 'openai-audio') {
         setAudioFields((f) => ({
@@ -432,24 +428,19 @@ export function SettingsScreen(): React.JSX.Element {
         azureOpenAI: undefined,
       } as AppSettings)
     } else if (provider === 'openai' || provider === 'mistral') {
-      // Prefill from preset catalog
+      // Prefill from the preset catalog and reveal the panel. The card remounts
+      // (its key is the preset) and seeds from the openaiCompatible block below.
       const preset = extractionPresets[provider]
-      const newCustomFields: CustomFields = {
-        baseUrl: preset.defaultBaseUrl,
-        model: preset.defaultModel,
-        displayName: preset.displayName,
-        keyRef: provider, // keyRef is the vendor ID: 'openai', 'mistral'
-      }
-      setCustomFields(newCustomFields)
-      setCustomDirty(true)
-      setCustomOpenAISaveState('idle')
-      // Update local state to show the form
+      setCustomInitiallyDirty(true)
       setSettings({
         ...settings,
         extractionProvider: 'openai-compatible',
         openaiCompatible: {
           preset: provider,
-          ...newCustomFields,
+          baseUrl: preset.defaultBaseUrl,
+          model: preset.defaultModel,
+          displayName: preset.displayName,
+          keyRef: provider, // keyRef is the vendor ID: 'openai', 'mistral'
         },
         azureOpenAI: undefined,
       } as AppSettings)
@@ -473,27 +464,19 @@ export function SettingsScreen(): React.JSX.Element {
         },
       } as AppSettings)
     } else {
-      // 'openai-compatible' (custom)
-      const { baseUrl, model, displayName, keyRef } = customFields
-      if (!isValidUrl(baseUrl) || model.trim().length === 0 || displayName.trim().length === 0) {
-        // Show form so user can fill in fields; update local state but don't persist yet
-        // Include placeholder config so initialization won't crash
-        setCustomDirty(true)
-        setCustomOpenAISaveState('idle')
-        setSettings({
-          ...settings,
-          extractionProvider: 'openai-compatible',
-          openaiCompatible: { preset: 'custom', baseUrl, model, keyRef, displayName },
-          azureOpenAI: undefined,
-        } as AppSettings)
-        return
-      }
-      void persistSettings({
+      // 'openai-compatible' (custom). Reveal the panel seeded from the persisted
+      // config (or empty defaults); the card owns the fields and persists on Save.
+      const { baseUrl, model, displayName, keyRef } = customInitialFields(settings)
+      const valid = isValidUrl(baseUrl) && model.trim().length > 0 && displayName.trim().length > 0
+      setCustomInitiallyDirty(true)
+      const next = {
         ...settings,
         extractionProvider: 'openai-compatible',
-        openaiCompatible: { preset: 'custom', baseUrl, model, keyRef, displayName },
+        openaiCompatible: { preset: 'custom' as const, baseUrl, model, keyRef, displayName },
         azureOpenAI: undefined,
-      } as AppSettings)
+      } as AppSettings
+      if (valid) void persistSettings(next)
+      else setSettings(next)
     }
   }
 
@@ -501,17 +484,13 @@ export function SettingsScreen(): React.JSX.Element {
     void persistSettings({ ...settings, primaryLanguage: lang })
   }
 
-  async function handleSaveCustomOpenAI(): Promise<void> {
-    const errors = validateCustomFields(customFields)
-    setCustomErrors(errors)
-    if (Object.keys(errors).length > 0) return
-
-    const { baseUrl, model, displayName, keyRef } = customFields
-    // Determine preset based on keyRef or settings
+  /** Persist a validated OpenAI-compatible config emitted by OpenAICompatibleCard. */
+  async function persistCustom(fields: CustomFields): Promise<void> {
+    const { baseUrl, model, displayName, keyRef } = fields
+    // Determine the preset from the keyRef (the vendor id for OpenAI/Mistral).
     const preset: 'openai' | 'mistral' | 'custom' =
       keyRef === 'openai' ? 'openai' : keyRef === 'mistral' ? 'mistral' : 'custom'
 
-    setCustomOpenAISaveState('saving')
     await persistSettings({
       ...settings,
       extractionProvider: 'openai-compatible',
@@ -523,8 +502,6 @@ export function SettingsScreen(): React.JSX.Element {
         displayName: displayName.trim(),
       },
     })
-    setCustomOpenAISaveState('saved')
-    setCustomDirty(false)
   }
 
   /** Persist a validated Azure config emitted by AzureExtractionCard. */
@@ -876,136 +853,17 @@ export function SettingsScreen(): React.JSX.Element {
                 missingText={t('settings.extraction.anthropic.key.missing')}
               />
             ) : (
-              /* Custom OpenAI fields */
-              <div className="settings-custom-openai">
-                <div className="form-group">
-                  <label htmlFor="custom-openai-base-url" className="form-label">
-                    {t('settings.custom.baseUrl.label')}
-                  </label>
-                  <input
-                    id="custom-openai-base-url"
-                    data-testid="custom-openai-base-url"
-                    type="url"
-                    className={`form-input${customErrors.baseUrl !== undefined ? ' form-input--error' : ''}`}
-                    placeholder={t('settings.custom.baseUrl.placeholder')}
-                    value={customFields.baseUrl}
-                    onChange={(e) => {
-                      const v = e.currentTarget.value
-                      setCustomFields((f) => ({ ...f, baseUrl: v }))
-                      setCustomErrors((err) => {
-                        const next = { ...err }
-                        delete next.baseUrl
-                        return next
-                      })
-                      setCustomDirty(true)
-                      if (customOpenAISaveState === 'saved') setCustomOpenAISaveState('idle')
-                    }}
-                  />
-                  {customErrors.baseUrl !== undefined && (
-                    <p className="form-error">{customErrors.baseUrl}</p>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="custom-openai-model" className="form-label">
-                    {t('settings.custom.model.label')}
-                  </label>
-                  <input
-                    id="custom-openai-model"
-                    data-testid="custom-openai-model"
-                    type="text"
-                    className={`form-input${customErrors.model !== undefined ? ' form-input--error' : ''}`}
-                    placeholder={t('settings.custom.model.placeholder')}
-                    value={customFields.model}
-                    onChange={(e) => {
-                      const v = e.currentTarget.value
-                      setCustomFields((f) => ({ ...f, model: v }))
-                      setCustomErrors((err) => {
-                        const next = { ...err }
-                        delete next.model
-                        return next
-                      })
-                      setCustomDirty(true)
-                      if (customOpenAISaveState === 'saved') setCustomOpenAISaveState('idle')
-                    }}
-                  />
-                  {customErrors.model !== undefined && (
-                    <p className="form-error">{customErrors.model}</p>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="custom-openai-display-name" className="form-label">
-                    {t('settings.custom.displayName.label')}
-                  </label>
-                  <input
-                    id="custom-openai-display-name"
-                    data-testid="custom-openai-display-name"
-                    type="text"
-                    className={`form-input${customErrors.displayName !== undefined ? ' form-input--error' : ''}`}
-                    placeholder={t('settings.custom.displayName.placeholder')}
-                    value={customFields.displayName}
-                    onChange={(e) => {
-                      const v = e.currentTarget.value
-                      setCustomFields((f) => ({ ...f, displayName: v }))
-                      setCustomErrors((err) => {
-                        const next = { ...err }
-                        delete next.displayName
-                        return next
-                      })
-                      setCustomDirty(true)
-                      if (customOpenAISaveState === 'saved') setCustomOpenAISaveState('idle')
-                    }}
-                  />
-                  {customErrors.displayName !== undefined && (
-                    <p className="form-error">{customErrors.displayName}</p>
-                  )}
-                </div>
-
-                <KeyField
-                  idBase="custom-openai"
-                  label={t('settings.custom.key.label')}
-                  placeholder={t('settings.custom.key.placeholder')}
-                  present={customKey.present}
-                  editing={customKey.editing}
-                  value={customKey.value}
-                  saveState={customKey.saveState}
-                  testIdInput="custom-openai-key"
-                  testIdSave="save-custom-key"
-                  testIdMissing="custom-key-missing"
-                  missingText={t('settings.custom.key.missing')}
-                  onChange={customKey.change}
-                  onSave={() => {
-                    void customKey.save(customFields.keyRef)
-                  }}
-                  onReplace={customKey.beginReplace}
-                  onCancel={customKey.cancel}
-                />
-
-                <button
-                  type="button"
-                  data-testid="save-custom-openai"
-                  className="btn btn--primary"
-                  disabled={customOpenAISaveState === 'saving' || !customDirty}
-                  onClick={() => {
-                    void handleSaveCustomOpenAI()
-                  }}
-                >
-                  {customOpenAISaveState === 'saved'
-                    ? t('settings.custom.saved')
-                    : t('settings.custom.save')}
-                </button>
-
-                <ProviderKeyHelp keyRef={customFields.keyRef} testId="custom-key-help" />
-
-                <SharedKeyNotice
-                  settings={settings}
-                  keyRef={customFields.keyRef}
-                  testId="shared-key-custom"
-                />
-
-                <TestConnectionButton role="extraction" testId="test-extraction-connection" />
-              </div>
+              /* Custom OpenAI fields — form owned by OpenAICompatibleCard. A
+                 preset switch changes the keyRef, remounting the card so it
+                 re-seeds from the new preset. */
+              <OpenAICompatibleCard
+                key={customInitialFields(settings).keyRef}
+                keyField={customKey}
+                settings={settings}
+                initialFields={customInitialFields(settings)}
+                initiallyDirty={customInitiallyDirty}
+                onSave={persistCustom}
+              />
             )
           }
           disclosure={
