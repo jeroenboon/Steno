@@ -240,6 +240,20 @@ describe('endMeeting()', () => {
     expect(mRepo.findById(MEETING_ID)).not.toBeNull()
   })
 
+  it('transitions the meeting Live → Ended in the DB (state + endedAt)', async () => {
+    const { controller, extraction, mRepo } = await buildHarness()
+    extraction.scriptFinalPassResponse({ proposedDecisions: [], proposedActions: [] })
+
+    controller.start(MEETING_ID)
+    expect(mRepo.findById(MEETING_ID)?.state).toBe('live')
+
+    await controller.endMeeting(MEETING_ID)
+
+    const meeting = mRepo.findById(MEETING_ID)
+    expect(meeting?.state).toBe('ended')
+    expect(meeting?.endedAt).toBeTruthy()
+  })
+
   it('does not run the final pass when the id does not match a known row', async () => {
     const { controller, extraction } = await buildHarness()
     extraction.scriptFinalPassResponse({ proposedDecisions: [], proposedActions: [] })

@@ -31,6 +31,7 @@ import type { meetingRepo } from '../db/repos/meetingRepo'
 import type { participantRepo } from '../db/repos/participantRepo'
 import type { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
 import { LiveExtractionRuntime } from '../services/liveExtractionRuntime'
+import { MeetingLifecycleService } from '../services/meetingLifecycleService'
 import { tryBuildAsrProvider, tryBuildExtractionProvider } from '../settings/providerFactory'
 import type { SecretStorage } from '../settings/SecretStorage'
 import type { SettingsStore } from '../settings/SettingsStore'
@@ -57,6 +58,12 @@ export interface LiveSessionControllerDeps {
   buildAsr?: typeof tryBuildAsrProvider
   /** Injected so tests can supply fake providers. Defaults to the real factory. */
   buildExtraction?: typeof tryBuildExtractionProvider
+  /**
+   * The single enforcer of Draft → Live → Ended transitions. Optional so tests
+   * (and older wiring) get one built from meetingRepo + clock; production injects
+   * the shared instance so pause/resume and start/end all go through one place.
+   */
+  meetingLifecycle?: MeetingLifecycleService
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +84,7 @@ export class LiveSessionController {
   private readonly _clock: Clock
   private readonly _buildAsr: typeof tryBuildAsrProvider
   private readonly _buildExtraction: typeof tryBuildExtractionProvider
+  private readonly _meetingLifecycle: MeetingLifecycleService
 
   private _currentBridge: AudioCaptureBridge | null = null
   private _activeRuntime: LiveExtractionRuntime | null = null
@@ -95,6 +103,8 @@ export class LiveSessionController {
     this._clock = deps.clock
     this._buildAsr = deps.buildAsr ?? tryBuildAsrProvider
     this._buildExtraction = deps.buildExtraction ?? tryBuildExtractionProvider
+    this._meetingLifecycle =
+      deps.meetingLifecycle ?? new MeetingLifecycleService(deps.meetingRepo, deps.clock)
   }
 
   /**
@@ -154,6 +164,12 @@ export class LiveSessionController {
     const meeting = this._meetingRepo.findById(meetingId)
     if (meeting !== null) {
       await this._activeRuntime.endMeeting(meeting)
+      // Run the final pass first (it may enrich the row: inferred agenda, title),
+      // THEN transition Live → Ended through the single enforcer so state + endedAt
+      // are set and a double-end is guarded. Only a still-Live row transitions.
+      if (this._meetingRepo.findById(meetingId)?.state === 'live') {
+        this._meetingLifecycle.endMeeting(meetingId)
+      }
     }
     this._activeRuntime = null
   }
