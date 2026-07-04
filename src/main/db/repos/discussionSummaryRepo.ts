@@ -3,20 +3,7 @@ import type Database from 'better-sqlite3'
 import { DiscussionSummarySchema } from '@shared/domain'
 import type { DiscussionSummary } from '@shared/domain'
 
-interface DiscussionSummaryRow {
-  id: string
-  meeting_id: string
-  agenda_item_id: string
-  text: string
-}
-
-function rowToDomain(row: DiscussionSummaryRow): DiscussionSummary {
-  return DiscussionSummarySchema.parse({
-    id: row.id,
-    agendaItemId: row.agenda_item_id,
-    text: row.text,
-  })
-}
+import { parseRow } from '../mapRow'
 
 export function discussionSummaryRepo(db: Database.Database) {
   return {
@@ -35,17 +22,17 @@ export function discussionSummaryRepo(db: Database.Database) {
 
     findById(id: string): DiscussionSummary | null {
       const row = db.prepare('SELECT * FROM discussion_summaries WHERE id = ?').get(id) as
-        | DiscussionSummaryRow
+        | Record<string, unknown>
         | undefined
       if (row === undefined) return null
-      return rowToDomain(row)
+      return parseRow(row, DiscussionSummarySchema)
     },
 
     listByMeeting(meetingId: string): DiscussionSummary[] {
       const rows = db
         .prepare('SELECT * FROM discussion_summaries WHERE meeting_id = ?')
-        .all(meetingId) as DiscussionSummaryRow[]
-      return rows.map(rowToDomain)
+        .all(meetingId) as Record<string, unknown>[]
+      return rows.map((row) => parseRow(row, DiscussionSummarySchema))
     },
 
     delete(id: string): void {

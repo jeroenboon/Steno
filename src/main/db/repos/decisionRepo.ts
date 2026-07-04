@@ -3,24 +3,7 @@ import type Database from 'better-sqlite3'
 import { DecisionSchema } from '@shared/domain'
 import type { Decision } from '@shared/domain'
 
-interface DecisionRow {
-  id: string
-  meeting_id: string
-  rationale: string
-  agenda_item_id: string
-  source_span_id: string
-  state: string
-}
-
-function rowToDomain(row: DecisionRow): Decision {
-  return DecisionSchema.parse({
-    id: row.id,
-    rationale: row.rationale,
-    agendaItemId: row.agenda_item_id,
-    sourceSpanId: row.source_span_id,
-    state: row.state,
-  })
-}
+import { parseRow } from '../mapRow'
 
 export function decisionRepo(db: Database.Database) {
   return {
@@ -55,17 +38,17 @@ export function decisionRepo(db: Database.Database) {
 
     findById(id: string): Decision | null {
       const row = db.prepare('SELECT * FROM decisions WHERE id = ?').get(id) as
-        | DecisionRow
+        | Record<string, unknown>
         | undefined
       if (row === undefined) return null
-      return rowToDomain(row)
+      return parseRow(row, DecisionSchema)
     },
 
     listByMeeting(meetingId: string): Decision[] {
       const rows = db
         .prepare('SELECT * FROM decisions WHERE meeting_id = ?')
-        .all(meetingId) as DecisionRow[]
-      return rows.map(rowToDomain)
+        .all(meetingId) as Record<string, unknown>[]
+      return rows.map((row) => parseRow(row, DecisionSchema))
     },
 
     /** Resolve the meeting a decision belongs to, or null when unknown. */

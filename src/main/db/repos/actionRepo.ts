@@ -3,30 +3,7 @@ import type Database from 'better-sqlite3'
 import { ActionSchema } from '@shared/domain'
 import type { Action } from '@shared/domain'
 
-interface ActionRow {
-  id: string
-  meeting_id: string
-  description: string | null
-  agenda_item_id: string
-  source_span_id: string
-  owner: string | null
-  due_date: string | null
-  status: string
-  state: string
-}
-
-function rowToDomain(row: ActionRow): Action {
-  return ActionSchema.parse({
-    id: row.id,
-    description: row.description ?? undefined,
-    agendaItemId: row.agenda_item_id,
-    sourceSpanId: row.source_span_id,
-    owner: row.owner ?? undefined,
-    dueDate: row.due_date ?? undefined,
-    status: row.status,
-    state: row.state,
-  })
-}
+import { parseRow } from '../mapRow'
 
 export function actionRepo(db: Database.Database) {
   return {
@@ -66,16 +43,18 @@ export function actionRepo(db: Database.Database) {
     },
 
     findById(id: string): Action | null {
-      const row = db.prepare('SELECT * FROM actions WHERE id = ?').get(id) as ActionRow | undefined
+      const row = db.prepare('SELECT * FROM actions WHERE id = ?').get(id) as
+        | Record<string, unknown>
+        | undefined
       if (row === undefined) return null
-      return rowToDomain(row)
+      return parseRow(row, ActionSchema)
     },
 
     listByMeeting(meetingId: string): Action[] {
       const rows = db
         .prepare('SELECT * FROM actions WHERE meeting_id = ?')
-        .all(meetingId) as ActionRow[]
-      return rows.map(rowToDomain)
+        .all(meetingId) as Record<string, unknown>[]
+      return rows.map((row) => parseRow(row, ActionSchema))
     },
 
     /**
@@ -85,8 +64,8 @@ export function actionRepo(db: Database.Database) {
     listOpenActionsByOwner(ownerId: string): Action[] {
       const rows = db
         .prepare(`SELECT * FROM actions WHERE owner = ? AND status = 'open'`)
-        .all(ownerId) as ActionRow[]
-      return rows.map(rowToDomain)
+        .all(ownerId) as Record<string, unknown>[]
+      return rows.map((row) => parseRow(row, ActionSchema))
     },
 
     /** Resolve the meeting an action belongs to, or null when unknown. */
