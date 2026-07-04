@@ -36,6 +36,8 @@ import { tryBuildAsrProvider, tryBuildExtractionProvider } from '../settings/pro
 import type { SecretStorage } from '../settings/SecretStorage'
 import type { SettingsStore } from '../settings/SettingsStore'
 
+import { finalizeMeetingEnd } from './finalizeMeetingEnd'
+
 const CADENCE_MS = 20_000
 
 // ---------------------------------------------------------------------------
@@ -165,11 +167,8 @@ export class LiveSessionController {
     if (meeting !== null) {
       await this._activeRuntime.endMeeting(meeting)
       // Run the final pass first (it may enrich the row: inferred agenda, title),
-      // THEN transition Live → Ended through the single enforcer so state + endedAt
-      // are set and a double-end is guarded. Only a still-Live row transitions.
-      if (this._meetingRepo.findById(meetingId)?.state === 'live') {
-        this._meetingLifecycle.endMeeting(meetingId)
-      }
+      // THEN transition Live → Ended through the single enforcer (shared helper).
+      finalizeMeetingEnd(this._meetingRepo, this._meetingLifecycle, meetingId)
     }
     this._activeRuntime = null
   }
