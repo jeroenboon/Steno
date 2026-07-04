@@ -51,6 +51,15 @@ export interface OpenAiJsonWireOptions {
 // ---------------------------------------------------------------------------
 
 export class OpenAiJsonWire implements ExtractionWire {
+  /**
+   * json_object mode has no schema enforcement, so the instruction spells out the
+   * exact JSON shape the engine's shared body describes.
+   */
+  readonly extractInstruction =
+    'Stuur je antwoord als JSON-object met de velden "proposedDecisions" (array), "proposedActions" (array) en optioneel "discussionSummaries" (array).'
+  readonly inferInstruction =
+    'Stuur je antwoord als JSON-object met de velden "agendaItems" (array), "participants" (array) en optioneel "title" (string).'
+
   private readonly _model: string
   private readonly _logTag: string
   private readonly _target: ChatCompletionsTarget

@@ -66,6 +66,17 @@ export type ExtractionCall =
  */
 export interface ExtractionWire {
   callStructured(call: ExtractionCall, system: string, user: string): Promise<unknown>
+
+  /**
+   * The per-vendor "how to hand the result back" sentence the engine appends to
+   * the shared prompt body. This is the one part of the prompt that is genuinely
+   * mechanism-specific: "Gebruik de extract_meeting_notes tool" (tool use) vs
+   * "Stuur je antwoord als JSON-object" (json_object mode). Everything else in
+   * the prompt — agenda, participants, language, schema — is shared (ADR 0034).
+   */
+  readonly extractInstruction: string
+  /** As {@link extractInstruction}, for the context-inference call. */
+  readonly inferInstruction: string
 }
 
 export interface ExtractionEngineOptions {
@@ -122,7 +133,7 @@ export class ExtractionEngine {
   }
 
   private async _callAndCoerce(request: ExtractionRequest): Promise<ExtractionResponse | null> {
-    const systemPrompt = buildSystemPrompt(request)
+    const systemPrompt = `${buildExtractBody(request)}\n\n${this._wire.extractInstruction}`
     const userMessage = buildUserMessage(request)
     const candidate = await this._wire.callStructured(
       { kind: 'extract', isFinalPass: request.isFinalPass },
@@ -172,7 +183,7 @@ export class ExtractionEngine {
   ): Promise<InferredContext | null> {
     const candidate = await this._wire.callStructured(
       { kind: 'infer' },
-      buildInferSystemPrompt(knownAgendaItems),
+      `${buildInferBody(knownAgendaItems)}\n\n${this._wire.inferInstruction}`,
       `Transcript:\n${sourceText}`,
     )
     if (candidate === null) return null
@@ -275,10 +286,17 @@ function validateArray<S extends z.ZodTypeAny>(
 }
 
 // ---------------------------------------------------------------------------
-// Prompt builders (shared) — never logged outside the devlog content opt-in
+// Prompt builders (shared body) — never logged outside the devlog content opt-in
+//
+// The body is vendor-neutral: agenda, participants, language, schema. The one
+// mechanism-specific sentence ("use the tool" vs "send JSON") is the wire's
+// `extractInstruction` / `inferInstruction`, appended by the engine (ADR 0034).
+// The body is the union of what the two families used to carry separately: the
+// explicit primary-language instruction (was Anthropic-only) and the inline
+// schema description (was OpenAI-only).
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(request: ExtractionRequest): string {
+function buildExtractBody(request: ExtractionRequest): string {
   const agendaLines =
     request.agendaItems.length > 0
       ? request.agendaItems.map((a, i) => `${String(i + 1)}. ${a.title}`).join('\n')
@@ -293,9 +311,10 @@ function buildSystemPrompt(request: ExtractionRequest): string {
     ? `\n\nDit is de EINDEXTRACTIE. Voeg ook een "discussionSummaries" array toe met een object per agendapunt: { "agendaItemId": "...", "text": "..." }.`
     : ''
 
-  return `Je bent een assistent die vergadernotities analyseert. Stuur je antwoord als JSON-object met de velden "proposedDecisions" (array), "proposedActions" (array) en optioneel "discussionSummaries" (array).
+  return `Je bent een assistent die vergadernotities analyseert en beslissingen en actiepunten extraheert.
 
 Primaire taal: ${request.primaryLanguage}
+Geef alle tekst (rationale, description, text) terug in de primaire taal van de vergadering.
 Agenda:\n${agendaLines}
 Deelnemers: ${participantNames}${summariesInstruction}
 
@@ -303,9 +322,7 @@ Schema voor proposedDecisions items: { "rationale": string, "sourceSpanId": stri
 Schema voor proposedActions items: { "description": string, "sourceSpanId": string, "ownerHint"?: string, "agendaItemHint"?: string }`
 }
 
-function buildInferSystemPrompt(
-  knownAgendaItems: readonly { title: string; topic: string }[],
-): string {
+function buildInferBody(knownAgendaItems: readonly { title: string; topic: string }[]): string {
   const grounding =
     knownAgendaItems.length === 0
       ? ''
@@ -315,7 +332,7 @@ function buildInferSystemPrompt(
             '\n',
           )}\nGeef alleen NIEUWE agendapunten terug die hier nog niet in staan; herhaal niets.`
 
-  return `Je leidt de agenda, de deelnemers en een korte vergadertitel af uit de bron. Stuur je antwoord als JSON-object met de velden "agendaItems" (array), "participants" (array) en optioneel "title" (string).
+  return `Je leidt de agenda, de deelnemers en een korte vergadertitel af uit de bron. Geef per agendapunt een korte title en topic.
 
 Schema voor agendaItems items: { "title": string, "topic": string }
 Schema voor participants items: { "name": string }

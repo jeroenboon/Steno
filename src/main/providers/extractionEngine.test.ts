@@ -56,6 +56,8 @@ function fakeWire(candidates: unknown[]): ExtractionWire & {
   let i = 0
   return {
     calls,
+    extractInstruction: 'FAKE_EXTRACT_INSTRUCTION',
+    inferInstruction: 'FAKE_INFER_INSTRUCTION',
     callStructured(call, system, user) {
       calls.push({ call, system, user })
       const value = i < candidates.length ? candidates[i] : null
@@ -89,6 +91,19 @@ describe('ExtractionEngine.extract', () => {
     expect(result.proposedActions[0]?.description).toBe('Begroting publiceren')
     expect(wire.calls).toHaveLength(1)
     expect(wire.calls[0]?.call).toEqual({ kind: 'extract', isFinalPass: false })
+  })
+
+  it('appends the wire output-mechanism instruction to the shared prompt body', async () => {
+    const wire = fakeWire([validExtraction])
+    const engine = makeEngine(wire)
+
+    await engine.extract(extractionRequest)
+
+    const system = wire.calls[0]?.system ?? ''
+    // The shared body carries the primary-language instruction (the "flavour"
+    // both vendors now share); the per-vendor mechanism sentence is appended.
+    expect(system).toContain('primaire taal van de vergadering')
+    expect(system).toContain('FAKE_EXTRACT_INSTRUCTION')
   })
 
   it('retries once when the wire fails, then degrades to empty proposals', async () => {
@@ -194,6 +209,7 @@ describe('ExtractionEngine.inferContext', () => {
     })
 
     expect(wire.calls[0]?.system).toContain('Reeds geagendeerd')
+    expect(wire.calls[0]?.system).toContain('FAKE_INFER_INSTRUCTION')
     expect(result.agendaItems.map((a) => a.title)).toEqual(['Planning'])
   })
 
