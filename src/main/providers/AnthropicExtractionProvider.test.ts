@@ -66,6 +66,20 @@ function makeToolUseResponse(content: Record<string, unknown>) {
   }
 }
 
+/**
+ * A response with no tool_use block (e.g. the model replied in prose). This is
+ * the failure the engine retries on: the wire returns null, so a second null
+ * degrades the turn to empty. (A malformed *field* inside a tool_use block is
+ * coerced, not retried — ADR 0034.)
+ */
+function makeNoToolUseResponse() {
+  return {
+    type: 'message',
+    content: [{ type: 'text', text: 'Sorry, ik kan dat niet.' }],
+    stop_reason: 'end_turn',
+  }
+}
+
 const validRollingContent = {
   proposedDecisions: [
     { rationale: 'Launch in Q3', sourceSpanId: 'span-1', agendaItemHint: 'Launch planning' },
@@ -228,12 +242,31 @@ describe('AnthropicExtractionProvider', () => {
   })
 
   // -------------------------------------------------------------------------
-  // Retry on validation failure → then empty response
+  // Coercion + retry (ADR 0034: shared with the OpenAI-compatible family)
   // -------------------------------------------------------------------------
 
-  it('retries once when model returns invalid JSON, then returns empty response', async () => {
-    const badResponse = makeToolUseResponse({ proposedDecisions: 'not-an-array' })
-    mockCreate.mockResolvedValueOnce(badResponse).mockResolvedValueOnce(badResponse)
+  it('keeps the valid items and drops only the malformed one, without retrying', async () => {
+    // One invalid decision (empty sourceSpanId) + one valid action.
+    mockCreate.mockResolvedValueOnce(
+      makeToolUseResponse({
+        proposedDecisions: [{ rationale: 'Ongeldig', sourceSpanId: '' }],
+        proposedActions: [{ description: 'Book venue', sourceSpanId: 'span-1' }],
+      }),
+    )
+
+    const provider = makeProvider()
+    const result = await provider.extract(rollingRequest)
+
+    expect(result.proposedDecisions).toEqual([])
+    expect(result.proposedActions[0]?.description).toBe('Book venue')
+    // A malformed field is coerced, not a reason to retry.
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries once when the response has no tool_use block, then returns empty', async () => {
+    mockCreate
+      .mockResolvedValueOnce(makeNoToolUseResponse())
+      .mockResolvedValueOnce(makeNoToolUseResponse())
 
     const provider = makeProvider()
     const result = await provider.extract(rollingRequest)
@@ -242,21 +275,23 @@ describe('AnthropicExtractionProvider', () => {
     expect(result).toEqual({ proposedDecisions: [], proposedActions: [] })
   })
 
-  it('returns empty response after one retry without throwing', async () => {
-    mockCreate.mockResolvedValue(makeToolUseResponse({ proposedDecisions: 'bad' }))
+  it('recovers on the retry: no tool_use first, valid second', async () => {
+    mockCreate
+      .mockResolvedValueOnce(makeNoToolUseResponse())
+      .mockResolvedValueOnce(makeToolUseResponse(validRollingContent))
 
     const provider = makeProvider()
-    await expect(provider.extract(rollingRequest)).resolves.toEqual({
-      proposedDecisions: [],
-      proposedActions: [],
-    })
+    const result = await provider.extract(rollingRequest)
+
+    expect(mockCreate).toHaveBeenCalledTimes(2)
+    expect(result.proposedDecisions[0]?.rationale).toBe('Launch in Q3')
   })
 
   // -------------------------------------------------------------------------
   // Principle #12: no transcript content or key in logs
   // -------------------------------------------------------------------------
 
-  it('does not log transcript content when validation fails', async () => {
+  it('does not log transcript content when the turn fails', async () => {
     const logged: string[] = []
     const errorSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
       logged.push(args.map(String).join(' '))
@@ -264,7 +299,7 @@ describe('AnthropicExtractionProvider', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
       logged.push(args.map(String).join(' '))
     })
-    mockCreate.mockResolvedValue(makeToolUseResponse({ proposedDecisions: 'bad' }))
+    mockCreate.mockResolvedValue(makeNoToolUseResponse())
 
     const provider = makeProvider()
     await provider.extract(rollingRequest)

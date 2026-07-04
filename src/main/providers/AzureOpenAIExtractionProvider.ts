@@ -2,9 +2,10 @@
  * AzureOpenAIExtractionProvider (Phase 2.1).
  *
  * An ExtractionProvider adapter for Azure OpenAI deployments. Azure speaks the
- * same chat-completions wire as OpenAI, so the request body, response parsing,
- * Zod validation and one-retry-then-degrade strategy are shared via
- * ChatExtractionEngine (openaiChatExtraction.ts). Azure differs only in:
+ * same chat-completions wire as OpenAI, so the transport is shared via
+ * OpenAiJsonWire (openAiJsonWire.ts) and the prompt/coerce/retry contract via
+ * the vendor-neutral ExtractionEngine (extractionEngine.ts). Azure differs only
+ * in:
  *   - URL: {endpoint}/openai/deployments/{deployment}/chat/completions
  *          ?api-version={apiVersion}
  *   - Auth: the `api-key` header (not `Authorization: Bearer`)
@@ -31,7 +32,8 @@ import type {
   InferredContext,
 } from '@shared/providers'
 
-import { ChatExtractionEngine } from './openaiChatExtraction'
+import { ExtractionEngine } from './extractionEngine'
+import { OpenAiJsonWire } from './openAiJsonWire'
 
 // ---------------------------------------------------------------------------
 // Constructor options
@@ -52,17 +54,18 @@ export interface AzureOpenAIExtractionProviderOptions {
 // ---------------------------------------------------------------------------
 
 export class AzureOpenAIExtractionProvider implements ExtractionProvider {
-  private readonly _engine: ChatExtractionEngine
+  private readonly _engine: ExtractionEngine
 
   constructor(opts: AzureOpenAIExtractionProviderOptions) {
     const endpoint = opts.endpoint.replace(/\/$/, '') // strip trailing slash
     const url =
       `${endpoint}/openai/deployments/${opts.deployment}/chat/completions` +
       `?api-version=${opts.apiVersion}`
+    const logTag = `[${opts.displayName}]`
 
-    this._engine = new ChatExtractionEngine({
+    const wire = new OpenAiJsonWire({
       model: opts.model,
-      logTag: `[${opts.displayName}]`,
+      logTag,
       target: {
         url,
         headers: {
@@ -72,6 +75,8 @@ export class AzureOpenAIExtractionProvider implements ExtractionProvider {
       },
       fetch: opts.fetch ?? globalThis.fetch,
     })
+
+    this._engine = new ExtractionEngine({ wire, logTag, model: opts.model })
   }
 
   async extract(request: ExtractionRequest): Promise<ExtractionResponse> {

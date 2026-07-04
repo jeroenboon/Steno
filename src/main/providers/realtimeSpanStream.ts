@@ -7,8 +7,8 @@
  * waiters, the `_connect` + `_reconnectAfterDelay` exponential-backoff loop, the
  * `string | ArrayBuffer | Uint8Array -> JSON` message decoder, and the
  * emit-to-waiter-or-queue push. That is exactly the transport plumbing the
- * extraction side already hides in `ChatExtractionEngine`; this is its ASR
- * counterpart.
+ * extraction side already hides behind its wire seam (`ExtractionWire`); this is
+ * its ASR counterpart.
  *
  * What actually varies per vendor is small and lives behind the {@link
  * RealtimeAsrWire} seam: the connection (URL + auth), the session-config message

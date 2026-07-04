@@ -7,9 +7,11 @@
  * response shapes. The vendor is just a prefilled base URL + model + displayName
  * (see the preset catalog, extractionPresets.ts); it changes no parsing here.
  *
- * The shared request/parse/validate/retry logic lives in ChatExtractionEngine
- * (openaiChatExtraction.ts), which the Azure adapter reuses too. This adapter
- * only supplies the OpenAI-style target: `${baseUrl}/chat/completions` with an
+ * The shared prompt/coerce/retry logic lives in the vendor-neutral
+ * ExtractionEngine (extractionEngine.ts); the OpenAI-compatible transport
+ * (fetch + json_object + parseJsonLoose) lives in OpenAiJsonWire
+ * (openAiJsonWire.ts), which the Azure adapter reuses too. This adapter only
+ * supplies the OpenAI-style target: `${baseUrl}/chat/completions` with an
  * `Authorization: Bearer` header.
  *
  * ## Privacy (principle #12)
@@ -34,7 +36,8 @@ import type {
   InferredContext,
 } from '@shared/providers'
 
-import { ChatExtractionEngine } from './openaiChatExtraction'
+import { ExtractionEngine } from './extractionEngine'
+import { OpenAiJsonWire } from './openAiJsonWire'
 
 // ---------------------------------------------------------------------------
 // Constructor options
@@ -53,14 +56,15 @@ export interface OpenAICompatibleExtractionProviderOptions {
 // ---------------------------------------------------------------------------
 
 export class OpenAICompatibleExtractionProvider implements ExtractionProvider {
-  private readonly _engine: ChatExtractionEngine
+  private readonly _engine: ExtractionEngine
 
   constructor(opts: OpenAICompatibleExtractionProviderOptions) {
     const baseUrl = opts.baseUrl.replace(/\/$/, '') // strip trailing slash
+    const logTag = `[${opts.displayName}]`
 
-    this._engine = new ChatExtractionEngine({
+    const wire = new OpenAiJsonWire({
       model: opts.model,
-      logTag: `[${opts.displayName}]`,
+      logTag,
       target: {
         url: `${baseUrl}/chat/completions`,
         headers: {
@@ -70,6 +74,8 @@ export class OpenAICompatibleExtractionProvider implements ExtractionProvider {
       },
       fetch: opts.fetch ?? globalThis.fetch,
     })
+
+    this._engine = new ExtractionEngine({ wire, logTag, model: opts.model })
   }
 
   async extract(request: ExtractionRequest): Promise<ExtractionResponse> {
