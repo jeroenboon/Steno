@@ -8,8 +8,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   isValidUrl,
+  validateAudioFields,
   validateAzureFields,
   validateCustomFields,
+  type AudioAsrFields,
   type AzureFields,
   type CustomFields,
 } from './settingsValidation'
@@ -57,6 +59,35 @@ describe('validateCustomFields', () => {
     expect(errors.model).toBeDefined()
     expect(errors.displayName).toBeDefined()
     expect(errors.baseUrl).toBeUndefined()
+  })
+})
+
+describe('validateAudioFields', () => {
+  const audio: AudioAsrFields = {
+    model: 'gpt-4o-mini-transcribe',
+    endpoint: '',
+    deployment: '',
+    apiVersion: '2024-06-01',
+    keyRef: 'openai',
+    displayName: 'OpenAI',
+  }
+
+  it('needs only a model for OpenAI/Mistral', () => {
+    expect(validateAudioFields('openai-audio', audio)).toEqual({})
+    expect(validateAudioFields('mistral-voxtral', { ...audio, model: '' }).model).toBeDefined()
+  })
+
+  it('needs a valid endpoint and deployment for Azure Speech', () => {
+    const errors = validateAudioFields('azure-speech', audio)
+    expect(errors.endpoint).toBeDefined()
+    expect(errors.deployment).toBeDefined()
+
+    const ok = validateAudioFields('azure-speech', {
+      ...audio,
+      endpoint: 'https://x.cognitiveservices.azure.com/',
+      deployment: 'whisper',
+    })
+    expect(ok).toEqual({})
   })
 })
 

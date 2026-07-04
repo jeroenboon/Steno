@@ -800,7 +800,7 @@ describe('SettingsScreen — import-only cloud ASR (Phase 3.4)', () => {
     expect(screen.queryByTestId('asr-import-only-notice')).toBeNull()
   })
 
-  it('persists asrProvider openai-audio with the default model on selection', async () => {
+  it('does not persist on selection alone — Save is required', async () => {
     render(<SettingsScreen />)
     await waitFor(() => screen.getByTestId('asr-provider-select'))
 
@@ -808,6 +808,29 @@ describe('SettingsScreen — import-only cloud ASR (Phase 3.4)', () => {
       fireEvent.change(screen.getByTestId('asr-provider-select'), {
         target: { value: 'openai-audio' },
       })
+    })
+    await waitFor(() => screen.getByTestId('save-audio-config'))
+
+    // Revealing the panel must not have written an openai-audio config yet.
+    expect(
+      mockApi.settingsSet.mock.calls.some((c) =>
+        JSON.stringify(c[0]).includes('"asrProvider":"openai-audio"'),
+      ),
+    ).toBe(false)
+  })
+
+  it('persists asrProvider openai-audio with the default model when saved', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('asr-provider-select'))
+
+    act(() => {
+      fireEvent.change(screen.getByTestId('asr-provider-select'), {
+        target: { value: 'openai-audio' },
+      })
+    })
+    await waitFor(() => screen.getByTestId('save-audio-config'))
+    act(() => {
+      fireEvent.click(screen.getByTestId('save-audio-config'))
     })
 
     await waitFor(() => {
@@ -859,7 +882,7 @@ describe('SettingsScreen — import-only cloud ASR (Phase 3.4)', () => {
     })
   })
 
-  it('persists azure-speech only once the endpoint is a valid URL', async () => {
+  it('persists azure-speech on Save with a valid endpoint + deployment', async () => {
     render(<SettingsScreen />)
     await waitFor(() => screen.getByTestId('asr-provider-select'))
     act(() => {
@@ -869,12 +892,14 @@ describe('SettingsScreen — import-only cloud ASR (Phase 3.4)', () => {
     })
     await waitFor(() => screen.getByTestId('azure-speech-endpoint'))
 
-    // Fill deployment + a valid endpoint; then a settings:set should carry them.
     fireEvent.change(screen.getByTestId('azure-speech-deployment'), {
       target: { value: 'whisper' },
     })
     fireEvent.change(screen.getByTestId('azure-speech-endpoint'), {
       target: { value: 'https://my-resource.openai.azure.com/' },
+    })
+    act(() => {
+      fireEvent.click(screen.getByTestId('save-audio-config'))
     })
 
     await waitFor(() => {
