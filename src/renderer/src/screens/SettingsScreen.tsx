@@ -31,11 +31,11 @@ import { SharedKeyNotice } from '../components/SharedKeyNotice'
 import { TestConnectionButton } from '../components/TestConnectionButton'
 import { t } from '../i18n'
 
+import { useSecretKeyField, type KeySaveState } from './useSecretKeyField'
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type KeySaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 interface CustomFields {
   baseUrl: string
@@ -277,10 +277,6 @@ export function SettingsScreen(): React.JSX.Element {
   // ---- settings state ----
   const [settings, setSettings] = useState<AppSettings | null>(null)
 
-  // ---- key presence ----
-  const [deepgramKeyPresent, setDeepgramKeyPresent] = useState(false)
-  const [anthropicKeyPresent, setAnthropicKeyPresent] = useState(false)
-
   // ---- local model state ----
   const [modelDownloaded, setModelDownloaded] = useState(false)
   const [modelProgress, setModelProgress] = useState<{ received: number; total: number } | null>(
@@ -288,19 +284,12 @@ export function SettingsScreen(): React.JSX.Element {
   )
   const [modelError, setModelError] = useState<string | null>(null)
 
-  // ---- key entry (password fields — cleared after save, never stored) ----
-  const [deepgramKeyEntry, setDeepgramKeyEntry] = useState('')
-  const [deepgramKeySave, setDeepgramKeySave] = useState<KeySaveState>('idle')
-  const [deepgramKeyEditing, setDeepgramKeyEditing] = useState(false)
-
-  const [anthropicKeyEntry, setAnthropicKeyEntry] = useState('')
-  const [anthropicKeySave, setAnthropicKeySave] = useState<KeySaveState>('idle')
-  const [anthropicKeyEditing, setAnthropicKeyEditing] = useState(false)
-
-  const [customKeyEntry, setCustomKeyEntry] = useState('')
-  const [customKeySave, setCustomKeySave] = useState<KeySaveState>('idle')
-  const [customKeyPresent, setCustomKeyPresent] = useState(false)
-  const [customKeyEditing, setCustomKeyEditing] = useState(false)
+  // ---- per-vendor secret keys (entry / save / editing / present lifecycle) ----
+  const deepgramKey = useSecretKeyField()
+  const anthropicKey = useSecretKeyField()
+  const customKey = useSecretKeyField()
+  const azureKey = useSecretKeyField()
+  const audioKey = useSecretKeyField()
 
   // ---- custom OpenAI fields ----
   const [customFields, setCustomFields] = useState<CustomFields>({
@@ -313,11 +302,7 @@ export function SettingsScreen(): React.JSX.Element {
   const [customOpenAISaveState, setCustomOpenAISaveState] = useState<KeySaveState>('idle')
   const [customDirty, setCustomDirty] = useState(false)
 
-  // ---- Azure OpenAI fields + key (Phase 2.2) ----
-  const [azureKeyEntry, setAzureKeyEntry] = useState('')
-  const [azureKeySave, setAzureKeySave] = useState<KeySaveState>('idle')
-  const [azureKeyPresent, setAzureKeyPresent] = useState(false)
-  const [azureKeyEditing, setAzureKeyEditing] = useState(false)
+  // ---- Azure OpenAI fields (Phase 2.2) ----
   const [azureFields, setAzureFields] = useState<AzureFields>({
     endpoint: '',
     deployment: '',
@@ -330,7 +315,7 @@ export function SettingsScreen(): React.JSX.Element {
   const [azureSaveState, setAzureSaveState] = useState<KeySaveState>('idle')
   const [azureDirty, setAzureDirty] = useState(false)
 
-  // ---- import-only cloud ASR fields + key (Phase 3.4) ----
+  // ---- import-only cloud ASR fields (Phase 3.4) ----
   const [audioFields, setAudioFields] = useState<AudioAsrFields>({
     model: '',
     endpoint: '',
@@ -339,10 +324,6 @@ export function SettingsScreen(): React.JSX.Element {
     keyRef: '',
     displayName: '',
   })
-  const [audioKeyEntry, setAudioKeyEntry] = useState('')
-  const [audioKeySave, setAudioKeySave] = useState<KeySaveState>('idle')
-  const [audioKeyPresent, setAudioKeyPresent] = useState(false)
-  const [audioKeyEditing, setAudioKeyEditing] = useState(false)
 
   // ---- load on mount ----
   useEffect(() => {
@@ -432,14 +413,14 @@ export function SettingsScreen(): React.JSX.Element {
         )
         const present = new Map<string, boolean>(entries)
 
-        setDeepgramKeyPresent(present.get('deepgram') ?? false)
-        setAnthropicKeyPresent(present.get('anthropic') ?? false)
+        deepgramKey.setPresent(present.get('deepgram') ?? false)
+        anthropicKey.setPresent(present.get('anthropic') ?? false)
         if (extractionKeyRef !== null) {
           const has = present.get(extractionKeyRef) ?? false
-          if (s.extractionProvider === 'openai-compatible') setCustomKeyPresent(has)
-          else if (s.extractionProvider === 'azure-openai') setAzureKeyPresent(has)
+          if (s.extractionProvider === 'openai-compatible') customKey.setPresent(has)
+          else if (s.extractionProvider === 'azure-openai') azureKey.setPresent(has)
         }
-        if (audioKeyRef !== null) setAudioKeyPresent(present.get(audioKeyRef) ?? false)
+        if (audioKeyRef !== null) audioKey.setPresent(present.get(audioKeyRef) ?? false)
       } catch (err) {
         console.error('[Settings] secretHas failed:', err)
       }
@@ -454,6 +435,12 @@ export function SettingsScreen(): React.JSX.Element {
         console.error('[Settings] modelStatus failed:', err)
       }
     })()
+    // Mount-once: load settings + probe key presence and model status a single
+    // time. The useSecretKeyField `setPresent` setters are stable (raw useState
+    // dispatchers), but exhaustive-deps sees them via the per-render key objects
+    // (deepgramKey, …) and would demand those in the array — which would re-run
+    // this probe on every render. It must run once, so the array stays empty.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Subscribe to model download progress events
@@ -526,7 +513,7 @@ export function SettingsScreen(): React.JSX.Element {
       displayName: defaults.displayName,
     }
     setAudioFields(nextFields)
-    setAudioKeySave('idle')
+    audioKey.resetSaveState()
     applyAudioProvider(provider, nextFields)
   }
 
@@ -581,20 +568,6 @@ export function SettingsScreen(): React.JSX.Element {
       void window.api.settingsSet(next).catch((err: unknown) => {
         console.error('[Settings] settingsSet failed:', err)
       })
-    }
-  }
-
-  async function handleSaveAudioKey(): Promise<void> {
-    if (audioKeyEntry.trim().length === 0) return
-    setAudioKeySave('saving')
-    try {
-      await window.api.secretSet({ key: audioFields.keyRef, value: audioKeyEntry })
-      setAudioKeyPresent(true)
-      setAudioKeyEntry('')
-      setAudioKeySave('saved')
-      setAudioKeyEditing(false)
-    } catch {
-      setAudioKeySave('error')
     }
   }
 
@@ -677,48 +650,6 @@ export function SettingsScreen(): React.JSX.Element {
     void persistSettings({ ...settings, primaryLanguage: lang })
   }
 
-  async function handleSaveDeepgramKey(): Promise<void> {
-    if (deepgramKeyEntry.trim().length === 0) return
-    setDeepgramKeySave('saving')
-    try {
-      await window.api.secretSet({ key: 'deepgram', value: deepgramKeyEntry })
-      setDeepgramKeyPresent(true)
-      setDeepgramKeyEntry('') // clear from UI immediately after save
-      setDeepgramKeySave('saved')
-      setDeepgramKeyEditing(false)
-    } catch {
-      setDeepgramKeySave('error')
-    }
-  }
-
-  async function handleSaveAnthropicKey(): Promise<void> {
-    if (anthropicKeyEntry.trim().length === 0) return
-    setAnthropicKeySave('saving')
-    try {
-      await window.api.secretSet({ key: 'anthropic', value: anthropicKeyEntry })
-      setAnthropicKeyPresent(true)
-      setAnthropicKeyEntry('') // clear from UI immediately after save
-      setAnthropicKeySave('saved')
-      setAnthropicKeyEditing(false)
-    } catch {
-      setAnthropicKeySave('error')
-    }
-  }
-
-  async function handleSaveCustomKey(): Promise<void> {
-    if (customKeyEntry.trim().length === 0) return
-    setCustomKeySave('saving')
-    try {
-      await window.api.secretSet({ key: customFields.keyRef, value: customKeyEntry })
-      setCustomKeyPresent(true)
-      setCustomKeyEntry('')
-      setCustomKeySave('saved')
-      setCustomKeyEditing(false)
-    } catch {
-      setCustomKeySave('error')
-    }
-  }
-
   async function handleSaveCustomOpenAI(): Promise<void> {
     const errors = validateCustomFields(customFields)
     setCustomErrors(errors)
@@ -743,20 +674,6 @@ export function SettingsScreen(): React.JSX.Element {
     })
     setCustomOpenAISaveState('saved')
     setCustomDirty(false)
-  }
-
-  async function handleSaveAzureKey(): Promise<void> {
-    if (azureKeyEntry.trim().length === 0) return
-    setAzureKeySave('saving')
-    try {
-      await window.api.secretSet({ key: azureFields.keyRef, value: azureKeyEntry })
-      setAzureKeyPresent(true)
-      setAzureKeyEntry('')
-      setAzureKeySave('saved')
-      setAzureKeyEditing(false)
-    } catch {
-      setAzureKeySave('error')
-    }
   }
 
   async function handleSaveAzureOpenAI(): Promise<void> {
@@ -1000,28 +917,20 @@ export function SettingsScreen(): React.JSX.Element {
                   idBase="audio"
                   label={t('settings.asr.audio.key.label')}
                   placeholder={t('settings.asr.audio.key.placeholder')}
-                  present={audioKeyPresent}
-                  editing={audioKeyEditing}
-                  value={audioKeyEntry}
-                  saveState={audioKeySave}
+                  present={audioKey.present}
+                  editing={audioKey.editing}
+                  value={audioKey.value}
+                  saveState={audioKey.saveState}
                   testIdInput="audio-key-input"
                   testIdSave="save-audio-key"
                   testIdMissing="audio-key-missing"
                   missingText={t('settings.asr.audio.key.missing')}
-                  onChange={(v) => {
-                    setAudioKeyEntry(v)
-                    if (audioKeySave === 'saved') setAudioKeySave('idle')
-                  }}
+                  onChange={audioKey.change}
                   onSave={() => {
-                    void handleSaveAudioKey()
+                    void audioKey.save(audioFields.keyRef)
                   }}
-                  onReplace={() => {
-                    setAudioKeyEditing(true)
-                  }}
-                  onCancel={() => {
-                    setAudioKeyEditing(false)
-                    setAudioKeyEntry('')
-                  }}
+                  onReplace={audioKey.beginReplace}
+                  onCancel={audioKey.cancel}
                 />
 
                 <ProviderKeyHelp keyRef={audioFields.keyRef} testId="audio-key-help" />
@@ -1041,28 +950,20 @@ export function SettingsScreen(): React.JSX.Element {
                   idBase="deepgram"
                   label={t('settings.asr.key.label')}
                   placeholder={t('settings.asr.key.placeholder')}
-                  present={deepgramKeyPresent}
-                  editing={deepgramKeyEditing}
-                  value={deepgramKeyEntry}
-                  saveState={deepgramKeySave}
+                  present={deepgramKey.present}
+                  editing={deepgramKey.editing}
+                  value={deepgramKey.value}
+                  saveState={deepgramKey.saveState}
                   testIdInput="deepgram-key-input"
                   testIdSave="save-deepgram-key"
                   testIdMissing="deepgram-key-missing"
                   missingText={t('settings.asr.key.missing')}
-                  onChange={(v) => {
-                    setDeepgramKeyEntry(v)
-                    if (deepgramKeySave === 'saved') setDeepgramKeySave('idle')
-                  }}
+                  onChange={deepgramKey.change}
                   onSave={() => {
-                    void handleSaveDeepgramKey()
+                    void deepgramKey.save('deepgram')
                   }}
-                  onReplace={() => {
-                    setDeepgramKeyEditing(true)
-                  }}
-                  onCancel={() => {
-                    setDeepgramKeyEditing(false)
-                    setDeepgramKeyEntry('')
-                  }}
+                  onReplace={deepgramKey.beginReplace}
+                  onCancel={deepgramKey.cancel}
                 />
 
                 <ProviderKeyHelp keyRef="deepgram" testId="deepgram-key-help" />
@@ -1275,28 +1176,20 @@ export function SettingsScreen(): React.JSX.Element {
                   idBase="azure-openai"
                   label={t('settings.azure.key.label')}
                   placeholder={t('settings.azure.key.placeholder')}
-                  present={azureKeyPresent}
-                  editing={azureKeyEditing}
-                  value={azureKeyEntry}
-                  saveState={azureKeySave}
+                  present={azureKey.present}
+                  editing={azureKey.editing}
+                  value={azureKey.value}
+                  saveState={azureKey.saveState}
                   testIdInput="azure-openai-key"
                   testIdSave="save-azure-key"
                   testIdMissing="azure-key-missing"
                   missingText={t('settings.azure.key.missing')}
-                  onChange={(v) => {
-                    setAzureKeyEntry(v)
-                    if (azureKeySave === 'saved') setAzureKeySave('idle')
-                  }}
+                  onChange={azureKey.change}
                   onSave={() => {
-                    void handleSaveAzureKey()
+                    void azureKey.save(azureFields.keyRef)
                   }}
-                  onReplace={() => {
-                    setAzureKeyEditing(true)
-                  }}
-                  onCancel={() => {
-                    setAzureKeyEditing(false)
-                    setAzureKeyEntry('')
-                  }}
+                  onReplace={azureKey.beginReplace}
+                  onCancel={azureKey.cancel}
                 />
 
                 <button
@@ -1330,28 +1223,20 @@ export function SettingsScreen(): React.JSX.Element {
                   idBase="anthropic"
                   label={t('settings.extraction.anthropic.key.label')}
                   placeholder={t('settings.extraction.anthropic.key.placeholder')}
-                  present={anthropicKeyPresent}
-                  editing={anthropicKeyEditing}
-                  value={anthropicKeyEntry}
-                  saveState={anthropicKeySave}
+                  present={anthropicKey.present}
+                  editing={anthropicKey.editing}
+                  value={anthropicKey.value}
+                  saveState={anthropicKey.saveState}
                   testIdInput="anthropic-key-input"
                   testIdSave="save-anthropic-key"
                   testIdMissing="anthropic-key-missing"
                   missingText={t('settings.extraction.anthropic.key.missing')}
-                  onChange={(v) => {
-                    setAnthropicKeyEntry(v)
-                    if (anthropicKeySave === 'saved') setAnthropicKeySave('idle')
-                  }}
+                  onChange={anthropicKey.change}
                   onSave={() => {
-                    void handleSaveAnthropicKey()
+                    void anthropicKey.save('anthropic')
                   }}
-                  onReplace={() => {
-                    setAnthropicKeyEditing(true)
-                  }}
-                  onCancel={() => {
-                    setAnthropicKeyEditing(false)
-                    setAnthropicKeyEntry('')
-                  }}
+                  onReplace={anthropicKey.beginReplace}
+                  onCancel={anthropicKey.cancel}
                 />
 
                 <ProviderKeyHelp keyRef="anthropic" testId="anthropic-key-help" />
@@ -1449,28 +1334,20 @@ export function SettingsScreen(): React.JSX.Element {
                   idBase="custom-openai"
                   label={t('settings.custom.key.label')}
                   placeholder={t('settings.custom.key.placeholder')}
-                  present={customKeyPresent}
-                  editing={customKeyEditing}
-                  value={customKeyEntry}
-                  saveState={customKeySave}
+                  present={customKey.present}
+                  editing={customKey.editing}
+                  value={customKey.value}
+                  saveState={customKey.saveState}
                   testIdInput="custom-openai-key"
                   testIdSave="save-custom-key"
                   testIdMissing="custom-key-missing"
                   missingText={t('settings.custom.key.missing')}
-                  onChange={(v) => {
-                    setCustomKeyEntry(v)
-                    if (customKeySave === 'saved') setCustomKeySave('idle')
-                  }}
+                  onChange={customKey.change}
                   onSave={() => {
-                    void handleSaveCustomKey()
+                    void customKey.save(customFields.keyRef)
                   }}
-                  onReplace={() => {
-                    setCustomKeyEditing(true)
-                  }}
-                  onCancel={() => {
-                    setCustomKeyEditing(false)
-                    setCustomKeyEntry('')
-                  }}
+                  onReplace={customKey.beginReplace}
+                  onCancel={customKey.cancel}
                 />
 
                 <button
