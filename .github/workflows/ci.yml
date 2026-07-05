@@ -29,10 +29,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: npm
@@ -48,7 +48,7 @@ jobs:
       # the first run (or a lockfile change) pays for it. Cache misses are
       # non-fatal.
       - name: Cache Electron binaries
-        uses: actions/cache@v5
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
             ~\AppData\Local\electron\Cache
@@ -84,3 +84,39 @@ jobs:
       # needed). This is the gate the Node-side suite structurally cannot catch.
       - name: Native ABI smoke test
         run: npm run test:native
+
+  # Supply-chain + secret hygiene. Split off the DoD gate so it runs in parallel
+  # on cheap Linux (no native rebuild, no Electron download) and its findings
+  # read separately from "does it build/pass". Advisory for now — promote to a
+  # required check (branch protection) once the check name has run once.
+  security:
+    name: Security (audit · secret scan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          # Full history so gitleaks can scan every commit on a PR, not just the tip.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+
+      # Reads package-lock.json against the advisory DB — no install, no native
+      # rebuild. Fails only on high/critical so a low-severity transitive advisory
+      # doesn't wedge every merge.
+      - name: npm audit (high+)
+        run: npm audit --audit-level=high
+
+      # Belt-and-suspenders over GitHub's native secret scanning + push
+      # protection: scans the PR's own commits so a leaked key is caught in CI too.
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

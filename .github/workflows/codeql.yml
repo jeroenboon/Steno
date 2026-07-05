@@ -1,0 +1,44 @@
+name: CodeQL
+
+# Static analysis (SAST) for the TypeScript across main, preload, renderer and
+# shared. Runs on every PR to master, on push to master, and weekly to catch
+# newly published query patterns against unchanged code. Findings surface in the
+# repo's Security tab; this workflow is advisory and does not gate merges.
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  schedule:
+    - cron: '27 4 * * 1' # Mondays 04:27 UTC
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL (javascript-typescript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@411c4c9a36b3fca4d674f06b6396b2c6d23522c6 # v3
+        with:
+          languages: javascript-typescript
+          # Pure static analysis of the source; no build step needed and no
+          # native ABI swap to worry about.
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@411c4c9a36b3fca4d674f06b6396b2c6d23522c6 # v3
+        with:
+          category: '/language:javascript-typescript'
