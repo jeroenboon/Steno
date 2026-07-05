@@ -286,7 +286,7 @@ export const ItemsChangedPayloadSchema = z.object({
       agendaItemId: z.string().min(1),
       sourceSpanId: z.string().min(1),
       owner: z.string().min(1).optional(),
-      dueDate: z.string().datetime().optional(),
+      dueDate: z.iso.datetime().optional(),
       status: z.enum(['open', 'done']),
       state: z.enum(['proposed', 'confirmed']),
     }),
@@ -396,7 +396,7 @@ const DecisionUpdatesSchema = z.object({
 const ActionUpdatesSchema = z.object({
   description: z.string().min(1).optional(),
   owner: z.string().min(1).optional(),
-  dueDate: z.string().datetime().optional(),
+  dueDate: z.iso.datetime().optional(),
   status: z.enum(['open', 'done']).optional(),
   agendaItemId: z.string().min(1).optional(),
 })
@@ -442,7 +442,7 @@ const NewActionItemSchema = z.object({
   agendaItemId: z.string().min(1),
   sourceSpanId: z.string().min(1),
   owner: z.string().min(1).optional(),
-  dueDate: z.string().datetime().optional(),
+  dueDate: z.iso.datetime().optional(),
   status: z.enum(['open', 'done']),
 })
 

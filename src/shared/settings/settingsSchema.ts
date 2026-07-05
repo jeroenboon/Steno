@@ -90,7 +90,7 @@ export type MistralVoxtralConfig = z.infer<typeof MistralVoxtralConfigSchema>
  */
 export const AzureSpeechConfigSchema = z.object({
   /** Azure Speech resource endpoint, e.g. https://my-resource.cognitiveservices.azure.com/ */
-  endpoint: z.string().url(),
+  endpoint: z.url(),
   /** Azure deployment name or region code, e.g. my-speech-deployment or westeurope */
   deployment: z.string().min(1),
   /** Azure API version (optional) */
@@ -119,7 +119,7 @@ export const OpenAICompatibleConfigSchema = z.object({
   /** Preset identifier: 'openai' | 'mistral' | 'custom' (default 'custom') */
   preset: z.enum(['openai', 'mistral', 'custom']).default('custom'),
   /** Base URL of the OpenAI-compatible API, e.g. https://api.openai.com/v1 */
-  baseUrl: z.string().url(),
+  baseUrl: z.url(),
   /** Model identifier, e.g. gpt-4o */
   model: z.string().min(1),
   /** Key for SecretStorage lookup — never the raw key value */
@@ -143,7 +143,7 @@ export type OpenAICompatibleConfig = z.infer<typeof OpenAICompatibleConfigSchema
  */
 export const AzureOpenAIConfigSchema = z.object({
   /** Azure OpenAI resource endpoint, e.g. https://my-resource.openai.azure.com/ */
-  endpoint: z.string().url(),
+  endpoint: z.url(),
   /** Azure OpenAI deployment name, e.g. my-gpt-4o-deployment */
   deployment: z.string().min(1),
   /** Azure API version, e.g. 2024-12-01-preview */

@@ -179,7 +179,7 @@ export const ActionSchema = z.object({
   /** The person responsible for this action. Optional until the note-taker assigns it. */
   owner: ParticipantIdSchema.optional(),
   /** When this action is due, if set. */
-  dueDate: z.string().datetime().optional(),
+  dueDate: z.iso.datetime().optional(),
   /** Completion status: open (not yet done) or done (completed). */
   status: ActionStatusSchema,
   /** Lifecycle state: proposed (from extraction provider) or confirmed (by note-taker). */
@@ -220,7 +220,7 @@ export const RunningSummarySchema = z.object({
   /** The current running summary text. */
   text: z.string(),
   /** When this summary was last updated. */
-  updatedAt: z.string().datetime(),
+  updatedAt: z.iso.datetime(),
 })
 
 export type RunningSummary = z.infer<typeof RunningSummarySchema>
@@ -256,7 +256,7 @@ export const NudgeSchema = z.object({
    * ISO 8601 datetime set by the consumer when the note-taker dismisses the nudge.
    * Absent until dismissed. Dismissal is in-memory only; nudges regenerate from state.
    */
-  dismissedAt: z.string().datetime().optional(),
+  dismissedAt: z.iso.datetime().optional(),
 })
 
 export type Nudge = z.infer<typeof NudgeSchema>
@@ -284,13 +284,13 @@ export const MeetingSchema = z.object({
    */
   paused: z.boolean().default(false),
   /** ISO 8601 timestamp when the meeting was created. */
-  createdAt: z.string().datetime(),
+  createdAt: z.iso.datetime(),
   /** ISO 8601 timestamp when the meeting was last modified, if applicable. */
-  updatedAt: z.string().datetime().optional(),
+  updatedAt: z.iso.datetime().optional(),
   /** ISO 8601 timestamp when Draft → Live transition occurred, if applicable. */
-  startedAt: z.string().datetime().optional(),
+  startedAt: z.iso.datetime().optional(),
   /** ISO 8601 timestamp when the meeting ended, if applicable. */
-  endedAt: z.string().datetime().optional(),
+  endedAt: z.iso.datetime().optional(),
   /** The primary language for extraction/UI (e.g., 'nl', 'en'). */
   primaryLanguage: z.string().min(1),
   /**

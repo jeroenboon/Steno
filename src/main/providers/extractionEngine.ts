@@ -270,7 +270,7 @@ interface ValidatedArray<T> {
 }
 
 /** Validate each element against `schema`, keeping the valid ones and recording why the rest dropped. */
-function validateArray<S extends z.ZodTypeAny>(
+function validateArray<S extends z.ZodType>(
   value: unknown,
   schema: S,
 ): ValidatedArray<z.infer<S>> {
@@ -279,7 +279,7 @@ function validateArray<S extends z.ZodTypeAny>(
   const droppedPaths: string[] = []
   for (const item of value) {
     const result = schema.safeParse(item)
-    if (result.success) items.push(result.data as z.infer<S>)
+    if (result.success) items.push(result.data)
     else droppedPaths.push(...result.error.issues.map((i) => i.path.join('.') || '(root)'))
   }
   return { items, rawCount: value.length, droppedPaths }
