@@ -32,6 +32,7 @@ import { participantRepo } from './db/repos/participantRepo'
 import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
 import { devlog, initDevlog } from './devlog'
 import { createIpcRegistry } from './ipc-registry'
+import { denyWindowOpen, isNavigationAllowed } from './navigation-guards'
 import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
 import { sendItemsChanged } from './services/itemsChangedNotifier'
@@ -482,7 +483,19 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
 function createWindow(): BrowserWindow {
   const preloadPath = join(__dirname, '../preload/index.js')
   const opts = createWindowOptions(preloadPath, appIconPath)
-  return new BrowserWindow(opts)
+  const window = new BrowserWindow(opts)
+
+  // Navigation guards (ADR 0005 defence-in-depth): never open new windows, and
+  // block any navigation away from the app's own content (dev-server origin in
+  // dev, file: in prod). Logic lives in navigation-guards.ts so it is testable.
+  window.webContents.setWindowOpenHandler(denyWindowOpen)
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!isNavigationAllowed(url, process.env.ELECTRON_RENDERER_URL)) {
+      event.preventDefault()
+    }
+  })
+
+  return window
 }
 
 // Load the renderer. Called AFTER IPC handlers are registered so the renderer
