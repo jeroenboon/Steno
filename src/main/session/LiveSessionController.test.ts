@@ -392,4 +392,34 @@ describe('pause() / resume()', () => {
     expect(() => controller.pause(MEETING_ID)).not.toThrow()
     expect(mRepo.findById(MEETING_ID)?.paused).toBe(true)
   })
+
+  it('pause() closes the ASR session so a long pause cannot leave it idle-closed', async () => {
+    const { controller, asr, mRepo } = await buildHarness()
+    seedLive(mRepo)
+    controller.start(MEETING_ID)
+    const stopSpy = vi.spyOn(asr, 'stop')
+
+    controller.pause(MEETING_ID)
+
+    // The ASR socket is torn down on pause rather than left to idle-close and
+    // reconnect-loop; resume() opens a fresh one.
+    expect(stopSpy).toHaveBeenCalled()
+  })
+
+  it('resume() rebuilds the ASR session so spans flow again after a pause', async () => {
+    const { controller, sender, asr, mRepo, buildAsr } = await buildHarness()
+    seedLive(mRepo)
+    controller.start(MEETING_ID)
+    controller.pause(MEETING_ID)
+
+    controller.resume(MEETING_ID)
+
+    // A fresh ASR session was built for the resume, not only the initial start.
+    expect(buildAsr).toHaveBeenCalledTimes(2)
+
+    // Spans from the resumed session reach the renderer again.
+    asr.pushScriptedSpan(makeSpan('after-resume'))
+    await flush()
+    expect(sender.sentOn('transcript:span').length).toBeGreaterThan(0)
+  })
 })
