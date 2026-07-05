@@ -237,6 +237,12 @@ export class LiveSessionController {
       // Ended meeting). startMeeting would reject it, so preserve the prior
       // permissive upsert rather than throw during audio:start.
       this._meetingRepo.update({ ...existing, state: 'live', startedAt: existing.startedAt ?? now })
+    } else if (existing.paused) {
+      // Resuming an interrupted meeting that was left paused (state stayed 'live'
+      // while the app was closed). The fresh runtime records from the start, so
+      // clear the stale flag — otherwise the next meeting:pause throws
+      // "already paused" (MeetingLifecycleService.pauseMeeting rejects it).
+      this._meetingRepo.update({ ...existing, paused: false })
     }
 
     // Rebuild extraction provider from current settings so a key entered after
