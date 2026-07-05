@@ -15,6 +15,14 @@ title = "LiveTranscriber gitleaks config"
 [extend]
 useDefault = true
 
+# Known historical leaks that are dead and deliberately NOT purged from history
+# (rewriting shared history is out of scope; the key is revoked) live in the
+# root `.gitleaksignore`, keyed by exact finding fingerprint. gitleaks 8.30
+# rejects a fingerprints-only `[allowlist]` here ("must contain at least one
+# check for: commits, paths, regexes, or stopwords"), and `.gitleaksignore` is
+# the purpose-built, fingerprint-precise suppression that keeps the bare-hex
+# rule firing on anything new.
+
 [[rules]]
 id = "bare-40-hex-secret"
 description = "Bare 40-char lowercase-hex secret with no in-content keyword (e.g. a Deepgram API key dropped into a text file)"
@@ -39,4 +47,9 @@ entropy = 3.5
     '''(^|/)package-lock\.json$''',
     '''(^|/)pnpm-lock\.yaml$''',
     '''(^|/)yarn\.lock$''',
+    # gitleaks' own config: `.gitleaksignore` lists finding fingerprints (each
+    # embeds a 40-hex commit SHA) and `.gitleaks.toml` may reference commit SHAs
+    # in comments — neither is a place a live secret would legitimately live.
+    '''(^|/)\.gitleaksignore$''',
+    '''(^|/)\.gitleaks\.toml$''',
   ]
