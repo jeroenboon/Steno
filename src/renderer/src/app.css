@@ -783,6 +783,65 @@ body::before {
   }
 }
 
+/* --- Finalising overlay (final pass in progress) --- */
+
+.live-ending-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background-color: rgba(246, 241, 231, 0.72); /* --color-base, translucent */
+  backdrop-filter: blur(3px);
+}
+
+.live-ending-overlay__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  max-width: 420px;
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  background-color: var(--color-surface-1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.live-ending-overlay__spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid var(--color-accent-muted);
+  border-top-color: var(--color-accent);
+  animation: live-ending-spin 0.8s linear infinite;
+}
+
+.live-ending-overlay__title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.live-ending-overlay__subtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+@keyframes live-ending-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-ending-overlay__spinner {
+    animation-duration: 2.4s;
+  }
+}
+
 /* --- Buttons (ink is the action colour) --- */
 
 /* Primary = the Fountain Pen: solid Myrtle fill, paper text. */

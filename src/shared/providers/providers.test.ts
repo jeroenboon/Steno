@@ -221,7 +221,7 @@ describe('ExtractionResponseSchema', () => {
     const result = ExtractionResponseSchema.parse({
       proposedDecisions: [],
       proposedActions: [],
-      discussionSummaries: [{ agendaItemId: 'agenda-1', text: 'We talked about the stack' }],
+      discussionSummaries: [{ agendaItemHint: 'agenda-1', text: 'We talked about the stack' }],
     })
     expect(result.discussionSummaries).toHaveLength(1)
     expect(result.discussionSummaries?.[0]?.text).toBe('We talked about the stack')
@@ -431,7 +431,7 @@ describe('FakeExtractionProvider', () => {
     provider.scriptFinalPassResponse({
       proposedDecisions: [],
       proposedActions: [{ description: 'Write docs', sourceSpanId: 'span-2' }],
-      discussionSummaries: [{ agendaItemId: 'agenda-1', text: 'We decided on the stack' }],
+      discussionSummaries: [{ agendaItemHint: 'agenda-1', text: 'We decided on the stack' }],
     })
 
     const result = await provider.extract({ ...minimalRequest, isFinalPass: true })
@@ -445,7 +445,7 @@ describe('FakeExtractionProvider', () => {
     provider.scriptFinalPassResponse({
       proposedDecisions: [],
       proposedActions: [],
-      discussionSummaries: [{ agendaItemId: 'agenda-1', text: 'Irrelevant for rolling' }],
+      discussionSummaries: [{ agendaItemHint: 'agenda-1', text: 'Irrelevant for rolling' }],
     })
 
     // Rolling call — should NOT return the final-pass script

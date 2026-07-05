@@ -386,6 +386,20 @@ export function ReviewScreen(): React.JSX.Element {
     ]
   }, [agendaItems])
 
+  const knownAgendaIds = React.useMemo(() => new Set(agendaItems.map((a) => a.id)), [agendaItems])
+
+  // Which group an item's agendaItemId belongs to. Off-agenda also catches
+  // orphans: an item whose agenda item isn't in the list (e.g. a final-pass
+  // routing to an agenda item the store never received) surfaces under
+  // Off-agenda instead of vanishing.
+  const belongsToGroup = useCallback(
+    (itemAgendaId: string, groupId: string): boolean =>
+      groupId === OffAgenda.id
+        ? itemAgendaId === OffAgenda.id || !knownAgendaIds.has(itemAgendaId)
+        : itemAgendaId === groupId,
+    [knownAgendaIds],
+  )
+
   const handleEdit = useCallback((kind: ItemKind, id: string, text: string, owner: string) => {
     setEditState({ id, kind, text, owner })
   }, [])
@@ -559,13 +573,19 @@ export function ReviewScreen(): React.JSX.Element {
 
       <div className="review-groups">
         {allGroups.map((group) => {
-          const summary = discussionSummaries.find((s) => s.agendaItemId === group.id)
-          const groupDecisions = confirmedDecisions.filter((d) => d.agendaItemId === group.id)
-          const groupActions = confirmedActions.filter((a) => a.agendaItemId === group.id)
-          const groupProposedDecisions = proposedDecisions.filter(
-            (d) => d.agendaItemId === group.id,
+          const summary = discussionSummaries.find((s) => belongsToGroup(s.agendaItemId, group.id))
+          const groupDecisions = confirmedDecisions.filter((d) =>
+            belongsToGroup(d.agendaItemId, group.id),
           )
-          const groupProposedActions = proposedActions.filter((a) => a.agendaItemId === group.id)
+          const groupActions = confirmedActions.filter((a) =>
+            belongsToGroup(a.agendaItemId, group.id),
+          )
+          const groupProposedDecisions = proposedDecisions.filter((d) =>
+            belongsToGroup(d.agendaItemId, group.id),
+          )
+          const groupProposedActions = proposedActions.filter((a) =>
+            belongsToGroup(a.agendaItemId, group.id),
+          )
 
           return (
             <ReviewGroup

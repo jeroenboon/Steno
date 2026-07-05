@@ -194,6 +194,34 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
+describe('LiveScreen — finalising the meeting', () => {
+  it('shows a generating-notes overlay while the final pass runs', async () => {
+    // meetingEnd resolves only after the whole final pass; hold it open so the
+    // overlay is observable (in production it clears when we navigate to Review).
+    let resolveEnd!: (v: { ok: true }) => void
+    mockApi.meetingEnd.mockReturnValueOnce(
+      new Promise<{ ok: true }>((res) => {
+        resolveEnd = res
+      }),
+    )
+
+    const user = userEvent.setup()
+    render(<LiveScreen />)
+
+    expect(screen.queryByTestId('live-ending-overlay')).not.toBeInTheDocument()
+    await user.click(await screen.findByTestId('end-meeting-btn'))
+
+    expect(await screen.findByTestId('live-ending-overlay')).toBeInTheDocument()
+    expect(screen.getByTestId('end-meeting-btn')).toBeDisabled()
+
+    // Let the pass finish so the promise settles cleanly.
+    await act(async () => {
+      resolveEnd({ ok: true })
+      await Promise.resolve()
+    })
+  })
+})
+
 describe('LiveScreen — guard: no active meeting', () => {
   it('shows empty state when activeMeeting is null', async () => {
     useAppStore.setState({ activeMeeting: null, route: 'live' })

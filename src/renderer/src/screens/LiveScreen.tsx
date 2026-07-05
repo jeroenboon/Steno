@@ -746,6 +746,27 @@ export function LiveScreen(): React.JSX.Element {
       className={`screen screen--live screen--live-items${isRecording ? ' screen--live--recording' : ''}`}
     >
       {/* ------------------------------------------------------------------ */}
+      {/* Finalising overlay — the final pass runs synchronously inside      */}
+      {/* meetingEnd (inference + extraction + per-agenda summaries, several  */}
+      {/* seconds of provider calls). Make that wait explicit so ending the   */}
+      {/* meeting never looks frozen; it clears when we navigate to Review.   */}
+      {/* ------------------------------------------------------------------ */}
+      {endingMeeting && (
+        <div
+          className="live-ending-overlay"
+          data-testid="live-ending-overlay"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="live-ending-overlay__card">
+            <span className="live-ending-overlay__spinner" aria-hidden="true" />
+            <p className="live-ending-overlay__title">{t('live.ending.title')}</p>
+            <p className="live-ending-overlay__subtitle">{t('live.ending.subtitle')}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
       {/* Header */}
       {/* ------------------------------------------------------------------ */}
       <header className="live-header">
@@ -772,11 +793,12 @@ export function LiveScreen(): React.JSX.Element {
             className="btn btn--secondary live-end-btn"
             data-testid="end-meeting-btn"
             disabled={endingMeeting}
+            aria-busy={endingMeeting}
             onClick={() => {
               void handleEndMeeting()
             }}
           >
-            {t('live.end.button')}
+            {endingMeeting ? t('live.end.busy') : t('live.end.button')}
           </button>
         </div>
       </header>

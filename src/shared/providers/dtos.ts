@@ -71,8 +71,13 @@ export type ProposedAction = z.infer<typeof ProposedActionSchema>
  * Per CONTEXT.md: "never live — generated when the Meeting reaches Ended".
  */
 export const ProposedDiscussionSummarySchema = z.object({
-  /** The Agenda Item this summary covers. */
-  agendaItemId: z.string().min(1),
+  /**
+   * Optional hint toward the Agenda Item this summary covers. The provider only
+   * ever sees a numbered agenda (no domain IDs), so it references the item by
+   * title/topic; the scheduler resolves this against the real agenda via
+   * `resolveAgendaItem` (unmatched/blank → Off-agenda). Never a domain ID.
+   */
+  agendaItemHint: z.string().optional(),
   /** The summary text. */
   text: z.string(),
 })

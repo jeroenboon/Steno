@@ -66,10 +66,10 @@ const EXTRACTION_TOOL_INPUT_SCHEMA = {
       items: {
         type: 'object',
         properties: {
-          agendaItemId: { type: 'string' },
+          agendaItemHint: { type: 'string' },
           text: { type: 'string' },
         },
-        required: ['agendaItemId', 'text'],
+        required: ['text'],
       },
     },
   },

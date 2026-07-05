@@ -139,6 +139,30 @@ describe('ReviewScreen — basic rendering', () => {
   })
 })
 
+describe('ReviewScreen — orphan items never vanish', () => {
+  it('shows an item under Off-agenda when its agenda item is not in the store', () => {
+    // The final pass can route an item onto an agenda item the renderer never
+    // received (stale/empty store agenda). Such an item must still be visible.
+    useAppStore.setState({
+      agendaItems: [AGENDA_1],
+      proposedActions: [
+        {
+          id: 'a-orphan',
+          description: 'Wees-actie',
+          agendaItemId: 'ghost-agenda',
+          sourceSpanId: 'span-x',
+          status: 'open',
+          state: 'proposed',
+        },
+      ],
+    })
+    renderReview()
+
+    const offAgenda = screen.getByTestId('review-group-__off-agenda__')
+    expect(offAgenda).toHaveTextContent('Wees-actie')
+  })
+})
+
 describe('ReviewScreen — Markdown export', () => {
   it('shows a saving state while exporting, then restores when done', async () => {
     let resolveSave: (v: { ok: true }) => void = () => undefined

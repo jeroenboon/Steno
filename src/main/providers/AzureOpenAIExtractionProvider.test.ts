@@ -144,7 +144,7 @@ describe('AzureOpenAIExtractionProvider.extract', () => {
       okResponse(
         JSON.stringify({
           ...validExtraction,
-          discussionSummaries: [{ agendaItemId: 'agenda-1', text: 'Samenvatting' }],
+          discussionSummaries: [{ agendaItemHint: 'agenda-1', text: 'Samenvatting' }],
         }),
       ),
     )

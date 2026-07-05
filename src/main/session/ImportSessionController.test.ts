@@ -123,7 +123,7 @@ describe('ImportSessionController', () => {
     fakeExtraction.scriptFinalPassResponse({
       proposedDecisions: [{ rationale: 'We launchen in Q3', sourceSpanId: 'span-1' }],
       proposedActions: [],
-      discussionSummaries: [{ agendaItemId: '__off-agenda__', text: 'Besproken: de planning.' }],
+      discussionSummaries: [{ agendaItemHint: undefined, text: 'Besproken: de planning.' }],
     })
     const s = makeSender()
     const controller = makeController(repos, fakeAsr, fakeExtraction, s.sender)
@@ -177,7 +177,7 @@ describe('ImportSessionController', () => {
     fakeExtraction.scriptFinalPassResponse({
       proposedDecisions: [],
       proposedActions: [],
-      discussionSummaries: [{ agendaItemId: '__off-agenda__', text: 'Besproken.' }],
+      discussionSummaries: [{ agendaItemHint: undefined, text: 'Besproken.' }],
     })
     const s = makeSender()
     const controller = makeController(repos, fakeAsr, fakeExtraction, s.sender)

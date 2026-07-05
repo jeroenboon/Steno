@@ -156,7 +156,7 @@ describe('ExtractionEngine.extract', () => {
   it('carries isFinalPass to the wire and keeps discussion summaries on the final pass', async () => {
     const withSummaries = {
       ...validExtraction,
-      discussionSummaries: [{ agendaItemId: 'agenda-1', text: 'Samenvatting' }],
+      discussionSummaries: [{ agendaItemHint: 'agenda-1', text: 'Samenvatting' }],
     }
     const wire = fakeWire([withSummaries])
     const engine = makeEngine(wire)

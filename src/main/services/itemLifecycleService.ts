@@ -139,6 +139,24 @@ export class ItemLifecycleService {
   }
 
   // -------------------------------------------------------------------------
+  // retractAllProposed — supersede every still-Proposed item of a meeting
+  //
+  // Used by the final extraction pass, which re-extracts the whole transcript
+  // and is authoritative over it. Retracting the still-Proposed rolling items
+  // first prevents the same content appearing twice (e.g. once under Off-agenda
+  // from a live turn, once under its agenda item from the final pass). Confirmed
+  // items the note-taker already curated are left untouched.
+  // -------------------------------------------------------------------------
+
+  retractAllProposed(meetingId: MeetingId): void {
+    const decisions = this.decisions.listByMeeting(meetingId).filter((d) => d.state === 'proposed')
+    const actions = this.actions.listByMeeting(meetingId).filter((a) => a.state === 'proposed')
+    for (const d of decisions) this.decisions.delete(d.id)
+    for (const a of actions) this.actions.delete(a.id)
+    if (decisions.length > 0 || actions.length > 0) this.notify(meetingId)
+  }
+
+  // -------------------------------------------------------------------------
   // confirm — note-taker confirms a Proposed item → Confirmed
   // -------------------------------------------------------------------------
 
