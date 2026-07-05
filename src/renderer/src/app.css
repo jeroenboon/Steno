@@ -239,6 +239,20 @@ body::before {
   margin-bottom: var(--space-10);
 }
 
+/* Primary + secondary sit side by side (same hierarchy treatment as the Draft
+ * action row): the "Nieuwe vergadering" CTA leads, "Importeer opname" beside it,
+ * instead of two stacked content-width buttons. */
+.home__action-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.home__action-buttons .btn--primary {
+  padding-inline: var(--space-6);
+}
+
 /* Active meeting callout: ink-red bordered, with pulsing dot */
 .home__active-callout {
   display: flex;

@@ -130,24 +130,26 @@ export function HomeScreen(): React.JSX.Element {
               </button>
             </div>
           )}
-          <button
-            type="button"
-            className="btn btn--primary"
-            data-testid="home-new-meeting"
-            onClick={handleNewMeeting}
-          >
-            {t('home.new.button')}
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary"
-            data-testid="home-import"
-            onClick={() => {
-              setRoute('import')
-            }}
-          >
-            {t('home.import.button')}
-          </button>
+          <div className="home__action-buttons">
+            <button
+              type="button"
+              className="btn btn--primary"
+              data-testid="home-new-meeting"
+              onClick={handleNewMeeting}
+            >
+              {t('home.new.button')}
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary"
+              data-testid="home-import"
+              onClick={() => {
+                setRoute('import')
+              }}
+            >
+              {t('home.import.button')}
+            </button>
+          </div>
         </div>
 
         <div className="home__history">
