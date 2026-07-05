@@ -1,0 +1,32 @@
+# Dependabot keeps dependencies and CI actions current. Grouped, weekly PRs so
+# updates arrive as reviewable batches rather than a stream of one-off PRs. The
+# same DoD gate (.github/workflows/ci.yml) runs on every Dependabot PR, so a
+# bump that breaks build/lint/test/native can never auto-merge.
+version: 2
+updates:
+  # npm: app + tooling. Grouped by risk so a patch wave is one PR.
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      production-patches:
+        dependency-type: production
+        update-types: [patch]
+
+  # Keep the pinned action SHAs current (Dependabot rewrites the SHA and the
+  # trailing version comment together).
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ['*']
