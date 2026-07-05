@@ -28,13 +28,10 @@ function snakeToCamel(key: string): string {
   return key.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())
 }
 
-export function parseRow<S extends z.ZodTypeAny>(
-  row: Record<string, unknown>,
-  schema: S,
-): z.infer<S> {
+export function parseRow<S extends z.ZodType>(row: Record<string, unknown>, schema: S): z.infer<S> {
   const mapped: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(row)) {
     mapped[snakeToCamel(key)] = value === null ? undefined : value
   }
-  return schema.parse(mapped) as z.infer<S>
+  return schema.parse(mapped)
 }
