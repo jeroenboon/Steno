@@ -10,13 +10,17 @@
  *
  * Expected files and hashes are injected at construction time so tests can use
  * controlled data without real HTTP calls. Production code uses
- * ModelDownloader.EXPECTED_FILES. Hashes will be filled in after the spike.
+ * ModelDownloader.EXPECTED_FILES, which pins the authoritative SHA-256 of every
+ * file (see that constant for provenance). Verification is fail-closed: a
+ * mismatch removes the partial download and throws (audit C6).
  */
 
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+
+import { devlog } from '../../devlog'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,8 +30,10 @@ export interface ExpectedFile {
   /** Filename relative to modelDir. */
   name: string
   /**
-   * Expected SHA-256 hex digest. Empty string means "skip hash check" —
-   * used as a placeholder until the spike produces real hashes.
+   * Expected SHA-256 hex digest. An empty string means "cannot verify": the
+   * check is skipped for this file but a loud devlog warning is emitted (never a
+   * silent no-op). Production EXPECTED_FILES pin real digests, so this escape
+   * hatch is for tests / not-yet-pinned mirrors only.
    */
   sha256: string
 }
@@ -48,16 +54,30 @@ function hfUrl(filename: string): string {
 
 export class ModelDownloader {
   /**
-   * Expected files in the sherpa-onnx Whisper small model.
+   * Expected files in the sherpa-onnx Whisper small model, with the authoritative
+   * SHA-256 of each file as published by the source repo
+   * (huggingface.co/csukuangfj/sherpa-onnx-whisper-small, main).
    *
-   * NOTE: sha256 values are placeholders ('') until the spike is completed on
-   * the target hardware. Fill them in after running scripts/spike-sherpa-asr.mjs
-   * and verifying the downloads.
+   * Provenance (audit C6): the two ONNX blobs are git-LFS files, so their SHA-256
+   * IS HuggingFace's LFS object id — read from the tree API and cross-checked
+   * against the `X-Linked-ETag` header on the resolve endpoint. `small-tokens.txt`
+   * is a non-LFS file (LFS gives no hash for it), so its digest is the SHA-256 of
+   * the downloaded content (816730 bytes). Update these only alongside a matching
+   * change to the upstream file — a wrong value rejects a healthy download.
    */
   static readonly EXPECTED_FILES: ExpectedFile[] = [
-    { name: 'small-encoder.int8.onnx', sha256: '' },
-    { name: 'small-decoder.int8.onnx', sha256: '' },
-    { name: 'small-tokens.txt', sha256: '' },
+    {
+      name: 'small-encoder.int8.onnx',
+      sha256: '4cbe7b22fa9026b843b60a68640c747de05bafb1a11b57edc0e66c232d9f33a9',
+    },
+    {
+      name: 'small-decoder.int8.onnx',
+      sha256: 'acad50b5c782696e91b55914cc5ab4f756f1532f76e22aa6fc615f39fb69a8ee',
+    },
+    {
+      name: 'small-tokens.txt',
+      sha256: 'b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126',
+    },
   ]
 
   constructor(
@@ -77,7 +97,7 @@ export class ModelDownloader {
 
   /**
    * Verifies each expected file by comparing its SHA-256 to the stored hash.
-   * Files with an empty sha256 value are skipped (spike pending).
+   * Files with an empty sha256 value are skipped with a loud devlog warning.
    * Throws if a file is missing or its hash does not match.
    */
   verify(): Promise<boolean> {
@@ -89,7 +109,13 @@ export class ModelDownloader {
         )
       }
 
-      if (expected.sha256 === '') continue
+      if (expected.sha256 === '') {
+        // Degrade, never crash: an unset expected hash means we cannot verify this
+        // file. Skip it rather than blocking the model, but log loudly so it is
+        // never a silent integrity no-op (audit C6).
+        devlog('model', 'hash-check-skipped', { file: expected.name })
+        continue
+      }
 
       const actual = sha256File(filePath)
       if (actual !== expected.sha256) {
@@ -163,7 +189,23 @@ export class ModelDownloader {
       onProgress(totalBytes, totalBytes)
     }
 
-    await this.verify()
+    // Fail-closed integrity gate: a mismatch (or a missing file) rejects AND
+    // removes every file this download wrote, so no half-written / corrupt model
+    // is left on disk for sherpa to load. isDownloaded() then stays false and the
+    // next attempt re-downloads cleanly.
+    try {
+      await this.verify()
+    } catch (err) {
+      this.removeAll()
+      throw err
+    }
+  }
+
+  /** Deletes every expected file from modelDir. Best-effort; ignores absent files. */
+  private removeAll(): void {
+    for (const file of this.expectedFiles) {
+      rmSync(join(this.modelDir, file.name), { force: true })
+    }
   }
 }
 
