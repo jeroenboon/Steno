@@ -64,7 +64,7 @@
     "cross-env": "^10.1.0",
     "electron": "^42.4.1",
     "electron-builder": "^26.15.3",
-    "electron-vite": "^3.0.0",
+    "electron-vite": "^5.0.0",
     "eslint": "^9.25.1",
     "eslint-config-prettier": "^10.1.5",
     "eslint-import-resolver-typescript": "^3.10.1",
