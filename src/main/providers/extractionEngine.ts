@@ -51,8 +51,7 @@ import { devlog } from '../devlog'
  * the prompt the engine builds.
  */
 export type ExtractionCall =
-  | { readonly kind: 'extract'; readonly isFinalPass: boolean }
-  | { readonly kind: 'infer' }
+  { readonly kind: 'extract'; readonly isFinalPass: boolean } | { readonly kind: 'infer' }
 
 /**
  * The per-vendor transport seam. Given the fully built system + user prompts,
@@ -270,10 +269,7 @@ interface ValidatedArray<T> {
 }
 
 /** Validate each element against `schema`, keeping the valid ones and recording why the rest dropped. */
-function validateArray<S extends z.ZodType>(
-  value: unknown,
-  schema: S,
-): ValidatedArray<z.infer<S>> {
+function validateArray<S extends z.ZodType>(value: unknown, schema: S): ValidatedArray<z.infer<S>> {
   if (!Array.isArray(value)) return { items: [], rawCount: 0, droppedPaths: [] }
   const items: z.infer<S>[] = []
   const droppedPaths: string[] = []
