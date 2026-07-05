@@ -146,19 +146,6 @@ export type ParticipantRemoveRequest = z.infer<typeof ParticipantRemoveRequestSc
 export type ParticipantRemoveResponse = z.infer<typeof ParticipantRemoveResponseSchema>
 
 // ---------------------------------------------------------------------------
-// meeting:start — transition a draft meeting to live (item 0014)
-// ---------------------------------------------------------------------------
-
-export const MeetingStartRequestSchema = z.object({
-  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
-})
-
-export const MeetingStartResponseSchema = MeetingSchema
-
-export type MeetingStartRequest = z.infer<typeof MeetingStartRequestSchema>
-export type MeetingStartResponse = z.infer<typeof MeetingStartResponseSchema>
-
-// ---------------------------------------------------------------------------
 // provider:testConnection — probe the configured provider's credentials (5.1)
 //
 // One cheap auth/reachability round-trip (models/projects listing) so the user
@@ -793,7 +780,6 @@ export type IpcChannel =
   | 'agendaItem:remove'
   | 'participant:add'
   | 'participant:remove'
-  | 'meeting:start'
   | 'meeting:end'
   | 'audio:start'
   | 'audio:stop'
@@ -850,8 +836,6 @@ export interface RendererApi {
   participantAdd: (req: ParticipantAddRequest) => Promise<ParticipantAddResponse>
   /** Remove a participant. */
   participantRemove: (req: ParticipantRemoveRequest) => Promise<ParticipantRemoveResponse>
-  /** Start a meeting (Draft → Live). */
-  meetingStart: (req: MeetingStartRequest) => Promise<MeetingStartResponse>
   /**
    * Write an API key into safeStorage. The key value is transmitted to main
    * exactly once during entry and is never returned to the renderer.

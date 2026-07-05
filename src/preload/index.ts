@@ -34,8 +34,6 @@ import type {
   ParticipantAddResponse,
   ParticipantRemoveRequest,
   ParticipantRemoveResponse,
-  MeetingStartRequest,
-  MeetingStartResponse,
   MeetingEndRequest,
   MeetingEndResponse,
   AudioStartRequest,
@@ -107,8 +105,6 @@ const api: RendererApi = {
     ipcRenderer.invoke('participant:add', req) as Promise<ParticipantAddResponse>,
   participantRemove: (req: ParticipantRemoveRequest) =>
     ipcRenderer.invoke('participant:remove', req) as Promise<ParticipantRemoveResponse>,
-  meetingStart: (req: MeetingStartRequest) =>
-    ipcRenderer.invoke('meeting:start', req) as Promise<MeetingStartResponse>,
 
   // ---------------------------------------------------------------------------
   // Secrets (item 0016) — write-only; no secret:get channel

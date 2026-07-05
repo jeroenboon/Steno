@@ -14,6 +14,8 @@ import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 
+import type { IpcChannel } from '@shared/ipc'
+
 import { runMigrations } from './db/migrate'
 import { agendaItemRepo } from './db/repos/agendaItemRepo'
 import { meetingRepo } from './db/repos/meetingRepo'
@@ -110,17 +112,14 @@ describe('IPC registry — item 0014 (meeting/agenda/participant ops)', () => {
   })
 
   describe('meeting:start', () => {
-    it('transitions a draft meeting to live', async () => {
-      const createResp = await registry.dispatch('meeting:create', {
-        title: 'Test',
-        primaryLanguage: 'nl',
-      })
-
-      const meetingId = (createResp as { id: string }).id
-
-      const response = await registry.dispatch('meeting:start', { meetingId })
-
-      expect(response).toHaveProperty('state', 'live')
+    // The meeting:start channel was removed (audit C5). It was a fabricating
+    // stub with no side effects; the real Draft → Live transition is owned by
+    // audio:start via LiveSessionController → MeetingLifecycleService. Dispatching
+    // the retired channel must now reject as an unknown channel.
+    it('is no longer a registered channel', async () => {
+      await expect(
+        registry.dispatch('meeting:start' as IpcChannel, { meetingId: 'm-1' }),
+      ).rejects.toThrow(/unknown channel/i)
     })
   })
 })
