@@ -6,7 +6,9 @@ import prettierConfig from 'eslint-config-prettier'
 
 export default tseslint.config(
   {
-    ignores: ['out/**', 'dist/**', 'node_modules/**'],
+    // src/renderer/src/preview.tsx is a local-only, gitignored preview harness
+    // (not part of the build); keep it out of the type-aware lint project.
+    ignores: ['out/**', 'dist/**', 'node_modules/**', 'src/renderer/src/preview.tsx'],
   },
   {
     files: ['src/**/*.ts', 'src/**/*.tsx'],
