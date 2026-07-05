@@ -22,6 +22,10 @@ npm run format:check # prettier --check . (CI gate)
 npm run test:native     # load native modules under the Electron runtime (ABI gate)
 npm run rebuild:native  # swap better-sqlite3 to the Electron ABI
 npm run rebuild:native:node  # swap better-sqlite3 back to the current Node ABI
+
+npm run verify       # full local mirror of the CI DoD gate (typecheck→lint→format→build→test→test:native→audit)
+npm run audit        # npm audit --audit-level=high (the CI security job, part 1)
+npm run secret-scan  # gitleaks over history (needs gitleaks in PATH; the CI security job, part 2)
 ```
 
 ### Native modules: the dual-ABI swap (read before touching better-sqlite3 / any native dep)
