@@ -1,6 +1,7 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
   "include": ["src/renderer/**/*", "src/shared/**/*", "src/test-setup.ts", "vitest.config.ts"],
+  "exclude": ["src/renderer/src/preview.tsx"],
   "compilerOptions": {
     "composite": true,
     "strict": true,

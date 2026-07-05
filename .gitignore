@@ -26,5 +26,12 @@ docs/handoff-*.md
 docs/design/screenshots/
 scripts/visual-inspect.mjs
 
+# Local-only design-preview harness (renders the screens in a browser with a
+# stubbed window.api; see the header in src/renderer/src/preview.tsx). Excluded
+# from the build and from eslint / tsc / prettier so it never trips the DoD gate.
+/preview.html
+/vite.preview.config.mjs
+src/renderer/src/preview.tsx
+
 # Agent prompts / copilot customisation (workspace-local, not source)
 .github/prompts/

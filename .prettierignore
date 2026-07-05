@@ -3,3 +3,8 @@ dist/
 node_modules/
 *.lock
 .claude/
+
+# Local-only design-preview harness (gitignored)
+preview.html
+vite.preview.config.mjs
+src/renderer/src/preview.tsx
