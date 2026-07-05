@@ -121,6 +121,21 @@ export class LiveSessionController {
     this._currentBridge?.stop()
     this._activeRuntime?.stop()
 
+    this._activeRuntime = this._buildRuntime(meetingId)
+    this._startBridge()
+  }
+
+  /**
+   * Build a fresh ASR provider + audio bridge wired to the current runtime and
+   * start it. Rebuilds the ASR provider from the settings active RIGHT NOW so a
+   * model downloaded or a provider switched after startup is picked up without a
+   * restart. Used by start() and by resume() — resume needs a NEW socket because
+   * pause() closed the previous one (a Deepgram socket idle-closes after ~10s
+   * with no audio, so a multi-minute pause leaves it dead).
+   */
+  private _startBridge(): void {
+    this._currentBridge?.stop()
+
     const asrResult = this._buildAsr(this._settingsStore.current, this._secretStorage)
     if (!asrResult.ok) {
       console.warn(
@@ -129,8 +144,6 @@ export class LiveSessionController {
       )
     }
     const asrProvider = asrResult.ok ? asrResult.provider : new FakeASRProvider()
-
-    this._activeRuntime = this._buildRuntime(meetingId)
 
     this._currentBridge = new AudioCaptureBridge({
       asrProvider,
@@ -195,13 +208,22 @@ export class LiveSessionController {
   pause(meetingId: string): Meeting {
     const meeting = this._meetingLifecycle.pauseMeeting(meetingId)
     this._activeRuntime?.pause()
+    // Close the ASR socket for the duration of the pause. With no audio flowing
+    // a Deepgram socket idle-closes after ~10s and then reconnect-loops with
+    // growing backoff, so a multi-minute pause left it dead (or mid-backoff) and
+    // the transcript never recovered on resume. resume() opens a fresh one.
+    this._currentBridge?.stop()
+    this._currentBridge = null
     return meeting
   }
 
-  /** Resume the meeting: persist the flag and resume the runtime cadence. */
+  /** Resume the meeting: persist the flag, resume the cadence, and reopen ASR. */
   resume(meetingId: string): Meeting {
     const meeting = this._meetingLifecycle.resumeMeeting(meetingId)
     this._activeRuntime?.resume()
+    // Reopen a fresh ASR session (pause() closed the previous socket). The live
+    // runtime is reused, so the transcript and context continue uninterrupted.
+    if (this._activeRuntime !== null) this._startBridge()
     return meeting
   }
 
