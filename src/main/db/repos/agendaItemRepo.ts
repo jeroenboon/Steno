@@ -21,8 +21,7 @@ export function agendaItemRepo(db: Database.Database) {
 
     findById(id: string): AgendaItem | null {
       const row = db.prepare('SELECT * FROM agenda_items WHERE id = ?').get(id) as
-        | Record<string, unknown>
-        | undefined
+        Record<string, unknown> | undefined
       if (row === undefined) return null
       return parseRow(row, AgendaItemSchema)
     },

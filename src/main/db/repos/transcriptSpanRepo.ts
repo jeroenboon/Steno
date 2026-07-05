@@ -24,8 +24,7 @@ export function transcriptSpanRepo(db: Database.Database) {
 
     findById(id: string): TranscriptSpan | null {
       const row = db.prepare('SELECT * FROM transcript_spans WHERE id = ?').get(id) as
-        | Record<string, unknown>
-        | undefined
+        Record<string, unknown> | undefined
       if (row === undefined) return null
       return parseRow(row, TranscriptSpanSchema)
     },

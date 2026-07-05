@@ -69,8 +69,7 @@ export interface BuiltProviders {
  * On failure: { ok: false, error: <human-readable reason> }
  */
 export type BuildProvidersResult =
-  | { ok: true; providers: BuiltProviders }
-  | { ok: false; error: string }
+  { ok: true; providers: BuiltProviders } | { ok: false; error: string }
 
 /**
  * Result types for the INDEPENDENT builders. ASR and extraction are gated on
@@ -96,8 +95,7 @@ const DEFAULT_AZURE_WHISPER_API_VERSION = '2024-06-01'
 // Realtime uses a preview api-version distinct from the batch Whisper default.
 const DEFAULT_AZURE_REALTIME_API_VERSION = '2024-10-01-preview'
 export type BuildExtractionResult =
-  | { ok: true; provider: ExtractionProvider }
-  | { ok: false; error: string }
+  { ok: true; provider: ExtractionProvider } | { ok: false; error: string }
 
 // ---------------------------------------------------------------------------
 // Factory
