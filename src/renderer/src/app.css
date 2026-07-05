@@ -881,6 +881,22 @@ body::before {
   box-shadow: none;
 }
 
+/* Ghost = the quietest tier: no fill, no border, just ink. For tertiary actions
+ * (reset, cancel, inline grooming) that must stay reachable without competing
+ * with the primary. Gains a faint well on hover so it still reads as a button. */
+.btn--ghost {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--color-text-secondary);
+}
+
+.btn--ghost:hover {
+  background-color: var(--color-surface-2);
+  border-color: transparent;
+  color: var(--color-text-primary);
+  box-shadow: none;
+}
+
 /* --- No-key banner (attention without alarm: umber, not red) --- */
 
 .no-key-banner {
@@ -1437,8 +1453,25 @@ body::before {
   margin: 0;
 }
 
+/* Action row: horizontal, hierarchy over uniformity. The primary CTA leads,
+ * the secondary sits beside it, and the quiet reset is pushed to the far right
+ * so it never reads as a third co-equal button (was: three stacked full-width
+ * bars, two of them solid). */
 .form-group--actions {
-  margin-top: var(--space-2);
+  margin-top: var(--space-4);
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Give the primary CTA a touch more presence than a content-width button. */
+.form-group--actions .btn--primary {
+  padding-inline: var(--space-6);
+}
+
+.form-group--actions .btn--ghost {
+  margin-left: auto;
 }
 
 /* Item list inside forms (agenda rows, participant rows) */
@@ -1739,9 +1772,11 @@ body::before {
   font-size: 12px;
 }
 
-.btn--sm {
+.btn--sm,
+.btn--small {
   padding: 2px var(--space-3);
   font-size: 12px;
+  font-weight: 500;
 }
 
 /* ---------------------------------------------------------------------------
