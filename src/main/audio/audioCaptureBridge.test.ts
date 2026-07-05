@@ -175,4 +175,92 @@ describe('AudioCaptureBridge', () => {
       expect(spans[1]?.isFinal).toBe(true)
     })
   })
+
+  describe('error resilience', () => {
+    it('keeps draining subsequent spans when the onSpan observer throws', async () => {
+      // The onSpan observer includes the runtime's span persistence (a DB
+      // insert). A single failing insert must not tear down the whole stream.
+      const seen: string[] = []
+      const onSpan = vi.fn((span: TranscriptSpan) => {
+        seen.push(span.text)
+        if (span.text === 'boom') {
+          throw new Error('db insert failed')
+        }
+      })
+      bridge = new AudioCaptureBridge({
+        asrProvider: fakeAsr,
+        sender: { send: sender.send },
+        onSpan,
+      })
+      bridge.start()
+
+      fakeAsr.pushScriptedSpan(makeSpan('boom')) // observer throws on this one
+      fakeAsr.pushScriptedSpan(makeSpan('daarna')) // must still be processed
+
+      await new Promise<void>((r) => {
+        setTimeout(r, 0)
+      })
+
+      // The observer saw both spans: the loop did not abort after the throw.
+      expect(seen).toEqual(['boom', 'daarna'])
+      // And the surviving span still reached the renderer.
+      expect(sender.sentSpans().map((s) => s.text)).toContain('daarna')
+    })
+
+    it('keeps draining subsequent spans when the sender throws', async () => {
+      // The renderer can vanish mid-meeting; webContents.send then throws.
+      let calls = 0
+      const flakySend = vi.fn((channel: string) => {
+        void channel
+        calls += 1
+        if (calls === 1) {
+          throw new Error('renderer gone')
+        }
+      })
+      bridge = new AudioCaptureBridge({
+        asrProvider: fakeAsr,
+        sender: { send: flakySend },
+      })
+      bridge.start()
+
+      fakeAsr.pushScriptedSpan(makeSpan('eerste')) // send throws
+      fakeAsr.pushScriptedSpan(makeSpan('tweede')) // loop must continue
+
+      await new Promise<void>((r) => {
+        setTimeout(r, 0)
+      })
+
+      // Both spans were attempted: the loop survived the first send throwing.
+      expect(flakySend).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not leak an unhandled rejection when a span throws', async () => {
+      const rejections: unknown[] = []
+      const onRejection = (reason: unknown): void => {
+        rejections.push(reason)
+      }
+      process.on('unhandledRejection', onRejection)
+      try {
+        bridge = new AudioCaptureBridge({
+          asrProvider: fakeAsr,
+          sender: { send: sender.send },
+          onSpan: () => {
+            throw new Error('boom')
+          },
+        })
+        bridge.start()
+
+        fakeAsr.pushScriptedSpan(makeSpan('boom'))
+
+        // Give any rejected microtask a chance to surface.
+        await new Promise<void>((r) => {
+          setTimeout(r, 10)
+        })
+
+        expect(rejections).toEqual([])
+      } finally {
+        process.off('unhandledRejection', onRejection)
+      }
+    })
+  })
 })

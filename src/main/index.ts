@@ -32,6 +32,7 @@ import { participantRepo } from './db/repos/participantRepo'
 import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
 import { devlog, initDevlog } from './devlog'
 import { createIpcRegistry } from './ipc-registry'
+import { installProcessErrorHandlers } from './processErrorHandlers'
 import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
 import { sendItemsChanged } from './services/itemsChangedNotifier'
@@ -500,6 +501,13 @@ function loadRenderer(mainWindow: BrowserWindow): void {
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
+
+// Install the process-level error backstop as early as possible so a stray
+// unhandled rejection (e.g. from the fire-and-forget span-forwarding loop)
+// can never take the app down silently mid-meeting. Logging becomes active
+// once initDevLogging() runs below; before that the handler still prevents the
+// default crash. See processErrorHandlers.ts and audit finding C3.
+installProcessErrorHandlers()
 
 app
   .whenReady()
