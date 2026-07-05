@@ -779,7 +779,7 @@ export function LiveScreen(): React.JSX.Element {
         <div className="live-header__actions">
           <button
             type="button"
-            className="btn btn--secondary live-pause-btn"
+            className="btn btn--ghost live-pause-btn"
             data-testid="pause-meeting-btn"
             disabled={endingMeeting}
             onClick={() => {
@@ -957,7 +957,7 @@ export function LiveScreen(): React.JSX.Element {
                         </button>
                         <button
                           type="button"
-                          className="btn btn--small"
+                          className="btn btn--small btn--ghost"
                           onClick={() => {
                             setAgendaEdit(null)
                           }}
@@ -977,7 +977,7 @@ export function LiveScreen(): React.JSX.Element {
                         </button>
                         <button
                           type="button"
-                          className="btn btn--small"
+                          className="btn btn--small btn--secondary"
                           aria-label={t('live.agenda.edit')}
                           onClick={() => {
                             setAgendaEdit({ id: item.id, title: item.title })
@@ -987,7 +987,7 @@ export function LiveScreen(): React.JSX.Element {
                         </button>
                         <button
                           type="button"
-                          className="btn btn--small"
+                          className="btn btn--small btn--secondary"
                           aria-label={t('live.agenda.dismiss')}
                           onClick={() => void handleAgendaDismiss(item.id)}
                         >
