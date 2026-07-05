@@ -1,0 +1,26 @@
+name: Dependabot auto-merge
+
+# Arms auto-merge on every Dependabot PR (all update types, incl. major — a
+# deliberate choice). The PR still only merges once the required checks pass
+# (branch protection: DoD gate + Security), so a bump that breaks build/lint/
+# test/native/audit stays open for a human. A green bump merges hands-free.
+#
+# pull_request_target runs in the base-repo context so GITHUB_TOKEN has the
+# write scope Dependabot's own read-only token lacks. Safe here: this workflow
+# never checks out or executes the PR's code — it only calls the gh API.
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor == 'dependabot[bot]' }}
+    steps:
+      - name: Enable auto-merge
+        run: gh pr merge --auto --merge "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
