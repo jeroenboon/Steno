@@ -288,11 +288,7 @@ export function SettingsScreen(): React.JSX.Element {
   }
 
   type AsrSelectValue =
-    | 'deepgram'
-    | 'local-parakeet'
-    | 'openai-audio'
-    | 'mistral-voxtral'
-    | 'azure-speech'
+    'deepgram' | 'local-parakeet' | 'openai-audio' | 'mistral-voxtral' | 'azure-speech'
 
   function handleAsrChange(provider: AsrSelectValue): void {
     if (provider === 'deepgram' || provider === 'local-parakeet') {

@@ -51,8 +51,7 @@ import { devlog } from '../devlog'
  * the prompt the engine builds.
  */
 export type ExtractionCall =
-  | { readonly kind: 'extract'; readonly isFinalPass: boolean }
-  | { readonly kind: 'infer' }
+  { readonly kind: 'extract'; readonly isFinalPass: boolean } | { readonly kind: 'infer' }
 
 /**
  * The per-vendor transport seam. Given the fully built system + user prompts,

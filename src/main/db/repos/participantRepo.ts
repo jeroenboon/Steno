@@ -15,8 +15,7 @@ export function participantRepo(db: Database.Database) {
 
     findById(id: string): Participant | null {
       const row = db.prepare('SELECT * FROM participants WHERE id = ?').get(id) as
-        | Record<string, unknown>
-        | undefined
+        Record<string, unknown> | undefined
       if (row === undefined) return null
       return parseRow(row, ParticipantSchema)
     },

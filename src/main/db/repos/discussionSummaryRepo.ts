@@ -22,8 +22,7 @@ export function discussionSummaryRepo(db: Database.Database) {
 
     findById(id: string): DiscussionSummary | null {
       const row = db.prepare('SELECT * FROM discussion_summaries WHERE id = ?').get(id) as
-        | Record<string, unknown>
-        | undefined
+        Record<string, unknown> | undefined
       if (row === undefined) return null
       return parseRow(row, DiscussionSummarySchema)
     },

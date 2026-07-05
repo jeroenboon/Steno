@@ -212,8 +212,8 @@ describe('ModelDownloader', () => {
     // ok-check that body gets written as if it were the model file — exactly how
     // tokens.txt ended up as 15 bytes of garbage and sherpa's ReadTokens failed.
     const expectedFiles = makeExpectedFiles(['small-tokens.txt'])
-    const notFoundFetch = vi.fn(
-      (): Promise<Response> => Promise.resolve(new Response('Entry not found', { status: 404 })),
+    const notFoundFetch = vi.fn((): Promise<Response> =>
+      Promise.resolve(new Response('Entry not found', { status: 404 })),
     ) as unknown as typeof fetch
     const dl = new ModelDownloader(dir, notFoundFetch, expectedFiles)
 

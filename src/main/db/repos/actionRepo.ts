@@ -44,8 +44,7 @@ export function actionRepo(db: Database.Database) {
 
     findById(id: string): Action | null {
       const row = db.prepare('SELECT * FROM actions WHERE id = ?').get(id) as
-        | Record<string, unknown>
-        | undefined
+        Record<string, unknown> | undefined
       if (row === undefined) return null
       return parseRow(row, ActionSchema)
     },
@@ -71,8 +70,7 @@ export function actionRepo(db: Database.Database) {
     /** Resolve the meeting an action belongs to, or null when unknown. */
     findMeetingId(id: string): string | null {
       const row = db.prepare('SELECT meeting_id FROM actions WHERE id = ?').get(id) as
-        | { meeting_id: string }
-        | undefined
+        { meeting_id: string } | undefined
       return row?.meeting_id ?? null
     },
 

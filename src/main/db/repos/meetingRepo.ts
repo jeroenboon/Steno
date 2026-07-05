@@ -83,8 +83,7 @@ export function meetingRepo(db: Database.Database) {
 
     findById(id: string): Meeting | null {
       const row = db.prepare('SELECT * FROM meetings WHERE id = ?').get(id) as
-        | MeetingRow
-        | undefined
+        MeetingRow | undefined
       if (row === undefined) return null
       return rowToDomain(row)
     },

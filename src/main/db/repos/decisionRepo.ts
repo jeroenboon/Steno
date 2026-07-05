@@ -38,8 +38,7 @@ export function decisionRepo(db: Database.Database) {
 
     findById(id: string): Decision | null {
       const row = db.prepare('SELECT * FROM decisions WHERE id = ?').get(id) as
-        | Record<string, unknown>
-        | undefined
+        Record<string, unknown> | undefined
       if (row === undefined) return null
       return parseRow(row, DecisionSchema)
     },
@@ -54,8 +53,7 @@ export function decisionRepo(db: Database.Database) {
     /** Resolve the meeting a decision belongs to, or null when unknown. */
     findMeetingId(id: string): string | null {
       const row = db.prepare('SELECT meeting_id FROM decisions WHERE id = ?').get(id) as
-        | { meeting_id: string }
-        | undefined
+        { meeting_id: string } | undefined
       return row?.meeting_id ?? null
     },
 
