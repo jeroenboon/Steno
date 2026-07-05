@@ -27,7 +27,7 @@
  */
 
 import { AnimatePresence, motion } from 'framer-motion'
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 
 import { OffAgenda } from '@shared/domain/types'
 
@@ -510,6 +510,14 @@ export function LiveScreen(): React.JSX.Element {
   const [addingKind, setAddingKind] = useState<ItemKind | null>(null)
   const [endingMeeting, setEndingMeeting] = useState(false)
   const [paused, setPaused] = useState(false)
+
+  // LiveScreen is mounted permanently (only hidden via CSS), so endingMeeting
+  // must not leak from a finished meeting into the next one. Clear it whenever a
+  // new or resumed recording session begins — otherwise the finalising overlay
+  // from the previous meeting would block the incoming Live screen.
+  useEffect(() => {
+    if (liveMeetingId !== null) setEndingMeeting(false)
+  }, [liveMeetingId])
   // Inline edit state for a Proposed agenda item being groomed (ADR 0029).
   const [agendaEdit, setAgendaEdit] = useState<{ id: string; title: string } | null>(null)
 

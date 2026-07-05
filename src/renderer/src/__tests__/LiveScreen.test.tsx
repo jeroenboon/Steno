@@ -220,6 +220,26 @@ describe('LiveScreen — finalising the meeting', () => {
       await Promise.resolve()
     })
   })
+
+  it('clears a stale finalising overlay when a new live session begins', async () => {
+    // LiveScreen is mounted permanently, so the endingMeeting flag from a
+    // finished meeting must not leak into the next one. End a meeting (overlay
+    // shows), then resume/start another (liveMeetingId changes): the overlay
+    // must clear so the new session is not blocked.
+    mockApi.meetingEnd.mockResolvedValue({ ok: true })
+    const user = userEvent.setup()
+    render(<LiveScreen />)
+
+    await user.click(await screen.findByTestId('end-meeting-btn'))
+    expect(await screen.findByTestId('live-ending-overlay')).toBeInTheDocument()
+
+    await act(async () => {
+      useAppStore.setState({ activeMeeting: 'resumed-session', liveMeetingId: 'resumed-session' })
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByTestId('live-ending-overlay')).not.toBeInTheDocument()
+  })
 })
 
 describe('LiveScreen — guard: no active meeting', () => {
