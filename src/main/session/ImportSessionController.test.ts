@@ -210,6 +210,41 @@ describe('ImportSessionController', () => {
     expect(s.stages()).toContain('inferring')
   })
 
+  it('degrades and still ends the meeting when inferContext rejects (C2)', async () => {
+    // A transient provider failure at the inference step must not strand the
+    // import: the final pass must still run and the meeting must still end.
+    const fakeAsr = new FakeASRProvider()
+    fakeAsr.scriptBatchSpans([{ id: 'span-1', text: 'Anika opent', startMs: 0, endMs: 2000 }])
+    const fakeExtraction = new FakeExtractionProvider()
+    vi.spyOn(fakeExtraction, 'inferContext').mockRejectedValue(new Error('429 rate limit'))
+    fakeExtraction.scriptFinalPassResponse({
+      proposedDecisions: [],
+      proposedActions: [],
+      discussionSummaries: [{ agendaItemHint: undefined, text: 'Toch samengevat.' }],
+    })
+    const s = makeSender()
+    const controller = makeController(repos, fakeAsr, fakeExtraction, s.sender)
+
+    controller.start({
+      meetingId: 'imp-infer-fail',
+      title: 'Opname zonder agenda',
+      primaryLanguage: 'nl',
+      agendaItems: [],
+      participants: [],
+      inferContext: true,
+    })
+    controller.pushFrame(new Uint8Array([0, 0, 0, 0]))
+
+    const result = await controller.finish('imp-infer-fail')
+
+    expect(result).toEqual({ meetingId: 'imp-infer-fail' })
+    // The final pass still ran despite the inference failure.
+    expect(repos.discussionSummaryRepo.listByMeeting('imp-infer-fail').length).toBeGreaterThan(0)
+    // The meeting still transitioned to Ended.
+    expect(repos.meetingRepo.findById('imp-infer-fail')?.state).toBe('ended')
+    expect(s.stages()[s.stages().length - 1]).toBe('done')
+  })
+
   it('uses the user-supplied context and does not infer when inferContext is false', async () => {
     const fakeAsr = new FakeASRProvider()
     fakeAsr.scriptBatchSpans([
