@@ -227,8 +227,9 @@ describe('HomeScreen', () => {
     expect(screen.queryByTestId('home-meeting-item')).not.toBeInTheDocument()
   })
 
-  it('Hervat button in interrupted callout is disabled', async () => {
-    useAppStore.setState({ activeMeeting: null })
+  it('Hervat button resumes an interrupted meeting into the live session', async () => {
+    const user = userEvent.setup()
+    useAppStore.setState({ activeMeeting: null, liveMeetingId: null, route: 'home' })
     mockApi.meetingList.mockResolvedValue({
       meetings: [
         {
@@ -241,11 +242,33 @@ describe('HomeScreen', () => {
         },
       ],
     })
+    mockApi.meetingLoad.mockResolvedValue({
+      meeting: {
+        id: 'mtg-live',
+        title: 'Interrupted meeting',
+        state: 'live',
+        createdAt: '2026-06-10T09:00:00.000Z',
+        primaryLanguage: 'nl',
+      },
+      decisions: [],
+      actions: [],
+      agendaItems: [],
+      participants: [],
+      summaries: [],
+    })
     render(<HomeScreen />)
 
     const callout = await screen.findByTestId('home-interrupted-callout')
     const hervat = within(callout).getByRole('button', { name: /hervat/i })
-    expect(hervat).toBeDisabled()
+    expect(hervat).toBeEnabled()
+
+    await user.click(hervat)
+
+    await waitFor(() => {
+      expect(mockApi.meetingLoad).toHaveBeenCalledWith({ meetingId: 'mtg-live' })
+      expect(useAppStore.getState().liveMeetingId).toBe('mtg-live')
+      expect(useAppStore.getState().route).toBe('live')
+    })
   })
 
   it('shows active callout when meeting is currently running in this session', async () => {

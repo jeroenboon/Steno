@@ -26,6 +26,7 @@ import { useAppStore } from '../store/appStore'
 export function HomeScreen(): React.JSX.Element {
   const setRoute = useAppStore((s) => s.setRoute)
   const loadMeeting = useAppStore((s) => s.loadMeeting)
+  const setLiveMeetingId = useAppStore((s) => s.setLiveMeetingId)
   const activeMeeting = useAppStore((s) => s.activeMeeting)
 
   const [meetings, setMeetings] = useState<Meeting[]>([])
@@ -45,13 +46,29 @@ export function HomeScreen(): React.JSX.Element {
       })
   }, [])
 
+  // A meeting still in state 'live' that isn't the session running in THIS app
+  // instance was never ended by the user — it was left paused or the app crashed
+  // mid-recording. That is the only case where resume applies (a user-ended
+  // meeting is 'ended' and lands in the history list below).
   const interruptedMeetings = meetings.filter((m) => m.state === 'live' && m.id !== activeMeeting)
+  const interrupted = interruptedMeetings[0] ?? null
   const activeLiveMeeting =
     meetings.find((m) => m.state === 'live' && m.id === activeMeeting) ?? null
   const endedMeetings = meetings.filter((m) => m.state === 'ended')
 
   function handleNewMeeting(): void {
     setRoute('draft')
+  }
+
+  // Resume an interrupted meeting: restore its context (title, agenda,
+  // participants, items) and re-enter Live. Setting liveMeetingId arms audio
+  // capture, and main re-attaches a runtime to the still-'live' meeting so the
+  // same transcript continues (LiveSessionController._buildRuntime).
+  async function handleResume(meeting: Meeting): Promise<void> {
+    if (meeting.state !== 'live') return
+    await loadMeeting(meeting.id)
+    setLiveMeetingId(meeting.id)
+    setRoute('live')
   }
 
   async function handleReopen(meeting: Meeting): Promise<void> {
@@ -114,17 +131,18 @@ export function HomeScreen(): React.JSX.Element {
               </button>
             </div>
           )}
-          {interruptedMeetings.length > 0 && activeLiveMeeting === null && (
+          {interrupted !== null && activeLiveMeeting === null && (
             <div className="home__interrupted-callout" data-testid="home-interrupted-callout">
               <span className="home__interrupted-label">
-                {t('home.interrupted.callout')} · {interruptedMeetings[0]?.title ?? ''}
+                {t('home.interrupted.callout')} · {interrupted.title}
               </span>
               <button
                 type="button"
-                className="btn btn--secondary"
-                disabled
-                aria-disabled
-                title="Binnenkort beschikbaar"
+                className="btn btn--primary"
+                data-testid="home-resume"
+                onClick={() => {
+                  void handleResume(interrupted)
+                }}
               >
                 {t('home.interrupted.resume')}
               </button>
