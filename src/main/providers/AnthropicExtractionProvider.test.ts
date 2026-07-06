@@ -445,4 +445,128 @@ describe('AnthropicExtractionProvider', () => {
       errorSpy.mockRestore()
     })
   })
+
+  // -------------------------------------------------------------------------
+  // Plain-text methods: summarise + query (item 0020)
+  //
+  // Characterization tests pinning the exact request shape and response
+  // handling of both methods, so the summarise/query dedup refactor is
+  // provably behaviour-preserving.
+  // -------------------------------------------------------------------------
+
+  /** Build a plain-text Anthropic message response. */
+  function makeTextResponse(text: string) {
+    return {
+      type: 'message',
+      content: [{ type: 'text', text }],
+      stop_reason: 'end_turn',
+    }
+  }
+
+  const summariseSpans = [
+    { id: 'span-1', text: 'We besloten in Q3 te lanceren.', startMs: 0, endMs: 3000 },
+    {
+      id: 'span-2',
+      text: 'Jeroen boekt de zaal.',
+      startMs: 3000,
+      endMs: 6000,
+      speakerLabel: 'Jeroen',
+    },
+  ]
+
+  describe('summarise', () => {
+    it('returns an empty string for empty spans without calling the SDK', async () => {
+      const provider = makeProvider()
+      const result = await provider.summarise([])
+
+      expect(result).toBe('')
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+
+    it('calls the SDK with the rolling model, summarise system prompt and transcript, returning the text', async () => {
+      mockCreate.mockResolvedValueOnce(makeTextResponse('Een korte samenvatting.'))
+
+      const provider = makeProvider()
+      const result = await provider.summarise(summariseSpans)
+
+      expect(result).toBe('Een korte samenvatting.')
+      expect(mockCreate).toHaveBeenCalledTimes(1)
+      expect(mockCreate).toHaveBeenCalledWith({
+        model: 'claude-haiku-4-5',
+        max_tokens: 512,
+        system:
+          'Je bent een assistent die een beknopte samenvatting geeft van een vergadering tot nu toe. ' +
+          'Geef één alinea in gewone taal. Geen opsommingen, geen koppen.',
+        messages: [
+          {
+            role: 'user',
+            content:
+              'Geef een korte samenvatting van de vergadering op basis van dit transcript:\n' +
+              '[span-1] We besloten in Q3 te lanceren.\n[span-2] Jeroen: Jeroen boekt de zaal.',
+          },
+        ],
+      })
+    })
+
+    it('returns an empty string when the response has no text block', async () => {
+      mockCreate.mockResolvedValueOnce({
+        type: 'message',
+        content: [{ type: 'tool_use', id: 't', name: 'x', input: {} }],
+        stop_reason: 'tool_use',
+      })
+
+      const provider = makeProvider()
+      const result = await provider.summarise(summariseSpans)
+
+      expect(result).toBe('')
+    })
+  })
+
+  describe('query', () => {
+    it('returns an empty string for empty spans without calling the SDK', async () => {
+      const provider = makeProvider()
+      const result = await provider.query([], 'Wanneer lanceren we?')
+
+      expect(result).toBe('')
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+
+    it('calls the SDK with the rolling model, query system prompt and transcript+question, returning the text', async () => {
+      mockCreate.mockResolvedValueOnce(makeTextResponse('In Q3.'))
+
+      const provider = makeProvider()
+      const result = await provider.query(summariseSpans, 'Wanneer lanceren we?')
+
+      expect(result).toBe('In Q3.')
+      expect(mockCreate).toHaveBeenCalledTimes(1)
+      expect(mockCreate).toHaveBeenCalledWith({
+        model: 'claude-haiku-4-5',
+        max_tokens: 512,
+        system:
+          'Je bent een assistent die vragen beantwoordt op basis van een vergadertranscript. ' +
+          'Wees bondig en feitelijk. Geef alleen antwoord op basis van het transcript.',
+        messages: [
+          {
+            role: 'user',
+            content:
+              'Transcript:\n[span-1] We besloten in Q3 te lanceren.\n' +
+              '[span-2] Jeroen: Jeroen boekt de zaal.\n\nVraag: Wanneer lanceren we?',
+          },
+        ],
+      })
+    })
+
+    it('returns an empty string when the response has no text block', async () => {
+      mockCreate.mockResolvedValueOnce({
+        type: 'message',
+        content: [{ type: 'tool_use', id: 't', name: 'x', input: {} }],
+        stop_reason: 'tool_use',
+      })
+
+      const provider = makeProvider()
+      const result = await provider.query(summariseSpans, 'Wanneer lanceren we?')
+
+      expect(result).toBe('')
+    })
+  })
 })

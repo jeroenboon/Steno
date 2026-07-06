@@ -28,6 +28,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
+import type { TranscriptSpan } from '@shared/domain/types'
 import type {
   ExtractionProvider,
   ExtractionRequest,
@@ -100,30 +101,14 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
    *
    * Never logs transcript content (principle #12).
    */
-  async summarise(spans: import('@shared/domain/types').TranscriptSpan[]): Promise<string> {
-    if (spans.length === 0) return ''
-
-    const spanLines = spans
-      .map((s) => `[${s.id}] ${s.speakerLabel ? `${s.speakerLabel}: ` : ''}${s.text}`)
-      .join('\n')
-
-    const response = await this._client.messages.create({
-      model: this._rollingModel,
-      max_tokens: 512,
-      system:
-        'Je bent een assistent die een beknopte samenvatting geeft van een vergadering tot nu toe. ' +
+  async summarise(spans: TranscriptSpan[]): Promise<string> {
+    return this._plainTextCompletion(
+      spans,
+      'Je bent een assistent die een beknopte samenvatting geeft van een vergadering tot nu toe. ' +
         'Geef één alinea in gewone taal. Geen opsommingen, geen koppen.',
-      messages: [
-        {
-          role: 'user',
-          content: `Geef een korte samenvatting van de vergadering op basis van dit transcript:\n${spanLines}`,
-        },
-      ],
-    })
-
-    const textBlock = response.content.find((block) => block.type === 'text')
-    if (textBlock?.type !== 'text') return ''
-    return textBlock.text
+      (spanLines) =>
+        `Geef een korte samenvatting van de vergadering op basis van dit transcript:\n${spanLines}`,
+    )
   }
 
   /**
@@ -133,9 +118,31 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
    *
    * Never logs transcript content or the question (principle #12).
    */
-  async query(
-    spans: import('@shared/domain/types').TranscriptSpan[],
-    question: string,
+  async query(spans: TranscriptSpan[], question: string): Promise<string> {
+    return this._plainTextCompletion(
+      spans,
+      'Je bent een assistent die vragen beantwoordt op basis van een vergadertranscript. ' +
+        'Wees bondig en feitelijk. Geef alleen antwoord op basis van het transcript.',
+      (spanLines) => `Transcript:\n${spanLines}\n\nVraag: ${question}`,
+    )
+  }
+
+  /**
+   * Shared body for the plain-text methods (`summarise` / `query`): they differ
+   * only in the system prompt and how the user message is composed from the
+   * transcript. Everything else — the empty-spans guard, the `[id] speaker:
+   * text` span formatting, the rolling-model 512-token request, and pulling the
+   * first text block out of the response — is identical.
+   *
+   * Never logs transcript content or the prompt (principle #12).
+   *
+   * @param buildUserContent receives the formatted span lines and returns the
+   *   user message content.
+   */
+  private async _plainTextCompletion(
+    spans: TranscriptSpan[],
+    system: string,
+    buildUserContent: (spanLines: string) => string,
   ): Promise<string> {
     if (spans.length === 0) return ''
 
@@ -146,15 +153,8 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
     const response = await this._client.messages.create({
       model: this._rollingModel,
       max_tokens: 512,
-      system:
-        'Je bent een assistent die vragen beantwoordt op basis van een vergadertranscript. ' +
-        'Wees bondig en feitelijk. Geef alleen antwoord op basis van het transcript.',
-      messages: [
-        {
-          role: 'user',
-          content: `Transcript:\n${spanLines}\n\nVraag: ${question}`,
-        },
-      ],
+      system,
+      messages: [{ role: 'user', content: buildUserContent(spanLines) }],
     })
 
     const textBlock = response.content.find((block) => block.type === 'text')
