@@ -15,6 +15,7 @@ import React, { useEffect, useState } from 'react'
 
 import type { EgressState } from '@shared/ipc'
 import { ItemsChangedPayloadSchema } from '@shared/ipc'
+import { resolveAsrKeyRef, resolveExtractionKeyRef } from '@shared/settings/keyRefs'
 
 import { EgressIndicator } from './components/EgressIndicator'
 import { Wordmark } from './components/Wordmark'
@@ -98,20 +99,22 @@ export function App(): React.JSX.Element {
   }, [])
 
   // Check whether the API keys for the CURRENTLY SELECTED providers are present.
-  // ASR and extraction need different keys; we only require the keys for the
-  // providers actually chosen, so e.g. a Deepgram-only setup isn't blocked by a
-  // missing Anthropic key. If not all selected providers are configured, the app
-  // shows a banner directing the user to Settings.
+  // The set of keyRefs a configuration needs is derived from the shared keyRefs
+  // module (resolveAsrKeyRef / resolveExtractionKeyRef), which is the single
+  // source of truth mirrored by providerFactory — so every provider combination
+  // is covered, not a hand-picked subset. ASR needs no key for the on-device
+  // option (null ref), and when both roles resolve to the same vendor keyRef we
+  // only look it up once. If any required key is missing, the app shows a banner
+  // directing the user to Settings.
   useEffect(() => {
     void (async () => {
       try {
         const settings = await window.api.settingsGet()
-        const requiredKeys: string[] = []
-        if (settings.asrProvider === 'deepgram') requiredKeys.push('deepgram')
-        if (settings.extractionProvider === 'anthropic') requiredKeys.push('anthropic')
-        if (settings.extractionProvider === 'openai-compatible') {
-          requiredKeys.push(settings.openaiCompatible.keyRef)
-        }
+        const asrRef = resolveAsrKeyRef(settings)
+        const extractionRef = resolveExtractionKeyRef(settings)
+        const requiredKeys = [
+          ...new Set([asrRef, extractionRef].filter((ref): ref is string => ref !== null)),
+        ]
         const results = await Promise.all(requiredKeys.map((key) => window.api.secretHas({ key })))
         setKeysConfigured(results.every((r) => r.has))
       } catch {
