@@ -17,6 +17,7 @@
  */
 
 import type { TranscriptSpan } from '../domain/types'
+
 import type { AsrTerminalState } from './asrTerminalState'
 
 export interface ASRProvider {
