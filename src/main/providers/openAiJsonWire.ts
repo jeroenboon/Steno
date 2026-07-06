@@ -44,6 +44,14 @@ export interface OpenAiJsonWireOptions {
   target: ChatCompletionsTarget
   /** Injected for testability. */
   fetch: typeof globalThis.fetch
+  /**
+   * Whether to send the `prompt_cache_key` body field. Defaults to true.
+   * It is a cloud billing optimisation (OpenAI/Azure) and useless for local
+   * runtimes (LM Studio / Ollama / llama.cpp do prefix caching themselves); a
+   * strict local server can even 400 on the unknown field. Local factory paths
+   * pass false. See ADR 0040.
+   */
+  sendCacheKey?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -64,12 +72,14 @@ export class OpenAiJsonWire implements ExtractionWire {
   private readonly _logTag: string
   private readonly _target: ChatCompletionsTarget
   private readonly _fetch: typeof globalThis.fetch
+  private readonly _sendCacheKey: boolean
 
   constructor(opts: OpenAiJsonWireOptions) {
     this._model = opts.model
     this._logTag = opts.logTag
     this._target = opts.target
     this._fetch = opts.fetch
+    this._sendCacheKey = opts.sendCacheKey ?? true
   }
 
   /**
@@ -96,8 +106,11 @@ export class OpenAiJsonWire implements ExtractionWire {
       // byte-identical system prompt (agenda + participants + instructions) every
       // 15-30s, so a stable key derived from it maximises OpenAI/Azure prompt-cache
       // hits on the dominant rolling cost (Phase 5.4). The key is non-sensitive
-      // (a hash of the prompt, never the transcript or the API key).
-      prompt_cache_key: `${this._model}:${stableHash(systemPrompt)}`,
+      // (a hash of the prompt, never the transcript or the API key). Omitted for
+      // local runtimes, where it does nothing and can trip a strict server (ADR 0040).
+      ...(this._sendCacheKey
+        ? { prompt_cache_key: `${this._model}:${stableHash(systemPrompt)}` }
+        : {}),
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },

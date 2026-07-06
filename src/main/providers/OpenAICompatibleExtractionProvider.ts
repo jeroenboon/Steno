@@ -44,11 +44,21 @@ import { OpenAiJsonWire } from './openAiJsonWire'
 // ---------------------------------------------------------------------------
 
 export interface OpenAICompatibleExtractionProviderOptions {
-  apiKey: string
+  /**
+   * Raw API key for the endpoint. Optional: local runtimes (LM Studio / Ollama /
+   * llama.cpp) usually need none, so when it is absent the Authorization header
+   * is omitted (ADR 0040). Cloud vendors always pass it.
+   */
+  apiKey?: string
   baseUrl: string
   model: string
   displayName: string
   fetch?: typeof globalThis.fetch
+  /**
+   * Send the `prompt_cache_key` body field. Defaults to true (cloud). Local
+   * factory paths pass false — see ADR 0040 and OpenAiJsonWire.
+   */
+  sendCacheKey?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -62,17 +72,20 @@ export class OpenAICompatibleExtractionProvider implements ExtractionProvider {
     const baseUrl = opts.baseUrl.replace(/\/$/, '') // strip trailing slash
     const logTag = `[${opts.displayName}]`
 
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (opts.apiKey !== undefined) {
+      headers.Authorization = `Bearer ${opts.apiKey}`
+    }
+
     const wire = new OpenAiJsonWire({
       model: opts.model,
       logTag,
       target: {
         url: `${baseUrl}/chat/completions`,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${opts.apiKey}`,
-        },
+        headers,
       },
       fetch: opts.fetch ?? globalThis.fetch,
+      ...(opts.sendCacheKey === undefined ? {} : { sendCacheKey: opts.sendCacheKey }),
     })
 
     this._engine = new ExtractionEngine({ wire, logTag, model: opts.model })
