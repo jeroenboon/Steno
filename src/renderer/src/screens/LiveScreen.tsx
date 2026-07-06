@@ -35,6 +35,7 @@ import { MarginLeaders } from '../components/MarginLeaders'
 import { NudgePanel } from '../components/NudgePanel'
 import { RunningSummaryPanel } from '../components/RunningSummaryPanel'
 import { t } from '../i18n'
+import { callApi } from '../lib/callApi'
 import { useAppStore } from '../store/appStore'
 import type { ProposedDecision, ProposedAction } from '../store/appStore'
 
@@ -542,19 +543,11 @@ export function LiveScreen(): React.JSX.Element {
   // Item mutations round-trip through main, which pushes the authoritative
   // items:changed the store reconciles from (ADR 0033) — no optimistic update.
   const handleConfirm = useCallback(async (kind: ItemKind, id: string) => {
-    try {
-      await window.api.itemConfirm({ kind, id })
-    } catch (err) {
-      console.error('[LiveScreen] confirm failed:', err)
-    }
+    await callApi('LiveScreen confirm', () => window.api.itemConfirm({ kind, id }))
   }, [])
 
   const handleDismiss = useCallback(async (kind: ItemKind, id: string) => {
-    try {
-      await window.api.itemDismiss({ kind, id })
-    } catch (err) {
-      console.error('[LiveScreen] dismiss failed:', err)
-    }
+    await callApi('LiveScreen dismiss', () => window.api.itemDismiss({ kind, id }))
   }, [])
 
   const handleEditOpen = useCallback((kind: ItemKind, id: string, text: string, owner: string) => {
@@ -568,19 +561,16 @@ export function LiveScreen(): React.JSX.Element {
   const handleEditSave = useCallback(async () => {
     if (editState === null) return
     const { id, kind, text, owner } = editState
-    try {
+    const ok = await callApi('LiveScreen editAndConfirm', () => {
       if (kind === 'decision') {
-        await window.api.itemEditAndConfirm({ kind, id, updates: { rationale: text } })
-      } else {
-        const updates: { description?: string; owner?: string } = {}
-        if (text.length > 0) updates.description = text
-        if (owner.length > 0) updates.owner = owner
-        await window.api.itemEditAndConfirm({ kind, id, updates })
+        return window.api.itemEditAndConfirm({ kind, id, updates: { rationale: text } })
       }
-      setEditState(null)
-    } catch (err) {
-      console.error('[LiveScreen] editAndConfirm failed:', err)
-    }
+      const updates: { description?: string; owner?: string } = {}
+      if (text.length > 0) updates.description = text
+      if (owner.length > 0) updates.owner = owner
+      return window.api.itemEditAndConfirm({ kind, id, updates })
+    })
+    if (ok) setEditState(null)
   }, [editState])
 
   const handleEditCancel = useCallback(() => {
@@ -590,11 +580,12 @@ export function LiveScreen(): React.JSX.Element {
   // --- Proposed agenda item grooming (ADR 0029) ---
   const handleAgendaConfirm = useCallback(
     async (id: string) => {
-      try {
-        await window.api.agendaItemConfirm({ agendaItemId: id })
+      if (
+        await callApi('LiveScreen agenda confirm', () =>
+          window.api.agendaItemConfirm({ agendaItemId: id }),
+        )
+      ) {
         setAgendaItems(agendaItems.map((a) => (a.id === id ? { ...a, state: 'confirmed' } : a)))
-      } catch (err) {
-        console.error('[LiveScreen] agenda confirm failed:', err)
       }
     },
     [agendaItems, setAgendaItems],
@@ -602,11 +593,12 @@ export function LiveScreen(): React.JSX.Element {
 
   const handleAgendaDismiss = useCallback(
     async (id: string) => {
-      try {
-        await window.api.agendaItemRemove({ agendaItemId: id })
+      if (
+        await callApi('LiveScreen agenda dismiss', () =>
+          window.api.agendaItemRemove({ agendaItemId: id }),
+        )
+      ) {
         setAgendaItems(agendaItems.filter((a) => a.id !== id))
-      } catch (err) {
-        console.error('[LiveScreen] agenda dismiss failed:', err)
       }
     },
     [agendaItems, setAgendaItems],
@@ -619,47 +611,52 @@ export function LiveScreen(): React.JSX.Element {
     if (trimmed.length === 0) return
     const existing = agendaItems.find((a) => a.id === id)
     const topic = existing?.topic ?? trimmed
-    try {
-      await window.api.agendaItemEditAndConfirm({ agendaItemId: id, title: trimmed, topic })
+    const ok = await callApi('LiveScreen agenda editAndConfirm', () =>
+      window.api.agendaItemEditAndConfirm({ agendaItemId: id, title: trimmed, topic }),
+    )
+    if (ok) {
       setAgendaItems(
         agendaItems.map((a) => (a.id === id ? { ...a, title: trimmed, state: 'confirmed' } : a)),
       )
       setAgendaEdit(null)
-    } catch (err) {
-      console.error('[LiveScreen] agenda editAndConfirm failed:', err)
     }
   }, [agendaEdit, agendaItems, setAgendaItems])
 
   const handleTogglePause = useCallback(async () => {
     if (activeMeeting === null) return
-    try {
-      if (paused) {
-        await window.api.meetingResume({ meetingId: activeMeeting })
+    if (paused) {
+      const ok = await callApi('LiveScreen resume', () =>
+        window.api.meetingResume({ meetingId: activeMeeting }),
+      )
+      if (ok) {
         setCapturePaused(false)
         setPaused(false)
-      } else {
-        await window.api.meetingPause({ meetingId: activeMeeting })
+      }
+    } else {
+      const ok = await callApi('LiveScreen pause', () =>
+        window.api.meetingPause({ meetingId: activeMeeting }),
+      )
+      if (ok) {
         setCapturePaused(true)
         setPaused(true)
       }
-    } catch (err) {
-      console.error('[LiveScreen] pause/resume failed:', err)
     }
   }, [activeMeeting, paused, setCapturePaused])
 
   const handleEndMeeting = useCallback(async () => {
     if (activeMeeting === null || endingMeeting) return
     setEndingMeeting(true)
-    try {
-      await window.api.meetingEnd({ meetingId: activeMeeting })
+    const ok = await callApi('LiveScreen meetingEnd', () =>
+      window.api.meetingEnd({ meetingId: activeMeeting }),
+    )
+    if (ok) {
       // The recording session is over: clear the live id so useLiveSession tears
       // down audio capture. activeMeeting stays set so Review can read the meeting.
       setLiveMeetingId(null)
       // Navigation to 'review' happens when items:summaries arrives.
       // If the runtime has no provider, items:summaries may not fire — navigate anyway.
       setRoute('review')
-    } catch (err) {
-      console.error('[LiveScreen] meetingEnd failed:', err)
+    } else {
       setEndingMeeting(false)
     }
   }, [activeMeeting, endingMeeting, setLiveMeetingId, setRoute])
@@ -683,16 +680,14 @@ export function LiveScreen(): React.JSX.Element {
               sourceSpanId: 'manual',
               status: 'open' as const,
             }
-      try {
-        await window.api.itemCreateConfirmed({
+      const ok = await callApi('LiveScreen createConfirmed', () =>
+        window.api.itemCreateConfirmed({
           kind,
           meetingId: activeMeeting,
           item,
-        })
-        setAddingKind(null)
-      } catch (err) {
-        console.error('[LiveScreen] createConfirmed failed:', err)
-      }
+        }),
+      )
+      if (ok) setAddingKind(null)
     },
     [activeMeeting],
   )
