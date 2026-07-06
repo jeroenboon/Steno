@@ -11,6 +11,7 @@ import {
   validateAudioFields,
   validateAzureFields,
   validateCustomFields,
+  validateLocalFields,
   type AudioAsrFields,
   type AzureFields,
   type CustomFields,
@@ -59,6 +60,24 @@ describe('validateCustomFields', () => {
     expect(errors.model).toBeDefined()
     expect(errors.displayName).toBeDefined()
     expect(errors.baseUrl).toBeUndefined()
+  })
+})
+
+describe('validateLocalFields', () => {
+  it('accepts a valid loopback base URL and a model (key is optional, not validated)', () => {
+    expect(validateLocalFields({ baseUrl: 'http://localhost:1234/v1', model: 'llama3.1' })).toEqual(
+      {},
+    )
+  })
+
+  it('flags an invalid base URL', () => {
+    expect(validateLocalFields({ baseUrl: 'not-a-url', model: 'llama3.1' }).baseUrl).toBeDefined()
+  })
+
+  it('flags a blank model', () => {
+    expect(
+      validateLocalFields({ baseUrl: 'http://localhost:1234/v1', model: '  ' }).model,
+    ).toBeDefined()
   })
 })
 

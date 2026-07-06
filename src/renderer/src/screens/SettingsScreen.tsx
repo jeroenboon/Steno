@@ -27,6 +27,7 @@ import { buildDisclosureCopy, computeEgressState } from '../../../shared/setting
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../shared/settings/settingsSchema'
 import { AudioAsrCard } from '../components/AudioAsrCard'
 import { AzureExtractionCard } from '../components/AzureExtractionCard'
+import { LocalExtractionCard, LOCAL_KEY_REF } from '../components/LocalExtractionCard'
 import { OpenAICompatibleCard } from '../components/OpenAICompatibleCard'
 import { ProviderKeyCard } from '../components/ProviderKeyCard'
 import { ProviderRoleCard, type ProviderGroup } from '../components/ProviderRoleCard'
@@ -38,6 +39,7 @@ import {
   type AudioAsrProvider,
   type AzureFields,
   type CustomFields,
+  type LocalFields,
 } from './settingsValidation'
 import { useSecretKeyField } from './useSecretKeyField'
 
@@ -82,6 +84,16 @@ function customInitialFields(settings: AppSettings): CustomFields {
   if (settings.extractionProvider !== 'openai-compatible') return CUSTOM_DEFAULT_FIELDS
   const c = settings.openaiCompatible
   return { baseUrl: c.baseUrl, model: c.model, displayName: c.displayName, keyRef: c.keyRef }
+}
+
+/** Empty local extraction form (used until a config is persisted). */
+const LOCAL_DEFAULT_FIELDS: LocalFields = { baseUrl: 'http://localhost:1234/v1', model: '' }
+
+/** Seed values for the local card: the persisted config, else defaults. */
+function localInitialFields(settings: AppSettings): LocalFields {
+  if (settings.extractionProvider !== 'local') return LOCAL_DEFAULT_FIELDS
+  const c = settings.local
+  return { baseUrl: c.baseUrl, model: c.model }
 }
 
 /** Default model id per cloud audio vendor (user-overridable). */
@@ -155,11 +167,16 @@ export function SettingsScreen(): React.JSX.Element {
   const customKey = useSecretKeyField()
   const azureKey = useSecretKeyField()
   const audioKey = useSecretKeyField()
+  const localKey = useSecretKeyField()
 
   // ---- OpenAI-compatible extraction — form state lives in OpenAICompatibleCard.
   // Only the reveal-dirty flag stays here (true once the panel is revealed via a
   // preset/custom switch); the card re-seeds from settings on a preset switch.
   const [customInitiallyDirty, setCustomInitiallyDirty] = useState(false)
+
+  // ---- Local extraction (ADR 0040) — form state lives in LocalExtractionCard.
+  // Only the reveal-dirty flag stays here (true once revealed via the local switch).
+  const [localInitiallyDirty, setLocalInitiallyDirty] = useState(false)
 
   // ---- Azure OpenAI (Phase 2.2) — form state lives in AzureExtractionCard ----
   // Only the reveal-dirty flag stays here: true once the user switches to Azure,
@@ -197,7 +214,9 @@ export function SettingsScreen(): React.JSX.Element {
             ? s.openaiCompatible.keyRef
             : s.extractionProvider === 'azure-openai'
               ? s.azureOpenAI.keyRef
-              : null
+              : s.extractionProvider === 'local'
+                ? s.local.keyRef
+                : null
         const audioKeyRef =
           s.asrProvider === 'openai-audio'
             ? s.openaiAudio.keyRef
@@ -222,6 +241,7 @@ export function SettingsScreen(): React.JSX.Element {
           const has = present.get(extractionKeyRef) ?? false
           if (s.extractionProvider === 'openai-compatible') customKey.setPresent(has)
           else if (s.extractionProvider === 'azure-openai') azureKey.setPresent(has)
+          else if (s.extractionProvider === 'local') localKey.setPresent(has)
         }
         if (audioKeyRef !== null) audioKey.setPresent(present.get(audioKeyRef) ?? false)
       } catch (err) {
@@ -346,7 +366,7 @@ export function SettingsScreen(): React.JSX.Element {
   }
 
   function handleExtractionChange(
-    provider: 'anthropic' | 'openai' | 'mistral' | 'azure' | 'openai-compatible',
+    provider: 'anthropic' | 'openai' | 'mistral' | 'azure' | 'openai-compatible' | 'local',
   ): void {
     if (provider === 'anthropic') {
       void persistSettings({
@@ -354,6 +374,28 @@ export function SettingsScreen(): React.JSX.Element {
         extractionProvider: 'anthropic',
         openaiCompatible: undefined,
         azureOpenAI: undefined,
+        local: undefined,
+      } as AppSettings)
+    } else if (provider === 'local') {
+      // Reveal the local config panel (the card mounts with Save enabled via
+      // initiallyDirty); persist only on explicit Save. Seed a default local
+      // block so egress/key-presence can read it before the first save. The
+      // displayName + keyRef are fixed here; the card edits only baseUrl + model.
+      localKey.resetSaveState()
+      setLocalInitiallyDirty(true)
+      const init = localInitialFields(settings)
+      setSettings({
+        ...settings,
+        extractionProvider: 'local',
+        openaiCompatible: undefined,
+        azureOpenAI: undefined,
+        local: {
+          preset: 'local-custom',
+          baseUrl: init.baseUrl,
+          model: init.model,
+          keyRef: LOCAL_KEY_REF,
+          displayName: 'Lokaal',
+        },
       } as AppSettings)
     } else if (provider === 'openai' || provider === 'mistral') {
       // Prefill from the preset catalog and reveal the panel. The card remounts
@@ -371,6 +413,7 @@ export function SettingsScreen(): React.JSX.Element {
           keyRef: provider, // keyRef is the vendor ID: 'openai', 'mistral'
         },
         azureOpenAI: undefined,
+        local: undefined,
       } as AppSettings)
     } else if (provider === 'azure') {
       // Reveal the Azure config panel (the card mounts with Save enabled via
@@ -382,6 +425,7 @@ export function SettingsScreen(): React.JSX.Element {
         ...settings,
         extractionProvider: 'azure-openai',
         openaiCompatible: undefined,
+        local: undefined,
         azureOpenAI: {
           endpoint: init.endpoint,
           deployment: init.deployment,
@@ -402,6 +446,7 @@ export function SettingsScreen(): React.JSX.Element {
         extractionProvider: 'openai-compatible',
         openaiCompatible: { preset: 'custom' as const, baseUrl, model, keyRef, displayName },
         azureOpenAI: undefined,
+        local: undefined,
       } as AppSettings
       if (valid) void persistSettings(next)
       else setSettings(next)
@@ -430,6 +475,23 @@ export function SettingsScreen(): React.JSX.Element {
         displayName: displayName.trim(),
       },
     })
+  }
+
+  /** Persist a validated local extraction config emitted by LocalExtractionCard. */
+  async function persistLocal(fields: LocalFields): Promise<void> {
+    await persistSettings({
+      ...settings,
+      extractionProvider: 'local',
+      openaiCompatible: undefined,
+      azureOpenAI: undefined,
+      local: {
+        preset: 'local-custom',
+        baseUrl: fields.baseUrl.trim(),
+        model: fields.model.trim(),
+        keyRef: LOCAL_KEY_REF,
+        displayName: 'Lokaal',
+      },
+    } as AppSettings)
   }
 
   /** Persist a validated Azure config emitted by AzureExtractionCard. */
@@ -463,6 +525,7 @@ export function SettingsScreen(): React.JSX.Element {
 
   const isCustomOpenAI = settings.extractionProvider === 'openai-compatible'
   const isAzure = settings.extractionProvider === 'azure-openai'
+  const isLocalExtraction = settings.extractionProvider === 'local'
   const isLocalAsr = settings.asrProvider === 'local-parakeet'
   // Narrowed to the import-only cloud audio union (or null), so the config panel
   // can index AUDIO_DEFAULTS and call applyAudioProvider type-safely.
@@ -681,12 +744,22 @@ export function SettingsScreen(): React.JSX.Element {
                   },
                 ],
               },
+              {
+                label: t('settings.extraction.group.device'),
+                options: [
+                  {
+                    value: 'local',
+                    label: t('settings.extraction.mode.local'),
+                    sublabel: t('settings.extraction.mode.local.sub'),
+                  },
+                ],
+              },
             ] as ProviderGroup[]
           }
           selectedValue={extractionProviderSelectValue}
           onChange={(v) => {
             handleExtractionChange(
-              v as 'anthropic' | 'openai' | 'mistral' | 'azure' | 'openai-compatible',
+              v as 'anthropic' | 'openai' | 'mistral' | 'azure' | 'openai-compatible' | 'local',
             )
           }}
           configPanel={
@@ -697,6 +770,13 @@ export function SettingsScreen(): React.JSX.Element {
                 initialFields={azureInitialFields(settings)}
                 initiallyDirty={azureInitiallyDirty}
                 onSave={persistAzure}
+              />
+            ) : isLocalExtraction ? (
+              <LocalExtractionCard
+                keyField={localKey}
+                initialFields={localInitialFields(settings)}
+                initiallyDirty={localInitiallyDirty}
+                onSave={persistLocal}
               />
             ) : !isCustomOpenAI ? (
               /* Anthropic key entry */

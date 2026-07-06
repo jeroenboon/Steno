@@ -65,6 +65,33 @@ export function validateCustomFields(fields: CustomFields): CustomValidationErro
 }
 
 /**
+ * Fields for the LOCAL extraction provider (ADR 0040). The user edits the base
+ * URL and model; the API key is optional (many local servers need none) and is
+ * handled by the key field, not validated here. `displayName` and `keyRef` are
+ * fixed by the parent, so they are not part of the editable form.
+ */
+export interface LocalFields {
+  baseUrl: string
+  model: string
+}
+
+export interface LocalValidationErrors {
+  baseUrl?: string
+  model?: string
+}
+
+export function validateLocalFields(fields: LocalFields): LocalValidationErrors {
+  const errors: LocalValidationErrors = {}
+  if (!isValidUrl(fields.baseUrl)) {
+    errors.baseUrl = t('settings.validation.baseUrl')
+  }
+  if (fields.model.trim().length === 0) {
+    errors.model = t('settings.validation.model')
+  }
+  return errors
+}
+
+/**
  * Fields for the cloud audio ASR providers (Phase 3.4). One object serves the
  * active provider; only the relevant fields are shown (OpenAI/Mistral edit just
  * `model`, Azure Speech also edits endpoint/deployment/apiVersion). `keyRef` and

@@ -171,6 +171,9 @@ const nl = {
   'settings.extraction.heading': 'Extractieprovider (LLM)',
   // Extraction provider groups (Phase 0.4)
   'settings.extraction.group.cloud': 'Cloud',
+  'settings.extraction.group.device': 'Op dit apparaat',
+  'settings.extraction.mode.local': 'Lokaal',
+  'settings.extraction.mode.local.sub': 'LM Studio, Ollama, llama.cpp',
   // Extraction provider labels
   'settings.extraction.mode.anthropic': 'Anthropic',
   'settings.extraction.mode.anthropic.sub': 'Cloud',
@@ -223,6 +226,20 @@ const nl = {
   'settings.custom.key.missing': 'Geen sleutel ingesteld. Vul je API-sleutel in.',
   'settings.custom.save': 'Instellingen opslaan',
   'settings.custom.saved': 'Opgeslagen',
+
+  // Local extraction config (ADR 0040)
+  'settings.local.baseUrl.label': 'Basis-URL',
+  'settings.local.baseUrl.placeholder': 'http://localhost:1234/v1',
+  'settings.local.model.label': 'Model',
+  'settings.local.model.placeholder': 'bijv. het model dat je server geladen heeft',
+  'settings.local.key.label': 'API-sleutel (optioneel)',
+  'settings.local.key.placeholder': 'alleen indien je server er om vraagt',
+  'settings.local.key.optional':
+    'Optioneel. De meeste lokale servers hebben geen sleutel nodig; vul er alleen een in als je server dat vereist (bijv. llama.cpp met --api-key).',
+  'settings.local.save': 'Instellingen opslaan',
+  'settings.local.saved': 'Opgeslagen',
+  'settings.local.hint':
+    'Transcripttekst blijft op dit apparaat. Let op: lokale modellen leveren doorgaans een lagere extractiekwaliteit dan clouddiensten.',
 
   // Azure OpenAI extraction config (Phase 2.2)
   'settings.azure.endpoint.label': 'Endpoint',
