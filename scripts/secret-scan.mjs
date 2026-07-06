@@ -30,8 +30,10 @@ if (!hasGitleaks()) {
 }
 
 // Scan the full git history, redacting any match so the finding itself never
-// leaks into terminal output or logs.
-const result = spawnSync('gitleaks', ['git', '.', '--redact', '-v'], {
+// leaks into terminal output or logs. `--config` is passed explicitly so the
+// root `.gitleaks.toml` (bare-40-hex rule, S1 hardening) is always applied,
+// independent of gitleaks' config auto-discovery.
+const result = spawnSync('gitleaks', ['git', '.', '--config', '.gitleaks.toml', '--redact', '-v'], {
   stdio: 'inherit',
   shell: false,
 })

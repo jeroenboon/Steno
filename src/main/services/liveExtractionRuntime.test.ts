@@ -676,6 +676,29 @@ describe('final pass — infer agenda/participants/title for un-prepared live me
     expect(decisions[0]?.agendaItemId).toBe('live-1')
   })
 
+  it('runs the final pass and ends cleanly when inferContext rejects (degrade, C2)', async () => {
+    // A transient provider failure (429, timeout, expired key) at the inference
+    // step must NOT strand the meeting: the final pass must still run and
+    // endMeeting must resolve so the caller can transition Live → Ended.
+    const h = buildHarness({ context: EMPTY_CONTEXT })
+    vi.spyOn(h.provider, 'inferContext').mockRejectedValueOnce(new Error('429 rate limit'))
+    h.provider.scriptFinalPassResponse({
+      proposedDecisions: [],
+      proposedActions: [],
+      discussionSummaries: [{ agendaItemHint: undefined, text: 'Toch samengevat.' }],
+    })
+
+    h.runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    await expect(h.runtime.endMeeting({ ...MEETING, state: 'ended' })).resolves.toBeUndefined()
+
+    // The final pass ran despite the inference failure...
+    expect(h.provider.calls().filter((c) => c.isFinalPass)).toHaveLength(1)
+    // ...and the discussion summaries were still produced + emitted.
+    const summaryEvents = h.sender.sentOn('items:summaries') as ItemsSummariesPayload[]
+    expect(summaryEvents).toHaveLength(1)
+    expect(summaryEvents[0]?.summaries).toHaveLength(1)
+  })
+
   it('does not infer when the agenda already has items', async () => {
     const h = buildHarness() // default CONTEXT has a confirmed agenda item
     h.provider.scriptInferContextResponse({

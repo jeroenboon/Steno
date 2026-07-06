@@ -24,6 +24,8 @@
 
 import type { ASRProvider } from '@shared/providers'
 
+import { devlog } from '../devlog'
+
 // ---------------------------------------------------------------------------
 // Injected sender abstraction (testable without Electron webContents)
 // ---------------------------------------------------------------------------
@@ -102,11 +104,24 @@ export class AudioCaptureBridge {
 
   private async _forwardSpans(): Promise<void> {
     for await (const span of this._asr.spans()) {
-      // Notify the optional observer (e.g. LiveExtractionRuntime) before the
-      // renderer sees the span. The observer receives interim spans too; it
-      // is responsible for its own isFinal filtering.
-      this._onSpan?.(span)
-      this._sender.send('transcript:span', span)
+      // A single span must never tear down the stream. The observer path
+      // includes the runtime's DB persistence and the sender can throw if the
+      // renderer has gone away mid-meeting. Either throw would otherwise become
+      // an unhandled rejection (the loop is fire-and-forget) and could take the
+      // app down at the worst possible moment. Catch per span, log via devlog,
+      // and keep draining. See audit finding C3.
+      try {
+        // Notify the optional observer (e.g. LiveExtractionRuntime) before the
+        // renderer sees the span. The observer receives interim spans too; it
+        // is responsible for its own isFinal filtering.
+        this._onSpan?.(span)
+        this._sender.send('transcript:span', span)
+      } catch (err) {
+        devlog('audio', 'span-forward-failed', {
+          isFinal: span.isFinal ?? true,
+          reason: err instanceof Error ? err.message : String(err),
+        })
+      }
     }
   }
 }

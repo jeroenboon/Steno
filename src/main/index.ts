@@ -33,6 +33,7 @@ import { transcriptSpanRepo } from './db/repos/transcriptSpanRepo'
 import { devlog, initDevlog } from './devlog'
 import { createIpcRegistry } from './ipc-registry'
 import { denyWindowOpen, isNavigationAllowed } from './navigation-guards'
+import { installProcessErrorHandlers } from './processErrorHandlers'
 import { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import { ItemLifecycleService } from './services/itemLifecycleService'
 import { sendItemsChanged } from './services/itemsChangedNotifier'
@@ -464,6 +465,7 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
       return built.provider.inferContext({ source: { text: req.text } })
     },
     agendaItemRepo: aiRepo,
+    participantRepo: pRepo,
     onMeetingPause: (meetingId) => liveSession.pause(meetingId),
     onMeetingResume: (meetingId) => liveSession.resume(meetingId),
     meetingRepo: mRepo,
@@ -513,6 +515,13 @@ function loadRenderer(mainWindow: BrowserWindow): void {
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
+
+// Install the process-level error backstop as early as possible so a stray
+// unhandled rejection (e.g. from the fire-and-forget span-forwarding loop)
+// can never take the app down silently mid-meeting. Logging becomes active
+// once initDevLogging() runs below; before that the handler still prevents the
+// default crash. See processErrorHandlers.ts and audit finding C3.
+installProcessErrorHandlers()
 
 app
   .whenReady()

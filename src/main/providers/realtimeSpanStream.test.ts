@@ -56,9 +56,9 @@ class FakeWebSocket implements WebSocketLike {
     this.onmessage?.({ data })
   }
 
-  simulateClose(): void {
+  simulateClose(event?: { code?: number; reason?: string }): void {
     this.readyState = WS_CLOSED
-    this.onclose?.()
+    this.onclose?.(event)
   }
 
   simulateError(message = 'boom'): void {
@@ -311,6 +311,123 @@ describe('RealtimeSpanStream', () => {
 
     await iterPromise // must resolve, not hang
     expect(seen.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('stops retrying and emits a terminal auth state on an auth-code close', async () => {
+    const delays: number[] = []
+    const sleep = (ms: number) => {
+      delays.push(ms)
+      return Promise.resolve()
+    }
+    const terminals: { reason: string }[] = []
+    const { wire, sockets } = makeFakeWire()
+    const stream = new RealtimeSpanStream(wire, {
+      sleep,
+      onTerminal: (state) => terminals.push(state),
+    })
+
+    stream.start()
+    lastSocket(sockets).simulateOpen()
+
+    // A revoked / invalid key closes the socket with an auth code (Deepgram 4001).
+    lastSocket(sockets).simulateClose({ code: 4001, reason: 'Unauthorized' })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // No reconnect attempt: still the single original socket, no backoff sleep.
+    expect(sockets).toHaveLength(1)
+    expect(delays).toHaveLength(0)
+    // Terminal auth state surfaced exactly once.
+    expect(terminals).toEqual([{ reason: 'auth' }])
+  })
+
+  it('gives up with a max-retries terminal state after N consecutive failures', async () => {
+    const terminals: { reason: string }[] = []
+    const { wire, sockets } = makeFakeWire()
+    const stream = new RealtimeSpanStream(wire, {
+      sleep: instantSleep,
+      maxConsecutiveFailures: 3,
+      onTerminal: (state) => terminals.push(state),
+    })
+
+    stream.start()
+    lastSocket(sockets).simulateOpen()
+
+    // Repeatedly close without a successful open in between (endpoint down).
+    for (let i = 0; i < 3; i++) {
+      lastSocket(sockets).simulateClose({ code: 1006 })
+      await Promise.resolve()
+      await Promise.resolve()
+    }
+
+    expect(terminals).toEqual([{ reason: 'max-retries' }])
+    const socketsAtGiveUp = sockets.length
+
+    // A close after termination neither reconnects nor re-fires the terminal.
+    lastSocket(sockets).simulateClose({ code: 1006 })
+    await Promise.resolve()
+    expect(sockets).toHaveLength(socketsAtGiveUp)
+    expect(terminals).toHaveLength(1)
+  })
+
+  it('resets the failure count after a successful open (flaky link never gives up)', async () => {
+    const terminals: { reason: string }[] = []
+    const { wire, sockets } = makeFakeWire()
+    const stream = new RealtimeSpanStream(wire, {
+      sleep: instantSleep,
+      maxConsecutiveFailures: 2,
+      onTerminal: (state) => terminals.push(state),
+    })
+
+    stream.start()
+    // Many close/open cycles: each open resets the tally, so we never hit 2.
+    for (let i = 0; i < 6; i++) {
+      lastSocket(sockets).simulateOpen()
+      lastSocket(sockets).simulateClose({ code: 1006 })
+      await Promise.resolve()
+      await Promise.resolve()
+    }
+
+    expect(terminals).toHaveLength(0)
+  })
+
+  it('treats a handshake error carrying HTTP 401 as a permanent auth failure', async () => {
+    const delays: number[] = []
+    const sleep = (ms: number) => {
+      delays.push(ms)
+      return Promise.resolve()
+    }
+    const terminals: { reason: string }[] = []
+    const { wire, sockets } = makeFakeWire()
+    const stream = new RealtimeSpanStream(wire, {
+      sleep,
+      onTerminal: (state) => terminals.push(state),
+    })
+
+    stream.start()
+    lastSocket(sockets).simulateError('Unexpected server response: 401')
+    await Promise.resolve()
+
+    expect(terminals).toEqual([{ reason: 'auth' }])
+    expect(delays).toHaveLength(0)
+    expect(sockets).toHaveLength(1)
+  })
+
+  it('completes the spans() iterator when it terminates on auth failure', async () => {
+    const { wire, sockets } = makeFakeWire()
+    const stream = new RealtimeSpanStream(wire, { sleep: instantSleep })
+
+    stream.start()
+    lastSocket(sockets).simulateOpen()
+
+    const seen: TranscriptSpan[] = []
+    const iterPromise = (async () => {
+      for await (const span of stream.spans()) seen.push(span)
+    })()
+
+    lastSocket(sockets).simulateClose({ code: 4001 })
+    await iterPromise // must resolve, not hang
+    expect(seen).toHaveLength(0)
   })
 
   it('never logs the transcript text on any lifecycle event', async () => {
