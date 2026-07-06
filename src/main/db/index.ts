@@ -6,7 +6,7 @@
  *   const db = openDatabase(app.getPath('userData') + '/livetranscriber.db')
  *   runMigrations(db)
  */
-export { openDatabase } from './database'
+export { openDatabase, closeDatabase } from './database'
 export { runMigrations } from './migrate'
 export { meetingRepo } from './repos/meetingRepo'
 export { agendaItemRepo } from './repos/agendaItemRepo'

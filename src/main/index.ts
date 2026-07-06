@@ -23,6 +23,7 @@ import appIconPath from '../../resources/icon.png?asset'
 
 import { createPcmFrameHandler } from './audio/pcmFrameHandler'
 import { buildContentSecurityPolicy } from './csp'
+import { closeDatabase } from './db/database'
 import { runMigrations } from './db/migrate'
 import { actionRepo } from './db/repos/actionRepo'
 import { agendaItemRepo } from './db/repos/agendaItemRepo'
@@ -47,6 +48,10 @@ import { tryBuildExtractionProvider } from './settings/providerFactory'
 import { ElectronSecretStorage } from './settings/SecretStorage'
 import { SettingsStore } from './settings/SettingsStore'
 import { createWindowOptions } from './window-options'
+
+// The single SQLite handle for the session, opened in registerIpcHandlers and
+// captured here so the `before-quit` hook can close it cleanly (see below).
+let appDatabase: Database.Database | null = null
 
 // ---------------------------------------------------------------------------
 // CSP — applied via session headers rather than a meta tag.
@@ -292,6 +297,8 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   runMigrations(db)
+  // Expose the handle to the `before-quit` hook so it can close on shutdown.
+  appDatabase = db
 
   const dRepo = decisionRepo(db)
   const aRepo = actionRepo(db)
@@ -567,4 +574,17 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+// Close the SQLite handle on quit. WAL mode makes an unclosed handle benign, but
+// a clean close is correct hygiene. closeDatabase is idempotent and swallows any
+// error (handed to devlog) so a close failure can never throw and block shutdown.
+app.on('before-quit', () => {
+  if (appDatabase === null) return
+  closeDatabase(appDatabase, (err) => {
+    devlog('db', 'close-failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  })
+  appDatabase = null
 })
