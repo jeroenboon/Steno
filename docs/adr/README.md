@@ -41,5 +41,6 @@ So a missing number is expected, not a lost file. The directory currently runs t
 | [0038](0038-ipc-registry-grouped-role-interfaces.md)                             | IPC registry dependencies as grouped role interfaces                               |
 | [0039](0039-shared-extraction-session-core.md)                                   | Shared `ExtractionSession` core composed by both session controllers               |
 | [0040](0040-local-extraction-provider.md)                                        | Local extraction provider (LM Studio / Ollama / llama.cpp)                         |
+| [0041](0041-local-asr-inference-in-a-worker-thread.md)                           | Local ASR inference runs in a worker_thread (proposed)                             |
 
 When you add an ADR, add a row here (and take the next free number).
