@@ -777,8 +777,10 @@ describe('SettingsScreen — local extraction', () => {
     await waitFor(() => {
       expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
     })
-    const select = screen.getByTestId('extraction-provider-select') as HTMLSelectElement
-    const localOption = Array.from(select.options).find((o) => o.value === 'local')
+    const select = screen.getByTestId('extraction-provider-select')
+    const localOption = Array.from((select as HTMLSelectElement).options).find(
+      (o) => o.value === 'local',
+    )
     expect(localOption).toBeDefined()
   })
 

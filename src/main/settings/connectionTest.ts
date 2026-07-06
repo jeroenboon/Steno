@@ -145,7 +145,12 @@ function resolveExtractionProbe(settings: AppSettings): Probe | null {
       // a follow-up (issue #89); here it just resolves and never errors on no-key.
       const cfg = settings.local
       const baseUrl = cfg.baseUrl.replace(/\/$/, '')
-      return { url: `${baseUrl}/models`, keyRef: cfg.keyRef, authHeaders: bearer, keyOptional: true }
+      return {
+        url: `${baseUrl}/models`,
+        keyRef: cfg.keyRef,
+        authHeaders: bearer,
+        keyOptional: true,
+      }
     }
   }
 }
