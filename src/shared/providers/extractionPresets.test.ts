@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest'
 
-import { extractionPresets } from './extractionPresets'
+import { extractionPresets, localExtractionPresets } from './extractionPresets'
 
 describe('extractionPresets', () => {
   it('should export an object with three presets', () => {
@@ -69,5 +69,30 @@ describe('extractionPresets', () => {
     // This is a meta-test: verify that extractionPresets is importable from src/shared/providers
     // The actual import happens at the top of this file, so if it fails, this test fails.
     expect(extractionPresets).toBeDefined()
+  })
+})
+
+describe('localExtractionPresets (ADR 0040)', () => {
+  it('exposes the three named runtimes plus a generic custom entry', () => {
+    expect(localExtractionPresets).toHaveProperty('lmstudio')
+    expect(localExtractionPresets).toHaveProperty('ollama')
+    expect(localExtractionPresets).toHaveProperty('llamacpp')
+    expect(localExtractionPresets).toHaveProperty('local-custom')
+  })
+
+  it('prefills each named runtime with its default loopback URL and port', () => {
+    expect(localExtractionPresets.lmstudio.defaultBaseUrl).toBe('http://localhost:1234/v1')
+    expect(localExtractionPresets.ollama.defaultBaseUrl).toBe('http://localhost:11434/v1')
+    expect(localExtractionPresets.llamacpp.defaultBaseUrl).toBe('http://localhost:8080/v1')
+  })
+
+  it('gives every named runtime a non-empty display name', () => {
+    for (const preset of ['lmstudio', 'ollama', 'llamacpp'] as const) {
+      expect(localExtractionPresets[preset].displayName.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('leaves the generic custom entry with an empty base URL for the user to fill', () => {
+    expect(localExtractionPresets['local-custom'].defaultBaseUrl).toBe('')
   })
 })

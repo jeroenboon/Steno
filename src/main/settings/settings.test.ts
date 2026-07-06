@@ -1102,6 +1102,30 @@ describe('computeEgressState', () => {
     expect(state.notes).toBe('local-network:192.168.1.50')
   })
 
+  it('local egress derives from the URL host, not the preset (preset is prefill-only)', () => {
+    // Ollama preset pointed at a LAN host is still honest LAN egress...
+    const lan: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: {
+        preset: 'ollama',
+        baseUrl: 'http://192.168.1.50:11434/v1',
+        model: 'llama3.1',
+        keyRef: 'local',
+        displayName: 'Lokaal',
+      },
+    }
+    expect(computeEgressState(lan).notes).toBe('local-network:192.168.1.50')
+
+    // ...and the LM Studio preset on loopback is on-device, regardless of preset.
+    const loopback: AppSettings = {
+      ...lan,
+      local: { ...lan.local, preset: 'lmstudio', baseUrl: 'http://localhost:1234/v1' },
+    }
+    expect(computeEgressState(loopback).notes).toBe('local')
+  })
+
   it('egressState does not contain any key-like secrets', () => {
     const settings: AppSettings = {
       asrProvider: 'deepgram',

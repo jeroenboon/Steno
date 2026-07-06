@@ -417,6 +417,23 @@ describe('AppSettings — per-field validation is preserved', () => {
     expect(AppSettingsSchema.safeParse(input).success).toBe(false)
   })
 
+  it.each(['lmstudio', 'ollama', 'llamacpp', 'local-custom'] as const)(
+    'accepts the named local preset "%s"',
+    (preset) => {
+      const input = {
+        asrProvider: 'deepgram',
+        extractionProvider: 'local',
+        primaryLanguage: 'nl',
+        local: { ...localCfg, preset },
+      }
+      const result = AppSettingsSchema.safeParse(input)
+      expect(result.success).toBe(true)
+      if (result.success && result.data.extractionProvider === 'local') {
+        expect(result.data.local.preset).toBe(preset)
+      }
+    },
+  )
+
   it('defaults openaiCompatible.preset to "custom" when omitted', () => {
     const input = {
       asrProvider: 'deepgram',

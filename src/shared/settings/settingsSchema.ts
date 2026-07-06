@@ -140,12 +140,13 @@ export type OpenAICompatibleConfig = z.infer<typeof OpenAICompatibleConfigSchema
  * `keyRef` is still a required non-empty name so the shared key-resolution stays
  * non-null, but the STORED secret is optional: a keyless local server simply has
  * no secret under that ref, and the factory then omits the Authorization header.
- * `preset` is prefill-only (not egress-load-bearing); the named runtime presets
- * (lmstudio/ollama/llamacpp) are a follow-up, so for now only `local-custom`.
+ * `preset` is prefill-only (not egress-load-bearing): the named runtime presets
+ * (lmstudio/ollama/llamacpp) plus a generic `local-custom` only prefill the base
+ * URL + model in the UI; localness is derived from the base URL host, not here.
  */
 export const LocalExtractionConfigSchema = z.object({
-  /** Preset identifier. Prefill-only; named runtimes land in a follow-up slice. */
-  preset: z.enum(['local-custom']).default('local-custom'),
+  /** Prefill-only runtime preset; localness is derived from the base URL host. */
+  preset: z.enum(['lmstudio', 'ollama', 'llamacpp', 'local-custom']).default('local-custom'),
   /** Base URL of the local server, e.g. http://localhost:1234/v1 */
   baseUrl: z.url(),
   /** Model identifier as the local runtime names it. */
