@@ -12,7 +12,13 @@
 import { z } from 'zod'
 
 import { MeetingSchema, AgendaItemSchema, ParticipantSchema } from './domain'
-import { DecisionSchema, ActionSchema, DiscussionSummarySchema, NudgeSchema } from './domain/types'
+import {
+  DecisionSchema,
+  ActionSchema,
+  DiscussionSummarySchema,
+  NudgeSchema,
+  ItemStateSchema,
+} from './domain/types'
 import { AsrTerminalReasonSchema, InferredContextSchema } from './providers'
 import { type EgressState } from './settings/egressState'
 import { AppSettingsSchema } from './settings/settingsSchema'
@@ -255,29 +261,16 @@ export type { Decision, Action, DiscussionSummary, Nudge } from './domain/types'
 export const ItemsChangedPayloadSchema = z.object({
   /** The meeting these items belong to (renderer applies only for its focused meeting). */
   meetingId: z.string().min(1),
-  /** Full current decisions for the meeting (both Proposed and Confirmed). */
-  decisions: z.array(
-    z.object({
-      id: z.string().min(1),
-      rationale: z.string(),
-      agendaItemId: z.string().min(1),
-      sourceSpanId: z.string().min(1),
-      state: z.enum(['proposed', 'confirmed']),
-    }),
-  ),
-  /** Full current actions for the meeting (both Proposed and Confirmed). */
-  actions: z.array(
-    z.object({
-      id: z.string().min(1),
-      description: z.string().optional(),
-      agendaItemId: z.string().min(1),
-      sourceSpanId: z.string().min(1),
-      owner: z.string().min(1).optional(),
-      dueDate: z.iso.datetime().optional(),
-      status: z.enum(['open', 'done']),
-      state: z.enum(['proposed', 'confirmed']),
-    }),
-  ),
+  /**
+   * Full current decisions/actions (both Proposed and Confirmed). These are the
+   * domain Decision/Action shapes, derived from the domain schemas so the item
+   * fields stay a single source of truth (avoids the drift the audit flagged).
+   * Delta: `state` is required on the wire — main always sends it, so we drop the
+   * domain schema's `.default('proposed')` (a payload missing state must reject,
+   * exactly as before).
+   */
+  decisions: z.array(DecisionSchema.extend({ state: ItemStateSchema })),
+  actions: z.array(ActionSchema.extend({ state: ItemStateSchema })),
 })
 
 export type ItemsChangedPayload = z.infer<typeof ItemsChangedPayloadSchema>
@@ -400,18 +393,21 @@ export type ItemConfirmResponse = z.infer<typeof ItemConfirmResponseSchema>
 // item:editAndConfirm — edit + confirm in one step (item 0018)
 // ---------------------------------------------------------------------------
 
-const DecisionUpdatesSchema = z.object({
-  rationale: z.string().optional(),
-  agendaItemId: z.string().min(1).optional(),
-})
+// Edit payloads: a subset of the domain Decision/Action fields, all optional (a
+// partial update). Derived from the domain schemas so the shared fields have a
+// single source of truth. Delta: `description` keeps a min(1) constraint here (a
+// note-taker edit must not blank an action) whereas the domain Action.description
+// is optional-and-possibly-empty for back-compat, so it is re-declared locally.
+const DecisionUpdatesSchema = DecisionSchema.pick({ rationale: true, agendaItemId: true }).partial()
 
-const ActionUpdatesSchema = z.object({
-  description: z.string().min(1).optional(),
-  owner: z.string().min(1).optional(),
-  dueDate: z.iso.datetime().optional(),
-  status: z.enum(['open', 'done']).optional(),
-  agendaItemId: z.string().min(1).optional(),
+const ActionUpdatesSchema = ActionSchema.pick({
+  owner: true,
+  dueDate: true,
+  status: true,
+  agendaItemId: true,
 })
+  .partial()
+  .extend({ description: z.string().min(1).optional() })
 
 export const ItemEditAndConfirmRequestSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('decision'), id: z.string().min(1), updates: DecisionUpdatesSchema }),
@@ -441,22 +437,12 @@ export type ItemDismissResponse = z.infer<typeof ItemDismissResponseSchema>
 // item:createConfirmed — manual add during Live → directly Confirmed (item 0018)
 // ---------------------------------------------------------------------------
 
-const NewDecisionItemSchema = z.object({
-  id: z.string().min(1),
-  rationale: z.string(),
-  agendaItemId: z.string().min(1),
-  sourceSpanId: z.string().min(1),
-})
+// The create-confirmed payload is a full domain item minus `state`: main sets
+// state = 'confirmed' itself, so the renderer never sends it. Derived from the
+// domain schemas (single source of truth) rather than re-listing every field.
+const NewDecisionItemSchema = DecisionSchema.omit({ state: true })
 
-const NewActionItemSchema = z.object({
-  id: z.string().min(1),
-  description: z.string().optional(),
-  agendaItemId: z.string().min(1),
-  sourceSpanId: z.string().min(1),
-  owner: z.string().min(1).optional(),
-  dueDate: z.iso.datetime().optional(),
-  status: z.enum(['open', 'done']),
-})
+const NewActionItemSchema = ActionSchema.omit({ state: true })
 
 export const ItemCreateConfirmedRequestSchema = z.discriminatedUnion('kind', [
   z.object({
