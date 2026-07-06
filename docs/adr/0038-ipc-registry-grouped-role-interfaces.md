@@ -29,9 +29,11 @@ Optionality is now **per group, not per method.** A whole domain object is prese
 
 The registry still depends only on these **ports**, never on the concrete controller classes: fakes implement the interfaces and the registry remains unit-testable without Electron (the item-0012 property is preserved). The Zod-parse-per-channel dispatch, the `IpcChannel` union coverage, and the completeness guard are unchanged.
 
-## What this ADR does NOT do
+## Follow-up: per-domain file split (audit A2b)
 
-The per-domain **file split** — carving `ipc-registry.ts` into `sessionHandlers.ts`, `itemHandlers.ts`, … with a thin composer — is a separate follow-up (audit A2b). This change is dependency-surface only; the handlers still live in one file.
+The role-interface reshape above (A2a) left every handler reading from its own dep group but still in one 799-LOC file. A2b completes the move: the handler factories, and the role interface each one consumes, now live in per-domain modules under `src/main/ipc/` — `sessionHandlers.ts` (+ `SessionOps`), `itemHandlers.ts` (+ `ItemOps`), `historyHandlers.ts` (+ `HistoryOps`), `prepHandlers.ts` (+ `PrepDeps`), `importHandlers.ts` (+ `ImportOps`), `modelHandlers.ts` (+ `ModelOps`), `platformHandlers.ts` (+ `PlatformOps`), `settingsHandlers.ts` (+ `ProviderOps`), plus a shared `handlerTypes.ts` for the `Handler` type.
+
+Each module exports a factory returning a `Partial<Record<IpcChannel, Handler>>` for its channels and takes only its own dep slice (`SessionHandlerDeps`, etc.). `ipc-registry.ts` is now a thin **composer**: `IpcRegistryDependencies` is the aggregate of those slices, `createIpcRegistry` spreads the per-module maps into one `HANDLERS` map, and it still owns dispatch + the unknown-channel guard + the `IpcChannel` completeness property. The role interfaces are re-exported from `ipc-registry.ts` so `index.ts` and the tests keep a single import site and need no changes. Pure code movement — no behaviour change.
 
 ## Trade-offs
 
