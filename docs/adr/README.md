@@ -37,5 +37,6 @@ So a missing number is expected, not a lost file. The directory currently runs t
 | [0034](0034-shared-extraction-engine-wire-seam.md)                               | Shared extraction engine behind an `ExtractionWire` seam                           |
 | [0035](0035-final-pass-authoritative-meeting-notes.md)                           | The final pass produces the authoritative, deduplicated per-agenda notes           |
 | [0036](0036-asr-terminal-state-surfaced-to-egress-indicator.md)                  | ASR terminal state surfaced end-to-end to the EgressIndicator                      |
+| [0037](0037-drop-framer-motion-for-css-only-live-animation.md)                   | Drop framer-motion for CSS-only Live-screen animation                              |
 
 When you add an ADR, add a row here (and take the next free number).

@@ -21,6 +21,7 @@ import type { DiscussionSummary } from '@shared/domain/types'
 import { toMarkdown } from '@shared/export/meetingExporter'
 
 import { t } from '../i18n'
+import { callApi } from '../lib/callApi'
 import { useAppStore } from '../store/appStore'
 import type { ProposedDecision, ProposedAction } from '../store/appStore'
 
@@ -414,24 +415,20 @@ export function ReviewScreen(): React.JSX.Element {
   const handleEditSave = useCallback(async () => {
     if (editState === null) return
 
-    try {
+    await callApi('ReviewScreen editAndConfirm', () => {
       if (editState.kind === 'decision') {
-        await window.api.itemEditAndConfirm({
+        return window.api.itemEditAndConfirm({
           kind: 'decision',
           id: editState.id,
           updates: { rationale: editState.text },
         })
-      } else {
-        const updates: { description?: string; owner?: string } = {}
-        if (editState.text.length > 0) updates.description = editState.text
-        if (editState.owner !== '') updates.owner = editState.owner
-        await window.api.itemEditAndConfirm({ kind: 'action', id: editState.id, updates })
       }
-    } catch (err) {
-      console.error('[ReviewScreen] editAndConfirm failed:', err)
-    } finally {
-      setEditState(null)
-    }
+      const updates: { description?: string; owner?: string } = {}
+      if (editState.text.length > 0) updates.description = editState.text
+      if (editState.owner !== '') updates.owner = editState.owner
+      return window.api.itemEditAndConfirm({ kind: 'action', id: editState.id, updates })
+    })
+    setEditState(null)
   }, [editState])
 
   const handleEditCancel = useCallback(() => {
@@ -439,19 +436,11 @@ export function ReviewScreen(): React.JSX.Element {
   }, [])
 
   const handleConfirm = useCallback(async (kind: ItemKind, id: string) => {
-    try {
-      await window.api.itemConfirm({ kind, id })
-    } catch (err) {
-      console.error('[ReviewScreen] itemConfirm failed:', err)
-    }
+    await callApi('ReviewScreen itemConfirm', () => window.api.itemConfirm({ kind, id }))
   }, [])
 
   const handleDismiss = useCallback(async (kind: ItemKind, id: string) => {
-    try {
-      await window.api.itemDismiss({ kind, id })
-    } catch (err) {
-      console.error('[ReviewScreen] itemDismiss failed:', err)
-    }
+    await callApi('ReviewScreen itemDismiss', () => window.api.itemDismiss({ kind, id }))
   }, [])
 
   // ---------------------------------------------------------------------------
@@ -500,27 +489,27 @@ export function ReviewScreen(): React.JSX.Element {
 
   const handleCopyTranscript = useCallback(async () => {
     if (activeMeeting === null) return
-    try {
-      await window.api.transcriptCopy({ meetingId: activeMeeting })
+    const ok = await callApi('ReviewScreen transcriptCopy', () =>
+      window.api.transcriptCopy({ meetingId: activeMeeting }),
+    )
+    if (ok) {
       setTranscriptCopyFeedback(true)
       setTimeout(() => {
         setTranscriptCopyFeedback(false)
       }, 2000)
-    } catch (err) {
-      console.error('[ReviewScreen] transcriptCopy failed:', err)
     }
   }, [activeMeeting])
 
   const handleCopyMarkdown = useCallback(async () => {
-    try {
-      const content = toMarkdown(buildExportInput())
-      await window.api.exportCopyMarkdown({ content })
+    const content = toMarkdown(buildExportInput())
+    const ok = await callApi('ReviewScreen exportCopyMarkdown', () =>
+      window.api.exportCopyMarkdown({ content }),
+    )
+    if (ok) {
       setCopyFeedback(true)
       setTimeout(() => {
         setCopyFeedback(false)
       }, 2000)
-    } catch (err) {
-      console.error('[ReviewScreen] exportCopyMarkdown failed:', err)
     }
   }, [buildExportInput])
 

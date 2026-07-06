@@ -147,6 +147,14 @@ export interface AppState {
   loopbackState: LoopbackState | null
 
   /**
+   * Whether the Live transcript pane is expanded (A1). Lifted to the store so
+   * TranscriptPane owns the toggle while the LiveScreen orchestrator can still
+   * fold it into the MarginLeaders recompute key (collapsing the pane shifts
+   * the leader anchors). Open by default — it is the live canvas.
+   */
+  transcriptOpen: boolean
+
+  /**
    * Proposed decisions from the last extraction turn (item 0018).
    * Keyed by id; replaced wholesale on each items:changed event.
    */
@@ -248,6 +256,7 @@ export interface AppState {
 
   /** Update the loopback state after start() resolves. */
   setLoopbackState: (state: LoopbackState) => void
+  setTranscriptOpen: (open: boolean) => void
 
   /**
    * Reconcile the full item set for a meeting from an authoritative
@@ -322,6 +331,7 @@ export const useAppStore = create<AppState>()((set) => ({
   transcriptSpans: [],
   captureMode: 'remote',
   loopbackState: null,
+  transcriptOpen: true,
   proposedDecisions: [],
   proposedActions: [],
   confirmedDecisions: [],
@@ -385,6 +395,9 @@ export const useAppStore = create<AppState>()((set) => ({
   },
   setLoopbackState: (state) => {
     set({ loopbackState: state })
+  },
+  setTranscriptOpen: (open) => {
+    set({ transcriptOpen: open })
   },
 
   reconcileItems: (payload) => {
