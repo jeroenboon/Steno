@@ -54,7 +54,6 @@ const mockApi = {
   agendaItemRemove: vi.fn().mockResolvedValue({ ok: true }),
   participantAdd: vi.fn(),
   participantRemove: vi.fn(),
-  meetingStart: vi.fn(),
   ping: vi.fn(),
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),

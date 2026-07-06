@@ -223,7 +223,6 @@ const IPC_CHANNELS: IpcChannel[] = [
   'agendaItem:remove',
   'participant:add',
   'participant:remove',
-  'meeting:start',
   'audio:start',
   'audio:stop',
   'item:confirm',

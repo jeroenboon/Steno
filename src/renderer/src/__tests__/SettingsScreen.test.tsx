@@ -43,7 +43,6 @@ const mockApi = {
   agendaItemRemove: vi.fn(),
   participantAdd: vi.fn(),
   participantRemove: vi.fn(),
-  meetingStart: vi.fn(),
   audioStart: vi.fn(),
   audioStop: vi.fn(),
   audioSendFrame: vi.fn(),
