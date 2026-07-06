@@ -303,7 +303,7 @@ describe('ImportSessionController', () => {
     expect(repos.decisionRepo.listByMeeting('imp-degraded')).toHaveLength(0)
     expect(repos.meetingRepo.findById('imp-degraded')?.state).toBe('ended')
     expect(s.stages()[s.stages().length - 1]).toBe('done')
-    console_.expectLogged('[LiveExtractionRuntime] No extraction provider configured')
+    console_.expectLogged('[ImportSessionController] No extraction provider configured')
     console_.restore()
   })
 
