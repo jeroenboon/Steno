@@ -21,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { TranscriptSpan } from '@shared/domain/types'
 import type { AsrTerminalState } from '@shared/providers'
+import { captureConsole } from '@shared/testing/captureConsole'
 
 import { DeepgramAsrProvider, type WebSocketLike } from './DeepgramAsrProvider'
 
@@ -576,6 +577,7 @@ describe('DeepgramAsrProvider — terminal state (audit C4)', () => {
     const provider = makeProvider()
     const terminals: AsrTerminalState[] = []
     provider.onTerminal((state) => terminals.push(state))
+    const console_ = captureConsole()
 
     provider.start()
     currentSocket.simulateOpen()
@@ -583,6 +585,8 @@ describe('DeepgramAsrProvider — terminal state (audit C4)', () => {
     currentSocket.simulateClose({ code: 4001, reason: 'Unauthorized' })
 
     expect(terminals).toEqual([{ reason: 'auth' }])
+    console_.expectLogged('[DeepgramAsrProvider] Socket closed', 'authentication rejected')
+    console_.restore()
   })
 
   it('does not fire the terminal event on a transient (reconnectable) close', () => {

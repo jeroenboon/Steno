@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { TranscriptSpan } from '@shared/domain/types'
 import type { ExtractionRequest } from '@shared/providers'
+import { captureConsole } from '@shared/testing/captureConsole'
 
 import { AzureOpenAIExtractionProvider } from './AzureOpenAIExtractionProvider'
 
@@ -119,11 +120,17 @@ describe('AzureOpenAIExtractionProvider.extract', () => {
   it('retries once on invalid JSON, then degrades to empty proposals', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse('not json'))
     const provider = makeProvider(fetchMock)
+    const console_ = captureConsole()
 
     const result = await provider.extract(extractionRequest)
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(result).toEqual({ proposedDecisions: [], proposedActions: [] })
+    console_.expectLogged(
+      '[Azure] Validation failed, retrying',
+      '[Azure] Retry failed, skipping turn',
+    )
+    console_.restore()
   })
 
   it('repairs via the one retry: invalid first, valid second', async () => {
@@ -132,11 +139,14 @@ describe('AzureOpenAIExtractionProvider.extract', () => {
       .mockResolvedValueOnce(okResponse('broken {'))
       .mockResolvedValueOnce(okResponse(JSON.stringify(validExtraction)))
     const provider = makeProvider(fetchMock)
+    const console_ = captureConsole()
 
     const result = await provider.extract(extractionRequest)
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
+    console_.expectLogged('[Azure] Validation failed, retrying')
+    console_.restore()
   })
 
   it('asks for discussion summaries on the final pass', async () => {
@@ -238,10 +248,16 @@ describe('AzureOpenAIExtractionProvider.inferContext', () => {
   it('retries once on invalid JSON, then degrades to an empty context', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify({ agendaItems: 'bad' })))
     const provider = makeProvider(fetchMock)
+    const console_ = captureConsole()
 
     const result = await provider.inferContext({ source: { spans } })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(result).toEqual({ agendaItems: [], participants: [] })
+    console_.expectLogged(
+      '[Azure] Context inference failed, retrying',
+      '[Azure] Context inference retry failed, returning empty',
+    )
+    console_.restore()
   })
 })

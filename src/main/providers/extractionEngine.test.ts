@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { TranscriptSpan } from '@shared/domain/types'
 import type { ExtractionRequest } from '@shared/providers'
+import { captureConsole } from '@shared/testing/captureConsole'
 
 import { initDevlog, resetDevlog } from '../devlog'
 
@@ -109,21 +110,28 @@ describe('ExtractionEngine.extract', () => {
   it('retries once when the wire fails, then degrades to empty proposals', async () => {
     const wire = fakeWire([null, null])
     const engine = makeEngine(wire)
+    const console_ = captureConsole()
 
     const result = await engine.extract(extractionRequest)
 
     expect(result).toEqual({ proposedDecisions: [], proposedActions: [] })
     expect(wire.calls).toHaveLength(2)
+    console_.expectLogged(
+      '[Fake] Validation failed, retrying',
+      '[Fake] Retry failed, skipping turn',
+    )
   })
 
   it('repairs via the one retry: wire fails first, succeeds second', async () => {
     const wire = fakeWire([null, validExtraction])
     const engine = makeEngine(wire)
+    const console_ = captureConsole()
 
     const result = await engine.extract(extractionRequest)
 
     expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
     expect(wire.calls).toHaveLength(2)
+    console_.expectLogged('[Fake] Validation failed, retrying')
   })
 
   it('drops only the malformed item, keeping the rest of the turn (no retry)', async () => {
@@ -146,11 +154,13 @@ describe('ExtractionEngine.extract', () => {
   it('retries when the candidate is not a JSON object at all', async () => {
     const wire = fakeWire(['a string, not an object', validExtraction])
     const engine = makeEngine(wire)
+    const console_ = captureConsole()
 
     const result = await engine.extract(extractionRequest)
 
     expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
     expect(wire.calls).toHaveLength(2)
+    console_.expectLogged('[Fake] Validation failed, retrying')
   })
 
   it('carries isFinalPass to the wire and keeps discussion summaries on the final pass', async () => {
@@ -226,11 +236,16 @@ describe('ExtractionEngine.inferContext', () => {
   it('retries once on an invalid candidate, then degrades to an empty context', async () => {
     const wire = fakeWire([{ agendaItems: 'bad' }, { agendaItems: 'bad' }])
     const engine = makeEngine(wire)
+    const console_ = captureConsole()
 
     const result = await engine.inferContext({ source: { spans } })
 
     expect(result).toEqual({ agendaItems: [], participants: [] })
     expect(wire.calls).toHaveLength(2)
+    console_.expectLogged(
+      '[Fake] Context inference failed, retrying',
+      '[Fake] Context inference retry failed, returning empty',
+    )
   })
 })
 

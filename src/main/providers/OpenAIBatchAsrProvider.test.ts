@@ -14,6 +14,8 @@
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { captureConsole } from '@shared/testing/captureConsole'
+
 import { OpenAIBatchAsrProvider } from './OpenAIBatchAsrProvider'
 
 // ---------------------------------------------------------------------------
@@ -108,8 +110,12 @@ describe('OpenAIBatchAsrProvider.transcribeBatch', () => {
   it('throws on a non-ok HTTP response', async () => {
     const fetchMock = vi.fn().mockResolvedValue(errorResponse(401))
     const provider = makeProvider(fetchMock)
+    const console_ = captureConsole()
 
     await expect(provider.transcribeBatch(pcm)).rejects.toThrow(/401/)
+
+    console_.expectLogged('[OpenAI audio] Transcription request failed (HTTP 401)')
+    console_.restore()
   })
 
   it('does not log the API key on failure', async () => {

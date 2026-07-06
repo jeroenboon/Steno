@@ -10,6 +10,8 @@
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { captureConsole } from '@shared/testing/captureConsole'
+
 import { AzureWhisperBatchAsrProvider } from './AzureWhisperBatchAsrProvider'
 
 const pcm = new Uint8Array([0, 0, 1, 0, 2, 0, 3, 0])
@@ -83,7 +85,12 @@ describe('AzureWhisperBatchAsrProvider.transcribeBatch', () => {
 
   it('throws on a non-ok HTTP response', async () => {
     const provider = makeProvider(vi.fn().mockResolvedValue(errorResponse(403)))
+    const console_ = captureConsole()
+
     await expect(provider.transcribeBatch(pcm)).rejects.toThrow(/403/)
+
+    console_.expectLogged('[Azure audio] Transcription request failed (HTTP 403)')
+    console_.restore()
   })
 })
 
