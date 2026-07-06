@@ -173,266 +173,130 @@ export type CustomOpenAIConfig = z.infer<typeof CustomOpenAIConfigSchema>
 // providers (Anthropic, OpenAI-compatible, Azure OpenAI) and ASR providers
 // (local-parakeet, Deepgram, OpenAI Audio, Mistral Voxtral, Azure Speech).
 //
-// This generates 15 combination schemas (3 extraction × 5 ASR), each with
-// explicit type definitions to ensure type safety and proper validation.
+// This is 15 combination schemas (3 extraction × 5 ASR). Rather than hand-copy
+// the same ~13-line object shape 15 times (audit C9: drift risk grew with each
+// vendor), each variant is one declarative `providerVariant(...)` call. The
+// builder bakes in the shared shape — the two discriminants, `primaryLanguage`,
+// the always-optional `anthropic` model overrides, and all six provider slots
+// defaulted to "absent" (`z.undefined().optional()`) — then `.extend()`s the
+// one or two slots the chosen providers activate. The result is exactly
+// behaviour-preserving: same fields, same optionality, same defaults, same
+// `z.infer` per-variant type (`.extend` overrides let the union still narrow on
+// `asrProvider` / `extractionProvider`; the characterization tests in
+// `settingsSchema.test.ts` lock this).
+//
+// -------------------------------------------------------------------------
+// WIRING CHECKLIST — adding a new ASR or extraction vendor touches all of:
+//
+//   1. settingsSchema.ts (this file)
+//        - add the vendor's `<Vendor>ConfigSchema` + exported `z.infer` type
+//        - add its slot const below and the new `providerVariant(...)` rows
+//          (one per opposite-axis provider) to the `AppSettingsSchema` union
+//   2. src/shared/settings/keyRefs.ts
+//        - add a `case` to `resolveAsrKeyRef` / `resolveExtractionKeyRef`
+//   3. src/main/settings/providerFactory.ts
+//        - add a `case` to `buildAsrProvider` / `buildExtractionProvider`
+//          (+ any per-vendor live/import builder helper)
+//   4. src/main/settings/connectionTest.ts
+//        - add the vendor's connection-test branch
+//   5. src/shared/settings/egressState.ts
+//        - add a `case` to `computeAudioEgress` / `computeNotesEgress`
+//          (disclosure copy in `buildDisclosureCopy` derives from these)
+//   6. src/shared/providers/extractionPresets.ts
+//        - add a preset entry (extraction vendors only)
+//   7. src/renderer/src/screens/settingsValidation.ts
+//        - extend the form validation for the new slot
+//   8. src/renderer/Settings UI cards
+//        - AudioAsrCard.tsx (ASR) / OpenAICompatibleCard.tsx +
+//          AzureExtractionCard.tsx (extraction), wired in SettingsScreen.tsx
+//   9. src/main/settings/migrationUtils.ts
+//        - only if an old on-disk shape needs migrating to the new one
+//
+// (Grounded by grepping where an existing id such as `deepgram` /
+// `azure-openai` appears; keep this list in sync when a spot moves.)
 // ---------------------------------------------------------------------------
 
 /**
- * Settings when using the Anthropic preset extractor with local Parakeet ASR.
+ * Build one variant of the settings union from an ASR axis-shape and an
+ * extraction axis-shape.
+ *
+ * The base shape carries every field common to all 15 variants, with all six
+ * provider slots defaulted to "absent". Each axis-shape carries its own
+ * discriminant literal (`asrProvider` / `extractionProvider`) plus the one
+ * config slot that provider activates — an empty override for the no-slot
+ * providers (`local-parakeet`, `anthropic`). `.extend` overrides keep each
+ * variant's `z.infer` precise, so the union still narrows on the discriminants.
+ * (Baking the discriminant literal into the concrete axis-shape const is what
+ * preserves the narrow `z.literal('deepgram')` type per call.)
  */
-const AnthropicLocalParakeetSchema = z.object({
-  asrProvider: z.literal('local-parakeet'),
-  extractionProvider: z.literal('anthropic'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: z.undefined().optional(),
-  azureOpenAI: z.undefined().optional(),
-  deepgram: z.undefined().optional(),
-  openaiAudio: z.undefined().optional(),
-  mistralVoxtral: z.undefined().optional(),
-  azureSpeech: z.undefined().optional(),
-})
+function providerVariant<AsrShape extends z.ZodRawShape, ExtShape extends z.ZodRawShape>(
+  asrShape: AsrShape,
+  extShape: ExtShape,
+) {
+  return z
+    .object({
+      primaryLanguage: z.string().min(1),
+      anthropic: AnthropicConfigSchema,
+      openaiCompatible: z.undefined().optional(),
+      azureOpenAI: z.undefined().optional(),
+      deepgram: z.undefined().optional(),
+      openaiAudio: z.undefined().optional(),
+      mistralVoxtral: z.undefined().optional(),
+      azureSpeech: z.undefined().optional(),
+    })
+    .extend(extShape)
+    .extend(asrShape)
+}
 
-/**
- * Settings when using the Anthropic preset extractor with Deepgram ASR.
- */
-const AnthropicDeepgramSchema = z.object({
-  asrProvider: z.literal('deepgram'),
-  extractionProvider: z.literal('anthropic'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: z.undefined().optional(),
-  azureOpenAI: z.undefined().optional(),
-  deepgram: DeepgramConfigSchema,
-  openaiAudio: z.undefined().optional(),
-  mistralVoxtral: z.undefined().optional(),
-  azureSpeech: z.undefined().optional(),
-})
-
-/**
- * Settings when using the Anthropic preset extractor with OpenAI Audio ASR.
- */
-const AnthropicOpenAIAudioSchema = z.object({
+// Axis-shapes: the discriminant literal + the config slot each provider
+// activates. `local-parakeet` and `anthropic` activate no extra slot (their
+// config is either absent or the shared optional `anthropic` block).
+const asrLocalParakeet = { asrProvider: z.literal('local-parakeet') }
+const asrDeepgram = { asrProvider: z.literal('deepgram'), deepgram: DeepgramConfigSchema }
+const asrOpenAIAudio = {
   asrProvider: z.literal('openai-audio'),
-  extractionProvider: z.literal('anthropic'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: z.undefined().optional(),
-  azureOpenAI: z.undefined().optional(),
-  deepgram: z.undefined().optional(),
   openaiAudio: OpenAIAudioConfigSchema,
-  mistralVoxtral: z.undefined().optional(),
-  azureSpeech: z.undefined().optional(),
-})
-
-/**
- * Settings when using the Anthropic preset extractor with Mistral Voxtral ASR.
- */
-const AnthropicMistralVoxtralSchema = z.object({
+}
+const asrMistralVoxtral = {
   asrProvider: z.literal('mistral-voxtral'),
-  extractionProvider: z.literal('anthropic'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: z.undefined().optional(),
-  azureOpenAI: z.undefined().optional(),
-  deepgram: z.undefined().optional(),
-  openaiAudio: z.undefined().optional(),
   mistralVoxtral: MistralVoxtralConfigSchema,
-  azureSpeech: z.undefined().optional(),
-})
-
-/**
- * Settings when using the Anthropic preset extractor with Azure Speech ASR.
- */
-const AnthropicAzureSpeechSchema = z.object({
+}
+const asrAzureSpeech = {
   asrProvider: z.literal('azure-speech'),
-  extractionProvider: z.literal('anthropic'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: z.undefined().optional(),
-  azureOpenAI: z.undefined().optional(),
-  deepgram: z.undefined().optional(),
-  openaiAudio: z.undefined().optional(),
-  mistralVoxtral: z.undefined().optional(),
   azureSpeech: AzureSpeechConfigSchema,
-})
+}
 
-/**
- * Settings when using an OpenAI-compatible extractor with local Parakeet ASR.
- */
-const OpenAICompatibleLocalParakeetSchema = z.object({
-  asrProvider: z.literal('local-parakeet'),
+const extAnthropic = { extractionProvider: z.literal('anthropic') }
+const extOpenAICompatible = {
   extractionProvider: z.literal('openai-compatible'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
   openaiCompatible: OpenAICompatibleConfigSchema,
-  azureOpenAI: z.undefined().optional(),
-  deepgram: z.undefined().optional(),
-  openaiAudio: z.undefined().optional(),
-  mistralVoxtral: z.undefined().optional(),
-  azureSpeech: z.undefined().optional(),
-})
-
-/**
- * Settings when using an OpenAI-compatible extractor with Deepgram ASR.
- */
-const OpenAICompatibleDeepgramSchema = z.object({
-  asrProvider: z.literal('deepgram'),
-  extractionProvider: z.literal('openai-compatible'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: OpenAICompatibleConfigSchema,
-  azureOpenAI: z.undefined().optional(),
-  deepgram: DeepgramConfigSchema,
-  openaiAudio: z.undefined().optional(),
-  mistralVoxtral: z.undefined().optional(),
-  azureSpeech: z.undefined().optional(),
-})
-
-/**
- * Settings when using an OpenAI-compatible extractor with OpenAI Audio ASR.
- */
-const OpenAICompatibleOpenAIAudioSchema = z.object({
-  asrProvider: z.literal('openai-audio'),
-  extractionProvider: z.literal('openai-compatible'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: OpenAICompatibleConfigSchema,
-  azureOpenAI: z.undefined().optional(),
-  deepgram: z.undefined().optional(),
-  openaiAudio: OpenAIAudioConfigSchema,
-  mistralVoxtral: z.undefined().optional(),
-  azureSpeech: z.undefined().optional(),
-})
-
-/**
- * Settings when using an OpenAI-compatible extractor with Mistral Voxtral ASR.
- */
-const OpenAICompatibleMistralVoxtralSchema = z.object({
-  asrProvider: z.literal('mistral-voxtral'),
-  extractionProvider: z.literal('openai-compatible'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: OpenAICompatibleConfigSchema,
-  azureOpenAI: z.undefined().optional(),
-  deepgram: z.undefined().optional(),
-  openaiAudio: z.undefined().optional(),
-  mistralVoxtral: MistralVoxtralConfigSchema,
-  azureSpeech: z.undefined().optional(),
-})
-
-/**
- * Settings when using an OpenAI-compatible extractor with Azure Speech ASR.
- */
-const OpenAICompatibleAzureSpeechSchema = z.object({
-  asrProvider: z.literal('azure-speech'),
-  extractionProvider: z.literal('openai-compatible'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: OpenAICompatibleConfigSchema,
-  azureOpenAI: z.undefined().optional(),
-  deepgram: z.undefined().optional(),
-  openaiAudio: z.undefined().optional(),
-  mistralVoxtral: z.undefined().optional(),
-  azureSpeech: AzureSpeechConfigSchema,
-})
-
-/**
- * Settings when using Azure OpenAI extraction with local Parakeet ASR.
- */
-const AzureOpenAILocalParakeetSchema = z.object({
-  asrProvider: z.literal('local-parakeet'),
+}
+const extAzureOpenAI = {
   extractionProvider: z.literal('azure-openai'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: z.undefined().optional(),
   azureOpenAI: AzureOpenAIConfigSchema,
-  deepgram: z.undefined().optional(),
-  openaiAudio: z.undefined().optional(),
-  mistralVoxtral: z.undefined().optional(),
-  azureSpeech: z.undefined().optional(),
-})
+}
 
-/**
- * Settings when using Azure OpenAI extraction with Deepgram ASR.
- */
-const AzureOpenAIDeepgramSchema = z.object({
-  asrProvider: z.literal('deepgram'),
-  extractionProvider: z.literal('azure-openai'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: z.undefined().optional(),
-  azureOpenAI: AzureOpenAIConfigSchema,
-  deepgram: DeepgramConfigSchema,
-  openaiAudio: z.undefined().optional(),
-  mistralVoxtral: z.undefined().optional(),
-  azureSpeech: z.undefined().optional(),
-})
-
-/**
- * Settings when using Azure OpenAI extraction with OpenAI Audio ASR.
- */
-const AzureOpenAIOpenAIAudioSchema = z.object({
-  asrProvider: z.literal('openai-audio'),
-  extractionProvider: z.literal('azure-openai'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: z.undefined().optional(),
-  azureOpenAI: AzureOpenAIConfigSchema,
-  deepgram: z.undefined().optional(),
-  openaiAudio: OpenAIAudioConfigSchema,
-  mistralVoxtral: z.undefined().optional(),
-  azureSpeech: z.undefined().optional(),
-})
-
-/**
- * Settings when using Azure OpenAI extraction with Mistral Voxtral ASR.
- */
-const AzureOpenAIMistralVoxtralSchema = z.object({
-  asrProvider: z.literal('mistral-voxtral'),
-  extractionProvider: z.literal('azure-openai'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: z.undefined().optional(),
-  azureOpenAI: AzureOpenAIConfigSchema,
-  deepgram: z.undefined().optional(),
-  openaiAudio: z.undefined().optional(),
-  mistralVoxtral: MistralVoxtralConfigSchema,
-  azureSpeech: z.undefined().optional(),
-})
-
-/**
- * Settings when using Azure OpenAI extraction with Azure Speech ASR.
- */
-const AzureOpenAIAzureSpeechSchema = z.object({
-  asrProvider: z.literal('azure-speech'),
-  extractionProvider: z.literal('azure-openai'),
-  primaryLanguage: z.string().min(1),
-  anthropic: AnthropicConfigSchema,
-  openaiCompatible: z.undefined().optional(),
-  azureOpenAI: AzureOpenAIConfigSchema,
-  deepgram: z.undefined().optional(),
-  openaiAudio: z.undefined().optional(),
-  mistralVoxtral: z.undefined().optional(),
-  azureSpeech: AzureSpeechConfigSchema,
-})
-
+// Enumerated explicitly (not `.map`) so each member keeps its precise
+// per-variant `z.infer` type and the array stays a tuple `z.union` accepts.
 export const AppSettingsSchema = z.union([
-  AnthropicLocalParakeetSchema,
-  AnthropicDeepgramSchema,
-  AnthropicOpenAIAudioSchema,
-  AnthropicMistralVoxtralSchema,
-  AnthropicAzureSpeechSchema,
-  OpenAICompatibleLocalParakeetSchema,
-  OpenAICompatibleDeepgramSchema,
-  OpenAICompatibleOpenAIAudioSchema,
-  OpenAICompatibleMistralVoxtralSchema,
-  OpenAICompatibleAzureSpeechSchema,
-  AzureOpenAILocalParakeetSchema,
-  AzureOpenAIDeepgramSchema,
-  AzureOpenAIOpenAIAudioSchema,
-  AzureOpenAIMistralVoxtralSchema,
-  AzureOpenAIAzureSpeechSchema,
+  // Anthropic extraction × each ASR
+  providerVariant(asrLocalParakeet, extAnthropic),
+  providerVariant(asrDeepgram, extAnthropic),
+  providerVariant(asrOpenAIAudio, extAnthropic),
+  providerVariant(asrMistralVoxtral, extAnthropic),
+  providerVariant(asrAzureSpeech, extAnthropic),
+  // OpenAI-compatible extraction × each ASR
+  providerVariant(asrLocalParakeet, extOpenAICompatible),
+  providerVariant(asrDeepgram, extOpenAICompatible),
+  providerVariant(asrOpenAIAudio, extOpenAICompatible),
+  providerVariant(asrMistralVoxtral, extOpenAICompatible),
+  providerVariant(asrAzureSpeech, extOpenAICompatible),
+  // Azure OpenAI extraction × each ASR
+  providerVariant(asrLocalParakeet, extAzureOpenAI),
+  providerVariant(asrDeepgram, extAzureOpenAI),
+  providerVariant(asrOpenAIAudio, extAzureOpenAI),
+  providerVariant(asrMistralVoxtral, extAzureOpenAI),
+  providerVariant(asrAzureSpeech, extAzureOpenAI),
 ])
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>
