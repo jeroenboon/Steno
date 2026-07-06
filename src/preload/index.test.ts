@@ -5,16 +5,18 @@
  * the object handed to contextBridge.exposeInMainWorld, then assert each method
  * forwards to the correct IPC channel without touching real ipcRenderer.
  *
- * Since the generic-helper refactor (audit C8/A5) the bridge also Zod-validates
- * every invoke response at the renderer boundary, so the mock must resolve a
- * schema-valid response per channel and a malformed response must reject.
+ * The generic-helper refactor (audit A5) collapses the per-method repetition.
+ * The helper forwards each response typed but UNVALIDATED: the preload runs
+ * sandboxed (sandbox: true, ADR 0005) and cannot pull zod/the schema graph at
+ * runtime without failing to load, so response validation must not live here.
+ * The mock therefore just resolves a representative response per channel for the
+ * forwarding assertions.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import type { RendererApi } from '@shared/ipc'
 
-// Schema-valid responses keyed by channel, used by the default invoke mock so
-// response validation passes on the happy path.
+// Representative responses keyed by channel for the forwarding assertions.
 const validResponses: Record<string, unknown> = {
   ping: { pong: true },
   'context:inferFromText': { agendaItems: [], participants: [] },
@@ -76,34 +78,15 @@ describe('preload bridge — live agenda grooming (ADR 0029)', () => {
   })
 })
 
-describe('preload bridge — invoke response validation (audit C8)', () => {
-  it('returns a schema-valid response through the typed helper', async () => {
+describe('preload bridge — invoke forwards the typed response (audit A5)', () => {
+  it('returns the response from main through the typed helper unchanged', async () => {
     const api = await loadApi()
 
     const result = await api.agendaItemConfirm({ agendaItemId: 'ai-1' })
 
-    // The validated, typed AgendaItem flows through unchanged.
+    // The typed AgendaItem flows through as-is (no runtime validation here — see
+    // the file header: the sandboxed preload carries no zod).
     expect(result).toEqual({ id: 'ai-1', title: 'Begroting', topic: 'Q3', state: 'confirmed' })
-  })
-
-  it('rejects a response that violates the channel schema (not returned as-is)', async () => {
-    const api = await loadApi()
-
-    // pong must be the literal `true`; a malformed main response must be caught
-    // at the boundary instead of flowing to the renderer as a lie.
-    invoke.mockResolvedValueOnce({ pong: false })
-
-    await expect(api.ping()).rejects.toThrow()
-  })
-
-  it('rejects when a response is missing required fields', async () => {
-    const api = await loadApi()
-
-    invoke.mockResolvedValueOnce({ agendaItems: [{ title: '', topic: 'x' }], participants: [] })
-
-    await expect(
-      api.inferContextFromText({ text: 'Agenda', primaryLanguage: 'nl' }),
-    ).rejects.toThrow()
   })
 })
 
