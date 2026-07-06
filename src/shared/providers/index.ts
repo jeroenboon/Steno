@@ -10,6 +10,8 @@
  */
 
 export type { ASRProvider } from './ASRProvider'
+export { AsrTerminalReasonSchema, AsrTerminalStateSchema } from './asrTerminalState'
+export type { AsrTerminalReason, AsrTerminalState } from './asrTerminalState'
 export { inferSourceToText } from './ExtractionProvider'
 export type { ExtractionProvider, InferContextInput } from './ExtractionProvider'
 export { FakeASRProvider } from './FakeASRProvider'

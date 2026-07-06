@@ -67,3 +67,47 @@ describe('EgressIndicator — data-testid', () => {
     expect(screen.getByTestId('egress-indicator')).toBeInTheDocument()
   })
 })
+
+describe('EgressIndicator — ASR terminal state (audit C4)', () => {
+  const state: EgressState = { audio: 'cloud:Deepgram', notes: 'cloud:Anthropic' }
+
+  it('shows the Dutch "sleutel geweigerd" message for reason auth', () => {
+    render(<EgressIndicator egressState={state} terminalReason="auth" />)
+    expect(screen.getByTestId('egress-terminal')).toHaveTextContent(
+      'Transcriptie gestopt: sleutel geweigerd',
+    )
+  })
+
+  it('shows the Dutch "verbinding verbroken" message for reason max-retries', () => {
+    render(<EgressIndicator egressState={state} terminalReason="max-retries" />)
+    expect(screen.getByTestId('egress-terminal')).toHaveTextContent(
+      'Transcriptie gestopt: verbinding verbroken',
+    )
+  })
+
+  it('exposes the terminal message as a live status region (accessibility)', () => {
+    render(<EgressIndicator egressState={state} terminalReason="auth" />)
+    const status = screen.getByRole('status')
+    expect(status).toHaveAttribute('aria-live', 'assertive')
+    expect(status).toHaveTextContent('Transcriptie gestopt: sleutel geweigerd')
+  })
+
+  it('keeps the normal egress badge visible alongside the terminal message', () => {
+    render(<EgressIndicator egressState={state} terminalReason="auth" />)
+    expect(screen.getByTestId('egress-indicator')).toHaveTextContent(
+      'audio via Deepgram · notulen via Anthropic',
+    )
+  })
+
+  it('shows no terminal message when terminalReason is null (normal state)', () => {
+    render(<EgressIndicator egressState={state} terminalReason={null} />)
+    expect(screen.queryByTestId('egress-terminal')).not.toBeInTheDocument()
+  })
+
+  it('returns to normal (no terminal message) when the reason clears on rerender', () => {
+    const { rerender } = render(<EgressIndicator egressState={state} terminalReason="auth" />)
+    expect(screen.getByTestId('egress-terminal')).toBeInTheDocument()
+    rerender(<EgressIndicator egressState={state} terminalReason={null} />)
+    expect(screen.queryByTestId('egress-terminal')).not.toBeInTheDocument()
+  })
+})

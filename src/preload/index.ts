@@ -97,6 +97,13 @@ const api: RendererApi = {
   // ---------------------------------------------------------------------------
 
   onSummaryChanged: (cb) => subscribe('summary:changed', cb),
+
+  // ---------------------------------------------------------------------------
+  // ASR terminal state (audit C4)
+  // ---------------------------------------------------------------------------
+
+  onAsrTerminal: (cb) => subscribe('asr:terminal', cb),
+
   summaryQuery: (req) => invoke('summary:query', req),
 
   meetingEnd: (req) => invoke('meeting:end', req),

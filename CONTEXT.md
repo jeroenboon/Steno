@@ -80,6 +80,9 @@ A derived, serialisable value describing what data currently leaves the device a
 **Disclosure Copy**:
 Human-readable text generated from the Egress State for two purposes: (1) the short badge text in the persistent EgressIndicator ("audio via Deepgram · notulen via Anthropic"), and (2) the longer point-of-choice disclosure shown when the user selects a cloud provider in settings. Produced by `buildDisclosureCopy(egressState)`. Per ADR 0003, this disclosure is a standing UI obligation, not a one-off.
 
+**ASR Terminal State**:
+A runtime signal that live transcription has stopped **permanently** and why: `{ reason: 'auth' | 'max-retries' }` (`auth` = a revoked/invalid key that can never succeed; `max-retries` = the endpoint stayed unreachable past the reconnect ceiling). Distinct from Egress State (which is derived from settings): this is an event about a live socket that died, fired once by `RealtimeSpanStream.onTerminal`, relayed through the `ASRProvider.onTerminal` port seam and the `asr:terminal` IPC push channel, and rendered additively on the EgressIndicator so the note-taker sees the stop instead of a silently stalling transcript. Carries only the reason — never a key or content. A new live session pushes `reason: null` to clear it. See ADR 0032 and ADR 0036.
+
 ## Relationships
 
 - A **Meeting** has exactly one **Transcript**

@@ -788,6 +788,17 @@ body::before {
   animation: pulse var(--duration-slow) var(--ease-in-out) infinite alternate;
 }
 
+/* Terminal ASR state (audit C4): additive, next to the normal badge. Ink-red is
+   reserved for the live signal, so a stopped-transcription notice uses ink
+   emphasis + a separating rule rather than colour. */
+.egress-indicator__terminal {
+  margin-left: var(--space-2);
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
 @keyframes pulse {
   from {
     opacity: 1;

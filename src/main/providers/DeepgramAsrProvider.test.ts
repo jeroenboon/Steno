@@ -20,6 +20,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { TranscriptSpan } from '@shared/domain/types'
+import type { AsrTerminalState } from '@shared/providers'
 
 import { DeepgramAsrProvider, type WebSocketLike } from './DeepgramAsrProvider'
 
@@ -40,7 +41,7 @@ class FakeWebSocket {
   onopen: (() => void) | null = null
   onmessage: ((event: { data: unknown }) => void) | null = null
   onerror: ((event: { message: string }) => void) | null = null
-  onclose: (() => void) | null = null
+  onclose: ((event?: { code?: number; reason?: string }) => void) | null = null
 
   sentFrames: Uint8Array[] = []
   closed = false
@@ -67,10 +68,10 @@ class FakeWebSocket {
     this.onopen?.()
   }
 
-  /** Test helper: simulate a socket drop. */
-  simulateClose(): void {
+  /** Test helper: simulate a socket drop (optionally with a close code). */
+  simulateClose(event?: { code?: number; reason?: string }): void {
     this.readyState = FakeWebSocket.CLOSED
-    this.onclose?.()
+    this.onclose?.(event)
   }
 
   /** Test helper: simulate a socket error (triggers reconnect too). */
@@ -563,5 +564,37 @@ describe('DeepgramAsrProvider.transcribeBatch', () => {
     expect(logged.join('\n')).not.toContain('test-key')
 
     errorSpy.mockRestore()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Terminal state surfaced through the port (audit finding C4)
+// ---------------------------------------------------------------------------
+
+describe('DeepgramAsrProvider — terminal state (audit C4)', () => {
+  it('emits the port terminal event with reason "auth" on an auth-code close', () => {
+    const provider = makeProvider()
+    const terminals: AsrTerminalState[] = []
+    provider.onTerminal((state) => terminals.push(state))
+
+    provider.start()
+    currentSocket.simulateOpen()
+    // A revoked/invalid key closes the socket with a Deepgram auth code (4001).
+    currentSocket.simulateClose({ code: 4001, reason: 'Unauthorized' })
+
+    expect(terminals).toEqual([{ reason: 'auth' }])
+  })
+
+  it('does not fire the terminal event on a transient (reconnectable) close', () => {
+    const provider = makeProvider()
+    const terminals: AsrTerminalState[] = []
+    provider.onTerminal((state) => terminals.push(state))
+
+    provider.start()
+    currentSocket.simulateOpen()
+    // A plain drop (no auth code) reconnects rather than terminating.
+    currentSocket.simulateClose({ code: 1006 })
+
+    expect(terminals).toHaveLength(0)
   })
 })

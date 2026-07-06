@@ -39,6 +39,7 @@ const mockApi = {
   audioSendFrame: vi.fn(),
   onTranscriptSpan: vi.fn(() => () => undefined),
   onItemsChanged: vi.fn(() => () => undefined),
+  onAsrTerminal: vi.fn(() => () => undefined),
   meetingList: vi.fn().mockResolvedValue({ meetings: [] }),
   meetingLoad: vi.fn(),
 }

@@ -13,7 +13,7 @@ import { z } from 'zod'
 
 import { MeetingSchema, AgendaItemSchema, ParticipantSchema } from './domain'
 import { DecisionSchema, ActionSchema, DiscussionSummarySchema, NudgeSchema } from './domain/types'
-import { InferredContextSchema } from './providers'
+import { AsrTerminalReasonSchema, InferredContextSchema } from './providers'
 import { type EgressState } from './settings/egressState'
 import { AppSettingsSchema } from './settings/settingsSchema'
 
@@ -337,6 +337,31 @@ export const SummaryChangedPayloadSchema = z.object({
 })
 
 export type SummaryChangedPayload = z.infer<typeof SummaryChangedPayloadSchema>
+
+// ---------------------------------------------------------------------------
+// asr:terminal — main → renderer push event (audit finding C4)
+//
+// Emitted when a streaming ASR session terminates permanently (a revoked/invalid
+// key → 'auth', or the reconnect ceiling → 'max-retries'), so the always-visible
+// EgressIndicator can tell the note-taker that live transcription stopped and
+// why — instead of the transcript just going silent. `reason: null` clears the
+// state: main emits it when a NEW live session starts, so a stale error from a
+// prior meeting never lingers.
+//
+// Privacy (principle #11): the payload carries ONLY the reason enum — never a
+// key, a URL with credentials, or any transcript content.
+//
+// Pattern: webContents.send('asr:terminal', payload) on main (from the live
+//          runtime); ipcRenderer.on('asr:terminal', listener) in preload,
+//          exposed as window.api.onAsrTerminal(cb) returning an UnsubscribeFn.
+// ---------------------------------------------------------------------------
+
+export const AsrTerminalPayloadSchema = z.object({
+  /** The terminal reason, or null to clear the state (new session started). */
+  reason: AsrTerminalReasonSchema.nullable(),
+})
+
+export type AsrTerminalPayload = z.infer<typeof AsrTerminalPayloadSchema>
 
 // ---------------------------------------------------------------------------
 // summary:query — invoke channel (item 0020)
@@ -1020,6 +1045,13 @@ export interface RendererApi {
    * Returns an unsubscribe function.
    */
   onSummaryChanged: (cb: (payload: SummaryChangedPayload) => void) => UnsubscribeFn
+  /**
+   * Subscribe to ASR terminal-state events pushed from main (audit C4).
+   * Fired when live transcription stops permanently (`auth` / `max-retries`),
+   * and with `reason: null` when a new session starts (clears the state). The UI
+   * shows the stop reason on the EgressIndicator. Returns an unsubscribe function.
+   */
+  onAsrTerminal: (cb: (payload: AsrTerminalPayload) => void) => UnsubscribeFn
   /**
    * Ask a free-form question grounded in the current transcript (item 0020).
    * Main calls provider.query() and returns a plain-text answer.

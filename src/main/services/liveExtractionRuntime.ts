@@ -48,9 +48,14 @@ import type {
   MeetingId,
   TranscriptSpan,
 } from '@shared/domain'
-import type { AgendaChangedPayload, NudgesChangedPayload, SummaryChangedPayload } from '@shared/ipc'
+import type {
+  AgendaChangedPayload,
+  AsrTerminalPayload,
+  NudgesChangedPayload,
+  SummaryChangedPayload,
+} from '@shared/ipc'
 import { deriveNudges } from '@shared/nudges/deriveNudges'
-import type { ExtractionProvider } from '@shared/providers'
+import type { AsrTerminalState, ExtractionProvider } from '@shared/providers'
 
 import type { IpcSender } from '../audio/AudioCaptureBridge'
 import type { actionRepo } from '../db/repos/actionRepo'
@@ -238,6 +243,24 @@ export class LiveExtractionRuntime {
           'Configure an extraction API key in Settings to enable item extraction.',
       )
     }
+
+    // A fresh runtime = a new live session. Clear any ASR terminal state left on
+    // the renderer from a prior meeting so a stale "transcriptie gestopt" banner
+    // never lingers over a healthy new session (audit C4).
+    this._sender.send('asr:terminal', { reason: null } satisfies AsrTerminalPayload)
+  }
+
+  // -------------------------------------------------------------------------
+  // ASR terminal state (audit finding C4)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Forward a permanent ASR terminal state to the renderer so the EgressIndicator
+   * shows that live transcription stopped and why. Wired by the session controller
+   * to the ASR provider's onTerminal seam. Reason-only — never a key or content.
+   */
+  handleAsrTerminal(state: AsrTerminalState): void {
+    this._sender.send('asr:terminal', { reason: state.reason } satisfies AsrTerminalPayload)
   }
 
   // -------------------------------------------------------------------------

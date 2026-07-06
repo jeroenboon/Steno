@@ -25,6 +25,7 @@ import type {
 } from '@shared/domain/types'
 import type { ItemsChangedPayload, MeetingLoadResponse } from '@shared/ipc'
 import { MeetingLoadResponseSchema } from '@shared/ipc'
+import type { AsrTerminalReason } from '@shared/providers'
 
 import type { CaptureMode, LoopbackState } from '../services/AudioCaptureService'
 
@@ -204,6 +205,16 @@ export interface AppState {
    */
   discussionSummaries: DiscussionSummary[]
 
+  /**
+   * Reason live transcription stopped permanently, or null when healthy (audit
+   * C4). Set from the asr:terminal push event; main also pushes reason=null when
+   * a new session starts, which clears it. Rendered on the EgressIndicator.
+   */
+  asrTerminalReason: AsrTerminalReason | null
+
+  /** Set (or clear with null) the ASR terminal reason (asr:terminal event). */
+  setAsrTerminalReason: (reason: AsrTerminalReason | null) => void
+
   /** Replace the full nudge list (called on nudges:changed IPC event). */
   setNudges: (nudges: Nudge[]) => void
 
@@ -326,6 +337,11 @@ export const useAppStore = create<AppState>()((set) => ({
   dismissedNudgeIds: new Set<NudgeId>(),
   runningSummary: '',
   discussionSummaries: [],
+  asrTerminalReason: null,
+
+  setAsrTerminalReason: (reason) => {
+    set({ asrTerminalReason: reason })
+  },
 
   setNudges: (nudges) => {
     set({ nudges })

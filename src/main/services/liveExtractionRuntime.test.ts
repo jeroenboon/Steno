@@ -830,3 +830,29 @@ describe('teardown', () => {
     expect(provider.callCount()).toBe(0)
   })
 })
+
+// ---------------------------------------------------------------------------
+// ASR terminal state (audit finding C4)
+// ---------------------------------------------------------------------------
+
+describe('ASR terminal state (audit C4)', () => {
+  it('clears any prior terminal state when a new session starts (constructor resets)', () => {
+    const { sender } = buildHarness()
+    // Constructing the runtime = a new live session: push a cleared state so a
+    // stale error from a prior meeting never lingers on the EgressIndicator.
+    expect(sender.sentOn('asr:terminal')).toEqual([{ reason: null }])
+  })
+
+  it('forwards an ASR terminal state to the renderer via asr:terminal', () => {
+    const { runtime, sender } = buildHarness()
+    runtime.handleAsrTerminal({ reason: 'auth' })
+    // First the reset (null) from construction, then the terminal reason.
+    expect(sender.sentOn('asr:terminal')).toEqual([{ reason: null }, { reason: 'auth' }])
+  })
+
+  it('forwards the max-retries reason too', () => {
+    const { runtime, sender } = buildHarness()
+    runtime.handleAsrTerminal({ reason: 'max-retries' })
+    expect(sender.sentOn('asr:terminal')).toEqual([{ reason: null }, { reason: 'max-retries' }])
+  })
+})

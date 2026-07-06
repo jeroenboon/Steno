@@ -21,7 +21,7 @@
 
 import type { Meeting } from '@shared/domain'
 import { FakeASRProvider } from '@shared/providers'
-import type { Clock } from '@shared/providers'
+import type { ASRProvider, Clock } from '@shared/providers'
 
 import { AudioCaptureBridge, type IpcSender } from '../audio/AudioCaptureBridge'
 import type { actionRepo } from '../db/repos/actionRepo'
@@ -143,7 +143,17 @@ export class LiveSessionController {
           `falling back to FakeASRProvider. Reason: ${asrResult.error}`,
       )
     }
-    const asrProvider = asrResult.ok ? asrResult.provider : new FakeASRProvider()
+    // Typed as the port (not the FakeASRProvider concrete class) so the optional
+    // onTerminal seam resolves on the union below.
+    const asrProvider: ASRProvider = asrResult.ok ? asrResult.provider : new FakeASRProvider()
+
+    // Surface a permanent ASR terminal state (revoked key / endpoint unreachable)
+    // to the renderer's EgressIndicator via the active runtime (audit C4). Only
+    // realtime providers with a socket implement onTerminal; the Fake/local/batch
+    // providers omit it, so this is a guarded no-op for them.
+    asrProvider.onTerminal?.((state) => {
+      this._activeRuntime?.handleAsrTerminal(state)
+    })
 
     this._currentBridge = new AudioCaptureBridge({
       asrProvider,

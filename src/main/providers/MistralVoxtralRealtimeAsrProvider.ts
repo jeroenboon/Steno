@@ -35,9 +35,14 @@ import { z } from 'zod'
 
 import { CAPTURE_SAMPLE_RATE, resamplePcm16 } from '@shared/audio/pcmResampler'
 import { TranscriptSpanSchema, type TranscriptSpan } from '@shared/domain/types'
-import { RealClock, type ASRProvider, type Clock } from '@shared/providers'
+import { RealClock, type ASRProvider, type AsrTerminalState, type Clock } from '@shared/providers'
 
-import { RealtimeSpanStream, type RealtimeAsrWire, type WebSocketLike } from './realtimeSpanStream'
+import {
+  RealtimeSpanStream,
+  type RealtimeAsrWire,
+  type RealtimeSpanStreamOptions,
+  type WebSocketLike,
+} from './realtimeSpanStream'
 
 // ---------------------------------------------------------------------------
 // WebSocket abstraction (Bearer header auth — needs header options)
@@ -111,6 +116,8 @@ export class MistralVoxtralRealtimeAsrProvider implements ASRProvider {
   private readonly _clock: Clock
   private readonly _wsFactory: MistralRealtimeWebSocketFactory
   private readonly _stream: RealtimeSpanStream
+  /** Terminal-state observer registered via onTerminal(); undefined until set. */
+  private _onTerminal: ((state: AsrTerminalState) => void) | undefined = undefined
 
   // Per-session span timing, reset on start(); used when an event carries no
   // start/end seconds.
@@ -151,10 +158,18 @@ export class MistralVoxtralRealtimeAsrProvider implements ASRProvider {
       parseMessage: (message) => this._parseMessage(message),
     }
 
-    const streamOptions: { sleep?: (ms: number) => Promise<void>; maxBackoffMs?: number } = {}
+    // Forward the stream's terminal state out through the port (audit C4).
+    const streamOptions: RealtimeSpanStreamOptions = {
+      onTerminal: (state) => this._onTerminal?.(state),
+    }
     if (options.sleep !== undefined) streamOptions.sleep = options.sleep
     if (options.maxBackoffMs !== undefined) streamOptions.maxBackoffMs = options.maxBackoffMs
     this._stream = new RealtimeSpanStream(wire, streamOptions)
+  }
+
+  /** Register the terminal-state observer (ASRProvider port, audit C4). */
+  onTerminal(cb: (state: AsrTerminalState) => void): void {
+    this._onTerminal = cb
   }
 
   // -------------------------------------------------------------------------
