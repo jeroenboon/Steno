@@ -17,6 +17,9 @@ import {
   AgendaItemEditAndConfirmRequestSchema,
   MeetingPauseRequestSchema,
   MeetingResumeRequestSchema,
+  ItemsChangedPayloadSchema,
+  ItemCreateConfirmedRequestSchema,
+  ItemEditAndConfirmRequestSchema,
   type IpcChannel,
 } from './ipc'
 
@@ -309,6 +312,141 @@ describe('AgendaItemEditAndConfirmRequestSchema', () => {
         agendaItemId: 'ai-1',
         title: '',
         topic: 'x',
+      }),
+    ).toThrow()
+  })
+})
+
+// Item schemas — these are derived from the domain Decision/Action schemas.
+// These tests pin the boundary behaviour so the derivation stays byte-for-byte
+// behaviour-preserving (accepts/rejects exactly the same payloads).
+
+describe('ItemsChangedPayloadSchema', () => {
+  const validDecision = {
+    id: 'dec-1',
+    rationale: 'We ship on Friday',
+    agendaItemId: 'ai-1',
+    sourceSpanId: 'span-1',
+    state: 'proposed' as const,
+  }
+  const validAction = {
+    id: 'act-1',
+    description: 'Regel de API-keys',
+    agendaItemId: 'ai-1',
+    sourceSpanId: 'span-1',
+    owner: 'p-1',
+    dueDate: '2026-07-10T09:00:00.000Z',
+    status: 'open' as const,
+    state: 'confirmed' as const,
+  }
+
+  it('parses a full decision + action payload', () => {
+    const result = ItemsChangedPayloadSchema.parse({
+      meetingId: 'm-1',
+      decisions: [validDecision],
+      actions: [validAction],
+    })
+    expect(result.decisions[0]?.state).toBe('proposed')
+    expect(result.actions[0]?.status).toBe('open')
+  })
+
+  it('parses an action without its optional fields', () => {
+    const result = ItemsChangedPayloadSchema.parse({
+      meetingId: 'm-1',
+      decisions: [],
+      actions: [
+        {
+          id: 'act-2',
+          agendaItemId: 'ai-1',
+          sourceSpanId: 'span-1',
+          status: 'done',
+          state: 'proposed',
+        },
+      ],
+    })
+    expect(result.actions[0]?.description).toBeUndefined()
+  })
+
+  it('rejects a decision that omits state (state is required on the wire)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { state: _drop, ...noState } = validDecision
+    expect(() =>
+      ItemsChangedPayloadSchema.parse({ meetingId: 'm-1', decisions: [noState], actions: [] }),
+    ).toThrow()
+  })
+
+  it('rejects an action with an unknown status', () => {
+    expect(() =>
+      ItemsChangedPayloadSchema.parse({
+        meetingId: 'm-1',
+        decisions: [],
+        actions: [{ ...validAction, status: 'archived' }],
+      }),
+    ).toThrow()
+  })
+})
+
+describe('ItemCreateConfirmedRequestSchema', () => {
+  it('parses a new decision item (no state field)', () => {
+    const result = ItemCreateConfirmedRequestSchema.parse({
+      kind: 'decision',
+      meetingId: 'm-1',
+      item: { id: 'dec-1', rationale: 'x', agendaItemId: 'ai-1', sourceSpanId: 'span-1' },
+    })
+    expect(result.kind).toBe('decision')
+  })
+
+  it('parses a new action item requiring status', () => {
+    const result = ItemCreateConfirmedRequestSchema.parse({
+      kind: 'action',
+      meetingId: 'm-1',
+      item: {
+        id: 'act-1',
+        description: 'doen',
+        agendaItemId: 'ai-1',
+        sourceSpanId: 'span-1',
+        status: 'open',
+      },
+    })
+    expect(result.kind).toBe('action')
+  })
+
+  it('rejects a new action item missing status', () => {
+    expect(() =>
+      ItemCreateConfirmedRequestSchema.parse({
+        kind: 'action',
+        meetingId: 'm-1',
+        item: { id: 'act-1', agendaItemId: 'ai-1', sourceSpanId: 'span-1' },
+      }),
+    ).toThrow()
+  })
+})
+
+describe('ItemEditAndConfirmRequestSchema', () => {
+  it('parses partial decision updates', () => {
+    const result = ItemEditAndConfirmRequestSchema.parse({
+      kind: 'decision',
+      id: 'dec-1',
+      updates: { rationale: 'new rationale' },
+    })
+    expect(result.kind).toBe('decision')
+  })
+
+  it('parses an empty action updates object (all fields optional)', () => {
+    const result = ItemEditAndConfirmRequestSchema.parse({
+      kind: 'action',
+      id: 'act-1',
+      updates: {},
+    })
+    expect(result.kind).toBe('action')
+  })
+
+  it('rejects an action update with an empty description (min-1 delta)', () => {
+    expect(() =>
+      ItemEditAndConfirmRequestSchema.parse({
+        kind: 'action',
+        id: 'act-1',
+        updates: { description: '' },
       }),
     ).toThrow()
   })
