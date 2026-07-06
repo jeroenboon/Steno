@@ -12,6 +12,8 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { initDevlog, resetDevlog, type DevlogEntry } from '../../devlog'
+
 import { ModelDownloader, type ExpectedFile } from './ModelDownloader'
 
 // ---------------------------------------------------------------------------
@@ -84,7 +86,20 @@ describe('ModelDownloader', () => {
 
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true })
+    resetDevlog()
   })
+
+  /** Capture devlog lines with a fake writer (no filesystem, no real clock). */
+  function startDevlog(): DevlogEntry[] {
+    const lines: DevlogEntry[] = []
+    initDevlog({
+      enabled: true,
+      includeContent: false,
+      write: (line) => lines.push(JSON.parse(line) as DevlogEntry),
+      now: () => 0,
+    })
+    return lines
+  }
 
   // -------------------------------------------------------------------------
   // EXPECTED_FILES
@@ -101,6 +116,28 @@ describe('ModelDownloader', () => {
       'small-decoder.int8.onnx',
       'small-tokens.txt',
     ])
+  })
+
+  it('EXPECTED_FILES pin the authoritative SHA-256 published on HuggingFace', () => {
+    // Real integrity gate (audit C6): these are the SHA-256 of the exact files in
+    // csukuangfj/sherpa-onnx-whisper-small (HF git-LFS OID / X-Linked-ETag for the
+    // two ONNX blobs; hashed content for the non-LFS tokens file). A wrong value
+    // here breaks the download for every user, so they are cross-verified, not
+    // guessed. Empty strings are forbidden — that was the no-op the audit flagged.
+    const byName = new Map(ModelDownloader.EXPECTED_FILES.map((f) => [f.name, f.sha256]))
+    expect(byName.get('small-encoder.int8.onnx')).toBe(
+      '4cbe7b22fa9026b843b60a68640c747de05bafb1a11b57edc0e66c232d9f33a9',
+    )
+    expect(byName.get('small-decoder.int8.onnx')).toBe(
+      'acad50b5c782696e91b55914cc5ab4f756f1532f76e22aa6fc615f39fb69a8ee',
+    )
+    expect(byName.get('small-tokens.txt')).toBe(
+      'b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126',
+    )
+    // No entry may regress to an empty (unverifiable) hash.
+    for (const f of ModelDownloader.EXPECTED_FILES) {
+      expect(f.sha256).toMatch(/^[0-9a-f]{64}$/)
+    }
   })
 
   // -------------------------------------------------------------------------
@@ -145,6 +182,22 @@ describe('ModelDownloader', () => {
     writeFileSync(join(dir, 'tokens.txt'), 'corrupted content')
     const dl = new ModelDownloader(dir, fetch, expectedFiles)
     await expect(dl.verify()).rejects.toThrow(/hash mismatch/i)
+  })
+
+  it('verify() skips an empty expected hash but emits a loud devlog warning', async () => {
+    // Policy (degrade, never crash): an unset hash means "we cannot verify this
+    // file". We do NOT hard-fail (a missing hash must never block the app from
+    // getting a model), but we DO surface it loudly so it is never a silent no-op.
+    const lines = startDevlog()
+    const expectedFiles: ExpectedFile[] = [{ name: 'small-tokens.txt', sha256: '' }]
+    writeFileSync(join(dir, 'small-tokens.txt'), 'anything at all')
+    const dl = new ModelDownloader(dir, fetch, expectedFiles)
+
+    await expect(dl.verify()).resolves.toBe(true)
+
+    const warning = lines.find((l) => l.event === 'hash-check-skipped')
+    expect(warning).toBeDefined()
+    expect(warning?.meta?.file).toBe('small-tokens.txt')
   })
 
   it('verify() throws when an expected file is missing', async () => {
@@ -205,6 +258,29 @@ describe('ModelDownloader', () => {
         return
       }),
     ).rejects.toThrow()
+  })
+
+  it('download() removes the corrupt files it wrote when verify fails', async () => {
+    // Fail-closed: a hash mismatch must reject AND leave no half-written model on
+    // disk. Otherwise isDownloaded() reports true over corrupt bytes and sherpa
+    // loads garbage instead of re-downloading.
+    const content = 'good content'
+    const expectedFiles = makeExpectedFiles(
+      ['small-encoder.int8.onnx', 'small-tokens.txt'],
+      content,
+    )
+    const fakeFetch = makeFakeFetch('bad content')
+    const dl = new ModelDownloader(dir, fakeFetch, expectedFiles)
+
+    await expect(
+      dl.download(() => {
+        return
+      }),
+    ).rejects.toThrow(/hash mismatch/i)
+
+    expect(existsSync(join(dir, 'small-encoder.int8.onnx'))).toBe(false)
+    expect(existsSync(join(dir, 'small-tokens.txt'))).toBe(false)
+    expect(dl.isDownloaded()).toBe(false)
   })
 
   it('download() rejects and writes nothing when the server responds non-OK', async () => {
