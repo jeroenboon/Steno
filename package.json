@@ -48,7 +48,7 @@
     "@fontsource/fraunces": "^5.2.9",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/ibm-plex-sans": "^5.2.8",
-    "autoprefixer": "^10.4.21",
+    "autoprefixer": "^10.5.2",
     "@electron-toolkit/eslint-config-ts": "^2.0.0",
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@testing-library/jest-dom": "^6.6.3",
