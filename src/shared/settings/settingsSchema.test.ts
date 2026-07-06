@@ -20,6 +20,7 @@ import {
   type AppSettings,
   type AzureOpenAIConfig,
   type AzureSpeechConfig,
+  type LocalExtractionConfig,
   type MistralVoxtralConfig,
   type OpenAIAudioConfig,
   type OpenAICompatibleConfig,
@@ -51,6 +52,14 @@ const azureOpenAICfg: AzureOpenAIConfig = {
   displayName: 'Azure OpenAI',
 }
 
+const localCfg: LocalExtractionConfig = {
+  preset: 'local-custom',
+  baseUrl: 'http://localhost:1234/v1',
+  model: 'local-model',
+  keyRef: 'local',
+  displayName: 'Lokaal',
+}
+
 const deepgramCfg = { language: 'nl' }
 
 const openaiAudioCfg: OpenAIAudioConfig = {
@@ -74,10 +83,10 @@ const azureSpeechCfg: AzureSpeechConfig = {
   displayName: 'Azure Speech',
 }
 
-type Ext = 'anthropic' | 'openai-compatible' | 'azure-openai'
+type Ext = 'anthropic' | 'openai-compatible' | 'azure-openai' | 'local'
 type Asr = 'local-parakeet' | 'deepgram' | 'openai-audio' | 'mistral-voxtral' | 'azure-speech'
 
-const EXT_PROVIDERS: Ext[] = ['anthropic', 'openai-compatible', 'azure-openai']
+const EXT_PROVIDERS: Ext[] = ['anthropic', 'openai-compatible', 'azure-openai', 'local']
 const ASR_PROVIDERS: Asr[] = [
   'local-parakeet',
   'deepgram',
@@ -95,6 +104,8 @@ function extractionSlot(ext: Ext): Record<string, unknown> {
       return { openaiCompatible: openaiCompatibleCfg }
     case 'azure-openai':
       return { azureOpenAI: azureOpenAICfg }
+    case 'local':
+      return { local: localCfg }
   }
 }
 
@@ -129,7 +140,7 @@ function buildValid(asr: Asr, ext: Ext): Record<string, unknown> {
 // The full matrix parses
 // ---------------------------------------------------------------------------
 
-describe('AppSettings provider matrix — all 15 combinations parse', () => {
+describe('AppSettings provider matrix — all provider combinations parse', () => {
   for (const ext of EXT_PROVIDERS) {
     for (const asr of ASR_PROVIDERS) {
       it(`parses ${ext} extraction + ${asr} ASR`, () => {
@@ -363,6 +374,49 @@ describe('AppSettings — per-field validation is preserved', () => {
     expect(AppSettingsSchema.safeParse(input).success).toBe(false)
   })
 
+  it('parses a local extractor with a loopback base URL', () => {
+    const input = {
+      asrProvider: 'local-parakeet',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: localCfg,
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(true)
+    if (result.success && result.data.extractionProvider === 'local') {
+      expect(result.data.local.baseUrl).toBe('http://localhost:1234/v1')
+      expect(result.data.local.keyRef).toBe('local')
+    }
+  })
+
+  it('defaults local.preset to "local-custom" when omitted', () => {
+    const input = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: {
+        baseUrl: 'http://localhost:11434/v1',
+        model: 'llama3.1',
+        keyRef: 'local',
+        displayName: 'Lokaal',
+      },
+    }
+    const result = AppSettingsSchema.safeParse(input)
+    expect(result.success).toBe(true)
+    if (result.success && result.data.extractionProvider === 'local') {
+      expect(result.data.local.preset).toBe('local-custom')
+    }
+  })
+
+  it('rejects local extraction with no local block', () => {
+    const input = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+    }
+    expect(AppSettingsSchema.safeParse(input).success).toBe(false)
+  })
+
   it('defaults openaiCompatible.preset to "custom" when omitted', () => {
     const input = {
       asrProvider: 'deepgram',
@@ -455,6 +509,8 @@ function extractionKeyRef(settings: AppSettings): string {
       return settings.openaiCompatible.keyRef
     case 'azure-openai':
       return settings.azureOpenAI.keyRef
+    case 'local':
+      return settings.local.keyRef
   }
 }
 

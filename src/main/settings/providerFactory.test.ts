@@ -312,3 +312,40 @@ describe('providerFactory degrade paths (missing key → ok:false, no throw)', (
     })
   }
 })
+
+// ---------------------------------------------------------------------------
+// Local extraction: reuses the OpenAI-compatible adapter, and its key is
+// OPTIONAL — a missing secret must build fine (not degrade), unlike the cloud
+// vendors above. See ADR 0040.
+// ---------------------------------------------------------------------------
+
+const LOCAL_EXTRACTION = {
+  asrProvider: 'local-parakeet',
+  extractionProvider: 'local',
+  primaryLanguage: 'nl',
+  local: {
+    preset: 'local-custom',
+    baseUrl: 'http://localhost:1234/v1',
+    model: 'local-model',
+    keyRef: 'local',
+    displayName: 'Lokaal',
+  },
+} as AppSettings
+
+describe('providerFactory local extraction (optional key)', () => {
+  it('builds OpenAICompatibleExtractionProvider for local with a stored key', () => {
+    const storage = storageWith({ local: 'llama-key' })
+    const result = tryBuildExtractionProvider(LOCAL_EXTRACTION, storage)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.provider.constructor.name).toBe('OpenAICompatibleExtractionProvider')
+  })
+
+  it('builds for local even with NO stored key (keyless server does not degrade)', () => {
+    const storage = new MemorySecretStorage()
+    const result = tryBuildExtractionProvider(LOCAL_EXTRACTION, storage)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.provider.constructor.name).toBe('OpenAICompatibleExtractionProvider')
+  })
+})

@@ -1067,6 +1067,41 @@ describe('computeEgressState', () => {
     expect(state.notes).toBe('cloud:Azure OpenAI')
   })
 
+  it('local ASR + local extraction on loopback → audio local, notes local (fully on-device)', () => {
+    const settings: AppSettings = {
+      asrProvider: 'local-parakeet',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: {
+        preset: 'local-custom',
+        baseUrl: 'http://localhost:1234/v1',
+        model: 'local-model',
+        keyRef: 'local',
+        displayName: 'Lokaal',
+      },
+    }
+    const state = computeEgressState(settings)
+    expect(state.audio).toBe('local')
+    expect(state.notes).toBe('local')
+  })
+
+  it('local extraction on a LAN host → notes local-network:<host> (honest about leaving the device)', () => {
+    const settings: AppSettings = {
+      asrProvider: 'deepgram',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: {
+        preset: 'local-custom',
+        baseUrl: 'http://192.168.1.50:11434/v1',
+        model: 'llama3.1',
+        keyRef: 'local',
+        displayName: 'Lokaal',
+      },
+    }
+    const state = computeEgressState(settings)
+    expect(state.notes).toBe('local-network:192.168.1.50')
+  })
+
   it('egressState does not contain any key-like secrets', () => {
     const settings: AppSettings = {
       asrProvider: 'deepgram',
@@ -1123,6 +1158,22 @@ describe('buildDisclosureCopy', () => {
     // Badge should mention both providers
     expect(copy.badgeText).toContain('Deepgram')
     expect(copy.badgeText).toContain('Anthropic')
+  })
+
+  it('local notes: stays on device, with a quality caveat, badge "notulen lokaal"', () => {
+    const state: EgressState = { audio: 'local', notes: 'local' }
+    const copy = buildDisclosureCopy(state)
+    expect(copy.notesDisclosure).toContain('op dit apparaat')
+    expect(copy.notesDisclosure).toContain('lagere extractiekwaliteit')
+    expect(copy.badgeText).toContain('notulen lokaal')
+  })
+
+  it('local-network notes: names the host and says it leaves the device but stays on the network', () => {
+    const state: EgressState = { audio: 'local', notes: 'local-network:192.168.1.50' }
+    const copy = buildDisclosureCopy(state)
+    expect(copy.notesDisclosure).toContain('192.168.1.50')
+    expect(copy.notesDisclosure).toContain('netwerk')
+    expect(copy.badgeText).toContain('192.168.1.50')
   })
 })
 
