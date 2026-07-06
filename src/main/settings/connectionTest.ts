@@ -54,6 +54,12 @@ interface Probe {
    * unauthenticated. Used by local endpoints, whose key is optional (ADR 0040).
    */
   keyOptional?: boolean
+  /**
+   * When true, failures are mapped to local-specific hint codes
+   * (`local-unreachable` / `local-model-missing` / `local-auth`) so the UI can
+   * show concrete troubleshooting copy instead of a bare status (ADR 0040 §5).
+   */
+  localHints?: boolean
 }
 
 const OPENAI_AUDIO_BASE_URL = 'https://api.openai.com/v1'
@@ -94,9 +100,21 @@ export async function testProviderConnection(
       headers,
     })
     if (response.ok) return { ok: true }
+    if (probe.localHints === true) {
+      // Concrete hints for a local runtime the user can fix (ADR 0040 §5):
+      // 404 → the requested model is not loaded; 401/403 → the server wants a
+      // key. Anything else keeps the generic status.
+      if (response.status === 404) return { ok: false, error: 'local-model-missing' }
+      if (response.status === 401 || response.status === 403) {
+        return { ok: false, error: 'local-auth' }
+      }
+    }
     return { ok: false, error: `HTTP ${String(response.status)}` }
   } catch {
     // Never surface the underlying error object — it could echo the URL/key.
+    // For a local runtime the most likely cause is "server not running / wrong
+    // port", so give that hint instead of the generic transport code.
+    if (probe.localHints === true) return { ok: false, error: 'local-unreachable' }
     return { ok: false, error: 'network' }
   }
 }
@@ -141,8 +159,8 @@ function resolveExtractionProbe(settings: AppSettings): Probe | null {
     }
     case 'local': {
       // Local OpenAI-compatible server: probe /models, unauthenticated when no
-      // key is stored (Bearer only if the user set one). Rich failure hints are
-      // a follow-up (issue #89); here it just resolves and never errors on no-key.
+      // key is stored (Bearer only if the user set one). `localHints` maps
+      // failures to concrete troubleshooting codes (ADR 0040 §5).
       const cfg = settings.local
       const baseUrl = cfg.baseUrl.replace(/\/$/, '')
       return {
@@ -150,6 +168,7 @@ function resolveExtractionProbe(settings: AppSettings): Probe | null {
         keyRef: cfg.keyRef,
         authHeaders: bearer,
         keyOptional: true,
+        localHints: true,
       }
     }
   }
