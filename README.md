@@ -4,8 +4,8 @@ A Windows desktop app (Electron + TypeScript + React) that transcribes live meet
 
 ## Features
 
-- **Live transcription**: Choose between local Whisper (via sherpa-onnx, audio stays on device) or bring-your-own cloud ASR (Deepgram).
-- **Real-time extraction**: Proposed Decisions and Actions appear as the meeting progresses, driven by a rolling extraction loop.
+- **Live transcription**: Local Whisper (via sherpa-onnx, audio stays on device) or a bring-your-own cloud ASR provider: Deepgram, OpenAI, Azure OpenAI, or Mistral Voxtral. The cloud providers stream in real time during a meeting and run in batch mode for audio import.
+- **Real-time extraction**: Proposed Decisions and Actions appear as the meeting progresses, driven by a rolling extraction loop. Extraction runs on Anthropic, any OpenAI-compatible endpoint (OpenAI, Mistral, or a custom endpoint), or Azure OpenAI.
 - **Structured notes**: Every extracted item links back to its transcript span, carries metadata (owner, due date, rationale), and is editable in real time.
 - **Audio import**: Transcribe audio files directly; same pipeline as live capture.
 - **Draft → Live → Ended lifecycle**: Meetings move through states; you set an optional agenda and participant list upfront, and review/export notes after the meeting ends.
