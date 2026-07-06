@@ -423,74 +423,75 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
     handleImportFrame(frame)
   })
 
+  // Grouped role interfaces (audit A2): the collaborators already satisfy the
+  // ports, so we wire objects, not ~30 forwarder lambdas. Only the genuinely
+  // Electron-native side effects (save dialog, clipboard, webContents.send) and
+  // the per-call provider rebuild stay as small closures, in `platform`/`import`.
   const registry = createIpcRegistry({
     settingsStore,
     secretStorage,
-    testConnection: (role) =>
-      testProviderConnection({ role, settings: settingsStore.current, storage: secretStorage }),
-    itemLifecycleService: itemService,
-    onAudioStart: (meetingId) => {
-      liveSession.start(meetingId)
+    session: liveSession,
+    items: itemService,
+    history: meetingQuery,
+    provider: {
+      testConnection: (role) =>
+        testProviderConnection({ role, settings: settingsStore.current, storage: secretStorage }),
     },
-    onAudioStop: () => {
-      liveSession.stop()
+    model: {
+      downloader: new ModelDownloader(join(userData, 'models', 'whisper-small-sherpa')),
+      pushProgress: (evt) => {
+        mainWindow.webContents.send('model:progress', evt)
+      },
     },
-    summaryQuery: (question) => liveSession.querySummary(question),
-    onMeetingEnd: (meetingId) => liveSession.endMeeting(meetingId),
-    onExportFile: async ({ content, defaultFilename, filters }) => {
-      // Anchor the dialog to a fast, known folder (Documents). A bare relative
-      // filename makes Windows resolve the default directory against the process
-      // CWD, which can make the native save dialog slow to appear.
-      const result = await dialog.showSaveDialog(mainWindow, {
-        defaultPath: join(app.getPath('documents'), defaultFilename),
-        filters,
-      })
-      if (result.canceled || result.filePath === '') {
-        return { ok: false, reason: 'cancelled' }
-      }
-      try {
-        writeFileSync(result.filePath, content, 'utf8')
-        return { ok: true }
-      } catch (err) {
-        return { ok: false, reason: err instanceof Error ? err.message : String(err) }
-      }
+    import: {
+      start: (req) => {
+        const meetingId = randomUUID()
+        importSession.start({ meetingId, ...req })
+        return meetingId
+      },
+      finish: (meetingId) => importSession.finish(meetingId),
+      inferFromText: async (req) => {
+        // Rebuild the provider each call so a key set in Settings takes effect
+        // without restart. Degrade to an empty context when extraction is not
+        // configured or the provider can't infer (manual Draft entry still works).
+        const built = tryBuildExtractionProvider(settingsStore.current, secretStorage)
+        if (!built.ok || built.provider.inferContext === undefined) {
+          return { agendaItems: [], participants: [] }
+        }
+        return built.provider.inferContext({ source: { text: req.text } })
+      },
     },
-    onCopyToClipboard: (content) => {
-      clipboard.writeText(content)
+    prep: {
+      meetingRepo: mRepo,
+      agendaItemRepo: aiRepo,
+      participantRepo: pRepo,
     },
-    onCopyTranscript: (meetingId) => {
-      clipboard.writeText(meetingQuery.transcriptText(meetingId))
+    platform: {
+      exportFile: async ({ content, defaultFilename, filters }) => {
+        // Anchor the dialog to a fast, known folder (Documents). A bare relative
+        // filename makes Windows resolve the default directory against the process
+        // CWD, which can make the native save dialog slow to appear.
+        const result = await dialog.showSaveDialog(mainWindow, {
+          defaultPath: join(app.getPath('documents'), defaultFilename),
+          filters,
+        })
+        if (result.canceled || result.filePath === '') {
+          return { ok: false, reason: 'cancelled' }
+        }
+        try {
+          writeFileSync(result.filePath, content, 'utf8')
+          return { ok: true }
+        } catch (err) {
+          return { ok: false, reason: err instanceof Error ? err.message : String(err) }
+        }
+      },
+      copyToClipboard: (content) => {
+        clipboard.writeText(content)
+      },
+      copyTranscript: (meetingId) => {
+        clipboard.writeText(meetingQuery.transcriptText(meetingId))
+      },
     },
-    meetingList: () => meetingQuery.list(),
-    meetingLoad: (meetingId) => meetingQuery.load(meetingId),
-    meetingDelete: (meetingId) => {
-      meetingQuery.delete(meetingId)
-    },
-    modelDownloader: new ModelDownloader(join(userData, 'models', 'whisper-small-sherpa')),
-    pushModelProgress: (evt) => {
-      mainWindow.webContents.send('model:progress', evt)
-    },
-    onImportStart: (req) => {
-      const meetingId = randomUUID()
-      importSession.start({ meetingId, ...req })
-      return meetingId
-    },
-    onImportFinish: (meetingId) => importSession.finish(meetingId),
-    inferContextFromText: async (req) => {
-      // Rebuild the provider each call so a key set in Settings takes effect
-      // without restart. Degrade to an empty context when extraction is not
-      // configured or the provider can't infer (manual Draft entry still works).
-      const built = tryBuildExtractionProvider(settingsStore.current, secretStorage)
-      if (!built.ok || built.provider.inferContext === undefined) {
-        return { agendaItems: [], participants: [] }
-      }
-      return built.provider.inferContext({ source: { text: req.text } })
-    },
-    agendaItemRepo: aiRepo,
-    participantRepo: pRepo,
-    onMeetingPause: (meetingId) => liveSession.pause(meetingId),
-    onMeetingResume: (meetingId) => liveSession.resume(meetingId),
-    meetingRepo: mRepo,
   })
 
   for (const channel of IPC_CHANNELS) {

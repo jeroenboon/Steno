@@ -94,8 +94,7 @@ describe('IPC registry — item 0018 note-taker action channels', () => {
     registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
       settingsStore: mockSettingsStore as any,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
-      itemLifecycleService: mockItemLifecycleService as any,
+      items: mockItemLifecycleService,
     })
   })
 
