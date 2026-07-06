@@ -37,7 +37,6 @@
     "@fontsource/ibm-plex-sans": "^5.2.8",
     "autoprefixer": "^10.4.21",
     "better-sqlite3": "^12.11.1",
-    "electron-updater": "^6.3.9",
     "framer-motion": "^11.18.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
