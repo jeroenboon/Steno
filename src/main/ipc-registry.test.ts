@@ -21,7 +21,25 @@ import { agendaItemRepo } from './db/repos/agendaItemRepo'
 import { meetingRepo } from './db/repos/meetingRepo'
 import { participantRepo } from './db/repos/participantRepo'
 import { createIpcRegistry } from './ipc-registry'
+import type {
+  SessionOps,
+  HistoryOps,
+  ImportOps,
+  ModelOps,
+  ProviderOps,
+  PlatformOps,
+} from './ipc-registry'
 import { ModelDownloader } from './providers/sherpa/ModelDownloader'
+
+// Grouped role interfaces (audit A2) require a collaborator's full method set.
+// These helpers let a test supply just the port methods it exercises; the double
+// cast is lint-clean (no `any`) and keeps contextual typing on inline callbacks.
+const asSession = (p: Partial<SessionOps>): SessionOps => p as unknown as SessionOps
+const asHistory = (p: Partial<HistoryOps>): HistoryOps => p as unknown as HistoryOps
+const asImport = (p: Partial<ImportOps>): ImportOps => p as unknown as ImportOps
+const asModel = (p: Partial<ModelOps>): ModelOps => p as unknown as ModelOps
+const asProvider = (p: Partial<ProviderOps>): ProviderOps => p as unknown as ProviderOps
+const asPlatform = (p: Partial<PlatformOps>): PlatformOps => p as unknown as PlatformOps
 
 describe('IPC registry — item 0014 (meeting/agenda/participant ops)', () => {
   let registry: ReturnType<typeof createIpcRegistry>
@@ -151,8 +169,11 @@ describe('IPC registry — meeting:end (item 0021)', () => {
       },
     } as unknown
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
-    const registry = createIpcRegistry({ settingsStore: mockSettingsStore as any, onMeetingEnd })
+    const registry = createIpcRegistry({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+      settingsStore: mockSettingsStore as any,
+      session: asSession({ endMeeting: onMeetingEnd }),
+    })
 
     const response = await registry.dispatch('meeting:end', { meetingId: 'mtg-abc' })
 
@@ -181,8 +202,11 @@ describe('IPC registry — meeting:end (item 0021)', () => {
       },
     } as unknown
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
-    const registry = createIpcRegistry({ settingsStore: mockSettingsStore as any, onMeetingEnd })
+    const registry = createIpcRegistry({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
+      settingsStore: mockSettingsStore as any,
+      session: asSession({ endMeeting: onMeetingEnd }),
+    })
 
     await expect(registry.dispatch('meeting:end', { meetingId: '' })).rejects.toThrow()
     expect(onMeetingEnd).not.toHaveBeenCalled()
@@ -255,7 +279,7 @@ describe('IPC registry — meeting:list and meeting:load (item 0023)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        meetingList: () => [endedMeeting],
+        history: asHistory({ list: () => [endedMeeting] }),
       })
 
       const response = await registry.dispatch('meeting:list', {})
@@ -289,7 +313,7 @@ describe('IPC registry — meeting:list and meeting:load (item 0023)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        meetingLoad: (id) => (id === 'mtg-ended' ? fullPayload : null),
+        history: asHistory({ load: (id) => (id === 'mtg-ended' ? fullPayload : null) }),
       })
 
       const response = await registry.dispatch('meeting:load', { meetingId: 'mtg-ended' })
@@ -301,7 +325,7 @@ describe('IPC registry — meeting:list and meeting:load (item 0023)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        meetingLoad: () => null,
+        history: asHistory({ load: () => null }),
       })
 
       await expect(registry.dispatch('meeting:load', { meetingId: 'unknown' })).rejects.toThrow(
@@ -324,7 +348,7 @@ describe('IPC registry — meeting:list and meeting:load (item 0023)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        meetingLoad: () => fullPayload,
+        history: asHistory({ load: () => fullPayload }),
       })
 
       await expect(registry.dispatch('meeting:load', { meetingId: '' })).rejects.toThrow()
@@ -337,7 +361,7 @@ describe('IPC registry — meeting:list and meeting:load (item 0023)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        meetingDelete: (id) => deleted.push(id),
+        history: asHistory({ delete: (id) => deleted.push(id) }),
       })
 
       const response = await registry.dispatch('meeting:delete', { meetingId: 'mtg-1' })
@@ -361,7 +385,7 @@ describe('IPC registry — meeting:list and meeting:load (item 0023)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        meetingDelete: () => undefined,
+        history: asHistory({ delete: () => undefined }),
       })
 
       await expect(registry.dispatch('meeting:delete', { meetingId: '' })).rejects.toThrow()
@@ -401,7 +425,7 @@ describe('IPC registry — import:start and import:finish (item 0026)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        onImportStart: () => 'imp-xyz',
+        import: asImport({ start: () => 'imp-xyz' }),
       })
 
       const response = await registry.dispatch('import:start', validStart)
@@ -413,7 +437,7 @@ describe('IPC registry — import:start and import:finish (item 0026)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        onImportStart: () => 'imp-xyz',
+        import: asImport({ start: () => 'imp-xyz' }),
       })
 
       await expect(
@@ -438,7 +462,7 @@ describe('IPC registry — import:start and import:finish (item 0026)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        onImportFinish: (meetingId: string) => Promise.resolve({ meetingId }),
+        import: asImport({ finish: (meetingId: string) => Promise.resolve({ meetingId }) }),
       })
 
       const response = await registry.dispatch('import:finish', { meetingId: 'imp-1' })
@@ -485,7 +509,7 @@ describe('IPC registry — context:inferFromText (ADR 0029)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      inferContextFromText: () => Promise.resolve(inferred),
+      import: asImport({ inferFromText: () => Promise.resolve(inferred) }),
     })
 
     const response = await registry.dispatch('context:inferFromText', validReq)
@@ -508,7 +532,9 @@ describe('IPC registry — context:inferFromText (ADR 0029)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      inferContextFromText: () => Promise.resolve({ agendaItems: [], participants: [] }),
+      import: asImport({
+        inferFromText: () => Promise.resolve({ agendaItems: [], participants: [] }),
+      }),
     })
 
     await expect(
@@ -541,7 +567,7 @@ describe('IPC registry — meeting:create persistence', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      meetingRepo: mRepo,
+      prep: { meetingRepo: mRepo },
     })
 
     const created = (await registry.dispatch('meeting:create', {
@@ -600,7 +626,7 @@ describe('IPC registry — agenda/participant persistence (audit C1)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      agendaItemRepo: aiRepo,
+      prep: { agendaItemRepo: aiRepo },
     })
 
     const resp = (await registry.dispatch('agendaItem:add', {
@@ -622,7 +648,7 @@ describe('IPC registry — agenda/participant persistence (audit C1)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      participantRepo: pRepo,
+      prep: { participantRepo: pRepo },
     })
 
     const resp = (await registry.dispatch('participant:add', {
@@ -642,7 +668,7 @@ describe('IPC registry — agenda/participant persistence (audit C1)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      agendaItemRepo: aiRepo,
+      prep: { agendaItemRepo: aiRepo },
     })
 
     const resp = (await registry.dispatch('agendaItem:add', {
@@ -662,7 +688,7 @@ describe('IPC registry — agenda/participant persistence (audit C1)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      participantRepo: pRepo,
+      prep: { participantRepo: pRepo },
     })
 
     const resp = (await registry.dispatch('participant:add', {
@@ -716,7 +742,7 @@ describe('IPC registry — agenda grooming (ADR 0029)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      agendaItemRepo: aiRepo,
+      prep: { agendaItemRepo: aiRepo },
     })
 
     const response = (await registry.dispatch('agendaItem:confirm', { agendaItemId: 'ai-1' })) as {
@@ -735,7 +761,7 @@ describe('IPC registry — agenda grooming (ADR 0029)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      agendaItemRepo: aiRepo,
+      prep: { agendaItemRepo: aiRepo },
     })
 
     await registry.dispatch('agendaItem:editAndConfirm', {
@@ -754,7 +780,7 @@ describe('IPC registry — agenda grooming (ADR 0029)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      agendaItemRepo: agendaItemRepo(db),
+      prep: { agendaItemRepo: agendaItemRepo(db) },
     })
 
     await expect(
@@ -776,8 +802,10 @@ describe('IPC registry — agenda grooming (ADR 0029)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      onMeetingPause: () => paused,
-      onMeetingResume: () => ({ ...paused, paused: false }),
+      session: asSession({
+        pause: () => paused,
+        resume: () => ({ ...paused, paused: false }),
+      }),
     })
 
     const pauseRes = (await registry.dispatch('meeting:pause', { meetingId: 'mtg-1' })) as {
@@ -825,7 +853,7 @@ describe('IPC registry — transcript:copy (item 0026)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      onCopyTranscript: (meetingId) => copied.push(meetingId),
+      platform: asPlatform({ copyTranscript: (meetingId) => copied.push(meetingId) }),
     })
 
     const response = await registry.dispatch('transcript:copy', { meetingId: 'mtg-1' })
@@ -849,7 +877,7 @@ describe('IPC registry — transcript:copy (item 0026)', () => {
     const registry = createIpcRegistry({
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
       settingsStore: mockSettingsStore as any,
-      onCopyTranscript: () => undefined,
+      platform: asPlatform({ copyTranscript: () => undefined }),
     })
 
     await expect(registry.dispatch('transcript:copy', { meetingId: '' })).rejects.toThrow()
@@ -892,7 +920,7 @@ describe('IPC registry — model:status and model:download (item 0024)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        modelDownloader: downloader,
+        model: asModel({ downloader }),
       })
 
       const response = await registry.dispatch('model:status', {
@@ -908,7 +936,7 @@ describe('IPC registry — model:status and model:download (item 0024)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        modelDownloader: downloader,
+        model: asModel({ downloader }),
       })
 
       const response = await registry.dispatch('model:status', {
@@ -949,10 +977,12 @@ describe('IPC registry — model:status and model:download (item 0024)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        modelDownloader: downloader,
-        pushModelProgress: (evt) => {
-          progressEvents.push(evt)
-        },
+        model: asModel({
+          downloader,
+          pushProgress: (evt) => {
+            progressEvents.push(evt)
+          },
+        }),
       })
 
       const response = await registry.dispatch('model:download', {
@@ -986,7 +1016,7 @@ describe('IPC registry — model:status and model:download (item 0024)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        testConnection,
+        provider: asProvider({ testConnection }),
       })
 
       const response = await registry.dispatch('provider:testConnection', { role: 'extraction' })
@@ -999,7 +1029,9 @@ describe('IPC registry — model:status and model:download (item 0024)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        testConnection: () => Promise.resolve({ ok: false, error: 'HTTP 401' }),
+        provider: asProvider({
+          testConnection: () => Promise.resolve({ ok: false, error: 'HTTP 401' }),
+        }),
       })
 
       const response = await registry.dispatch('provider:testConnection', { role: 'asr' })
@@ -1022,7 +1054,7 @@ describe('IPC registry — model:status and model:download (item 0024)', () => {
       const registry = createIpcRegistry({
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-explicit-any
         settingsStore: mockSettingsStore as any,
-        testConnection: () => Promise.resolve({ ok: true }),
+        provider: asProvider({ testConnection: () => Promise.resolve({ ok: true }) }),
       })
 
       await expect(

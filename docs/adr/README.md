@@ -6,7 +6,7 @@ Each ADR captures one hard-to-reverse decision: the context, the choice, and the
 
 The low numbers were assigned to match the original build items, so the sequence has gaps where a build item never produced a standalone decision record. Right now **0009** and **0016–0025** have no file, and the number does not always equal the build-item number (ADR 0013 covers item 0015, ADR 0015 covers item 0018). From **0026** onward the numbering is plain sequential: each new ADR takes the next free number.
 
-So a missing number is expected, not a lost file. The directory currently runs to 0036.
+So a missing number is expected, not a lost file. The directory currently runs to 0038.
 
 ## Index
 
@@ -38,5 +38,6 @@ So a missing number is expected, not a lost file. The directory currently runs t
 | [0035](0035-final-pass-authoritative-meeting-notes.md)                           | The final pass produces the authoritative, deduplicated per-agenda notes           |
 | [0036](0036-asr-terminal-state-surfaced-to-egress-indicator.md)                  | ASR terminal state surfaced end-to-end to the EgressIndicator                      |
 | [0037](0037-drop-framer-motion-for-css-only-live-animation.md)                   | Drop framer-motion for CSS-only Live-screen animation                              |
+| [0038](0038-ipc-registry-grouped-role-interfaces.md)                             | IPC registry dependencies as grouped role interfaces                               |
 
 When you add an ADR, add a row here (and take the next free number).
