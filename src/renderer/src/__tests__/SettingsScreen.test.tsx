@@ -858,6 +858,71 @@ describe('SettingsScreen — local extraction', () => {
       expect(JSON.stringify(call[0])).not.toContain('secret')
     }
   })
+
+  it('offers a runtime preset picker with LM Studio, Ollama and llama.cpp', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('extraction-provider-select'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('extraction-provider-select'), {
+        target: { value: 'local' },
+      })
+    })
+
+    await waitFor(() => screen.getByTestId('local-preset'))
+    const picker = screen.getByTestId('local-preset')
+    const values = Array.from((picker as HTMLSelectElement).options).map((o) => o.value)
+    expect(values).toEqual(['lmstudio', 'ollama', 'llamacpp', 'local-custom'])
+  })
+
+  it('prefills the base URL from the chosen runtime preset', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('extraction-provider-select'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('extraction-provider-select'), {
+        target: { value: 'local' },
+      })
+    })
+
+    await waitFor(() => screen.getByTestId('local-preset'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('local-preset'), { target: { value: 'ollama' } })
+    })
+
+    await waitFor(() => {
+      const baseUrl = screen.getByTestId('local-base-url')
+      expect((baseUrl as HTMLInputElement).value).toBe('http://localhost:11434/v1')
+    })
+  })
+
+  it('persists the chosen preset on save', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('extraction-provider-select'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('extraction-provider-select'), {
+        target: { value: 'local' },
+      })
+    })
+
+    await waitFor(() => screen.getByTestId('local-preset'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('local-preset'), { target: { value: 'ollama' } })
+    })
+    act(() => {
+      fireEvent.change(screen.getByTestId('local-model'), { target: { value: 'llama3.1' } })
+    })
+    act(() => {
+      fireEvent.click(screen.getByTestId('save-local'))
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return json.includes('"extractionProvider":"local"') && json.includes('"preset":"ollama"')
+        }),
+      ).toBe(true)
+    })
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -87,13 +87,17 @@ function customInitialFields(settings: AppSettings): CustomFields {
 }
 
 /** Empty local extraction form (used until a config is persisted). */
-const LOCAL_DEFAULT_FIELDS: LocalFields = { baseUrl: 'http://localhost:1234/v1', model: '' }
+const LOCAL_DEFAULT_FIELDS: LocalFields = {
+  preset: 'local-custom',
+  baseUrl: 'http://localhost:1234/v1',
+  model: '',
+}
 
 /** Seed values for the local card: the persisted config, else defaults. */
 function localInitialFields(settings: AppSettings): LocalFields {
   if (settings.extractionProvider !== 'local') return LOCAL_DEFAULT_FIELDS
   const c = settings.local
-  return { baseUrl: c.baseUrl, model: c.model }
+  return { preset: c.preset, baseUrl: c.baseUrl, model: c.model }
 }
 
 /** Default model id per cloud audio vendor (user-overridable). */
@@ -390,7 +394,7 @@ export function SettingsScreen(): React.JSX.Element {
         openaiCompatible: undefined,
         azureOpenAI: undefined,
         local: {
-          preset: 'local-custom',
+          preset: init.preset,
           baseUrl: init.baseUrl,
           model: init.model,
           keyRef: LOCAL_KEY_REF,
@@ -485,7 +489,7 @@ export function SettingsScreen(): React.JSX.Element {
       openaiCompatible: undefined,
       azureOpenAI: undefined,
       local: {
-        preset: 'local-custom',
+        preset: fields.preset,
         baseUrl: fields.baseUrl.trim(),
         model: fields.model.trim(),
         keyRef: LOCAL_KEY_REF,

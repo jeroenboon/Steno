@@ -12,6 +12,7 @@
 
 import React, { useState } from 'react'
 
+import { localExtractionPresets, type LocalPreset } from '../../../shared/providers'
 import { t } from '../i18n'
 import {
   validateLocalFields,
@@ -19,6 +20,14 @@ import {
   type LocalValidationErrors,
 } from '../screens/settingsValidation'
 import type { KeySaveState, SecretKeyField } from '../screens/useSecretKeyField'
+
+/** Runtime presets in display order (LM Studio first); label is the brand name. */
+const LOCAL_PRESET_OPTIONS: readonly LocalPreset[] = [
+  'lmstudio',
+  'ollama',
+  'llamacpp',
+  'local-custom',
+]
 
 import { ConfigTextField } from './ConfigTextField'
 import { KeyField } from './KeyField'
@@ -57,6 +66,21 @@ export function LocalExtractionCard(props: LocalExtractionCardProps): React.JSX.
     if (saveState === 'saved') setSaveState('idle')
   }
 
+  /** Switch runtime preset: prefill base URL + model from the catalog. */
+  function editPreset(preset: LocalPreset): void {
+    const p = localExtractionPresets[preset]
+    setFields({ preset, baseUrl: p.defaultBaseUrl, model: p.defaultModel })
+    setErrors({})
+    setDirty(true)
+    if (saveState === 'saved') setSaveState('idle')
+  }
+
+  function presetLabel(preset: LocalPreset): string {
+    return preset === 'local-custom'
+      ? t('settings.local.preset.custom')
+      : localExtractionPresets[preset].displayName
+  }
+
   async function handleSave(): Promise<void> {
     const found = validateLocalFields(fields)
     setErrors(found)
@@ -70,6 +94,27 @@ export function LocalExtractionCard(props: LocalExtractionCardProps): React.JSX.
 
   return (
     <div className="settings-local-extraction">
+      <div className="form-group">
+        <label htmlFor="local-preset" className="form-label">
+          {t('settings.local.preset.label')}
+        </label>
+        <select
+          id="local-preset"
+          data-testid="local-preset"
+          className="form-input"
+          value={fields.preset}
+          onChange={(e) => {
+            editPreset(e.currentTarget.value as LocalPreset)
+          }}
+        >
+          {LOCAL_PRESET_OPTIONS.map((preset) => (
+            <option key={preset} value={preset}>
+              {presetLabel(preset)}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <ConfigTextField
         testId="local-base-url"
         label={t('settings.local.baseUrl.label')}

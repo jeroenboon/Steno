@@ -228,6 +228,8 @@ const nl = {
   'settings.custom.saved': 'Opgeslagen',
 
   // Local extraction config (ADR 0040)
+  'settings.local.preset.label': 'Lokale runtime',
+  'settings.local.preset.custom': 'Aangepast (andere server)',
   'settings.local.baseUrl.label': 'Basis-URL',
   'settings.local.baseUrl.placeholder': 'http://localhost:1234/v1',
   'settings.local.model.label': 'Model',
