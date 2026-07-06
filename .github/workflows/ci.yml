@@ -41,6 +41,11 @@ jobs:
       # @emnapi wasm-fallback deps (via the ESLint resolver) resolve differently
       # across npm patch versions, so an npm mismatch makes `npm ci` reject the
       # lockfile as out of sync. Keep this in lockstep with the dev toolchain.
+      # (The package.json `overrides` block pins the three @emnapi versions for
+      # the same reason. Re-verified 2026-07-06 (npm 11.6.2) as still
+      # deduplicating the lockfile: dropping them regresses it with nested
+      # duplicate @emnapi copies, so they stay. Revisit at the next major
+      # toolchain bump. Audit T8.)
       - name: Pin npm to the lockfile's version
         run: npm install --global npm@11.6.2
 
