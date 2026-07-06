@@ -17,11 +17,12 @@
  */
 
 import Database from 'better-sqlite3'
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 
 import type { AgendaItem, Meeting, MeetingId, Participant, TranscriptSpan } from '@shared/domain'
 import { OffAgenda } from '@shared/domain'
 import { FakeClock, FakeExtractionProvider } from '@shared/providers'
+import { captureConsole, type CapturedConsole } from '@shared/testing/captureConsole'
 
 import { runMigrations } from '../db/migrate'
 import { actionRepo } from '../db/repos/actionRepo'
@@ -296,10 +297,21 @@ describe("'items:changed' IPC event", () => {
 // ---------------------------------------------------------------------------
 
 describe('no extraction provider (degraded path)', () => {
+  // Building a runtime without a provider logs a one-time "extraction disabled"
+  // warning — legitimate at runtime, but noise here. Suppress and assert it.
+  let console_: CapturedConsole
+  beforeEach(() => {
+    console_ = captureConsole()
+  })
+  afterEach(() => {
+    console_.restore()
+  })
+
   it('persists final spans even without a provider', () => {
     const { spanRepo, runtime } = buildHarness({ noProvider: true })
     runtime.handleSpan(makeSpan('s1', { isFinal: true }))
     expect(spanRepo.listByMeeting(MTG_ID)).toHaveLength(1)
+    console_.expectLogged('[LiveExtractionRuntime] No extraction provider configured')
   })
 
   it("does NOT emit 'items:changed' without a provider", async () => {
@@ -687,6 +699,7 @@ describe('final pass — infer agenda/participants/title for un-prepared live me
       proposedActions: [],
       discussionSummaries: [{ agendaItemHint: undefined, text: 'Toch samengevat.' }],
     })
+    const console_ = captureConsole()
 
     h.runtime.handleSpan(makeSpan('s1', { isFinal: true }))
     await expect(h.runtime.endMeeting({ ...MEETING, state: 'ended' })).resolves.toBeUndefined()
@@ -697,6 +710,8 @@ describe('final pass — infer agenda/participants/title for un-prepared live me
     const summaryEvents = h.sender.sentOn('items:summaries') as ItemsSummariesPayload[]
     expect(summaryEvents).toHaveLength(1)
     expect(summaryEvents[0]?.summaries).toHaveLength(1)
+    console_.expectLogged('[LiveExtractionRuntime] context inference failed at meeting end')
+    console_.restore()
   })
 
   it('does not infer when the agenda already has items', async () => {
@@ -762,15 +777,19 @@ describe('running summary', () => {
 
     // Second tick: provider.summarise throws
     vi.spyOn(provider, 'summarise').mockRejectedValueOnce(new Error('LLM fout'))
+    const console_ = captureConsole()
     clock.tick(20_000)
     await runtime.tick()
 
     // Summary retained; no new event emitted beyond the first
     expect(runtime.runningSummary).toBe('Eerste samenvatting.')
     expect(sender.sentOn('summary:changed')).toHaveLength(1)
+    console_.expectLogged('[LiveExtractionRuntime] summarise() failed, retaining last summary')
+    console_.restore()
   })
 
   it("does NOT emit 'summary:changed' in the degraded path (no provider)", async () => {
+    const console_ = captureConsole()
     const { clock, sender, runtime } = buildHarness({ noProvider: true })
 
     runtime.handleSpan(makeSpan('s1', { isFinal: true }))
@@ -778,6 +797,8 @@ describe('running summary', () => {
     await runtime.tick()
 
     expect(sender.sentOn('summary:changed')).toHaveLength(0)
+    console_.expectLogged('[LiveExtractionRuntime] No extraction provider configured')
+    console_.restore()
   })
 
   it('querySummary() returns the provider answer when spans exist', async () => {
@@ -797,9 +818,12 @@ describe('running summary', () => {
   })
 
   it('querySummary() returns empty string in the degraded path (no provider)', async () => {
+    const console_ = captureConsole()
     const { runtime } = buildHarness({ noProvider: true })
     const answer = await runtime.querySummary('Wat werd besproken?')
     expect(answer).toBe('')
+    console_.expectLogged('[LiveExtractionRuntime] No extraction provider configured')
+    console_.restore()
   })
 })
 

@@ -11,6 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ExtractionRequest } from '@shared/providers'
+import { captureConsole } from '@shared/testing/captureConsole'
 
 import { AnthropicExtractionProvider } from './AnthropicExtractionProvider'
 
@@ -267,24 +268,33 @@ describe('AnthropicExtractionProvider', () => {
     mockCreate
       .mockResolvedValueOnce(makeNoToolUseResponse())
       .mockResolvedValueOnce(makeNoToolUseResponse())
+    const console_ = captureConsole()
 
     const provider = makeProvider()
     const result = await provider.extract(rollingRequest)
 
     expect(mockCreate).toHaveBeenCalledTimes(2)
     expect(result).toEqual({ proposedDecisions: [], proposedActions: [] })
+    console_.expectLogged(
+      '[Anthropic] No tool_use block in response',
+      '[Anthropic] Retry failed, skipping turn',
+    )
+    console_.restore()
   })
 
   it('recovers on the retry: no tool_use first, valid second', async () => {
     mockCreate
       .mockResolvedValueOnce(makeNoToolUseResponse())
       .mockResolvedValueOnce(makeToolUseResponse(validRollingContent))
+    const console_ = captureConsole()
 
     const provider = makeProvider()
     const result = await provider.extract(rollingRequest)
 
     expect(mockCreate).toHaveBeenCalledTimes(2)
     expect(result.proposedDecisions[0]?.rationale).toBe('Launch in Q3')
+    console_.expectLogged('[Anthropic] Validation failed, retrying')
+    console_.restore()
   })
 
   // -------------------------------------------------------------------------
@@ -420,12 +430,18 @@ describe('AnthropicExtractionProvider', () => {
     it('retries once on invalid JSON, then degrades to an empty context', async () => {
       const bad = makeInferToolUseResponse({ agendaItems: 'not-an-array' })
       mockCreate.mockResolvedValueOnce(bad).mockResolvedValueOnce(bad)
+      const console_ = captureConsole()
 
       const provider = makeProvider()
       const result = await provider.inferContext({ source: { spans } })
 
       expect(mockCreate).toHaveBeenCalledTimes(2)
       expect(result).toEqual({ agendaItems: [], participants: [] })
+      console_.expectLogged(
+        '[Anthropic] Context inference failed, retrying',
+        '[Anthropic] Context inference retry failed, returning empty',
+      )
+      console_.restore()
     })
 
     it('does not log transcript content or the key when inference fails', async () => {

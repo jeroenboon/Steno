@@ -19,6 +19,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EgressState } from '../../../shared/settings/egressState'
 import { DEFAULT_SETTINGS } from '../../../shared/settings/settingsSchema'
 import type { AppSettings } from '../../../shared/settings/settingsSchema'
+import { captureConsole } from '../../../shared/testing/captureConsole'
 
 // ---------------------------------------------------------------------------
 // Mock window.api — attach to existing jsdom window, do not replace it
@@ -1142,6 +1143,9 @@ describe('SettingsScreen — custom key saved state (Phase 1.2 bugfix)', () => {
     setup({
       settingsSet: vi.fn().mockRejectedValue(new Error('Zod validation failed')),
     })
+    // The failed persist is logged at runtime (operator-visible); suppress and
+    // assert here so the green run stays quiet.
+    const console_ = captureConsole()
     render(<SettingsScreen />)
     await waitFor(() => {
       expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
@@ -1162,6 +1166,10 @@ describe('SettingsScreen — custom key saved state (Phase 1.2 bugfix)', () => {
 
     // Screen should not be blank — the component should still be mounted
     expect(screen.getByTestId('screen-settings')).toBeDefined()
+    await waitFor(() => {
+      console_.expectLogged('[Settings] settingsSet failed')
+    })
+    console_.restore()
   })
 
   it('does not crash when typing a dot in the model field', async () => {

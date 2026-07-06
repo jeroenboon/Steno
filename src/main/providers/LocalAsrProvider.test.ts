@@ -15,6 +15,8 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { captureConsole } from '@shared/testing/captureConsole'
+
 import { LocalAsrProvider } from './LocalAsrProvider'
 import { FakeSherpaSessionFactory } from './sherpa/SherpaSession'
 
@@ -231,6 +233,7 @@ describe('LocalAsrProvider', () => {
       modelDir: '/fake/model',
       sessionFactory: new BrokenFactory(),
     })
+    const console_ = captureConsole()
 
     provider.start()
     provider.pushAudioFrame(new Uint8Array(CHUNK_BYTES))
@@ -246,5 +249,7 @@ describe('LocalAsrProvider', () => {
     ).resolves.toBeUndefined()
 
     expect(allSpans).toHaveLength(0)
+    console_.expectLogged('[LocalAsrProvider] Failed to initialise sherpa-onnx session')
+    console_.restore()
   })
 })

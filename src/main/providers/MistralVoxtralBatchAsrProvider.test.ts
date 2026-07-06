@@ -11,6 +11,8 @@
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { captureConsole } from '@shared/testing/captureConsole'
+
 import { MistralVoxtralBatchAsrProvider } from './MistralVoxtralBatchAsrProvider'
 
 const pcm = new Uint8Array([0, 0, 1, 0, 2, 0, 3, 0])
@@ -84,7 +86,12 @@ describe('MistralVoxtralBatchAsrProvider.transcribeBatch', () => {
 
   it('throws on a non-ok HTTP response', async () => {
     const provider = makeProvider(vi.fn().mockResolvedValue(errorResponse(429)))
+    const console_ = captureConsole()
+
     await expect(provider.transcribeBatch(pcm)).rejects.toThrow(/429/)
+
+    console_.expectLogged('[Mistral audio] Transcription request failed (HTTP 429)')
+    console_.restore()
   })
 })
 

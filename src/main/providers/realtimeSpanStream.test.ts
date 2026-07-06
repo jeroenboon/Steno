@@ -14,6 +14,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { TranscriptSpanSchema, type TranscriptSpan } from '@shared/domain/types'
+import { captureConsole } from '@shared/testing/captureConsole'
 
 import { RealtimeSpanStream, type RealtimeAsrWire, type WebSocketLike } from './realtimeSpanStream'
 
@@ -325,6 +326,7 @@ describe('RealtimeSpanStream', () => {
       sleep,
       onTerminal: (state) => terminals.push(state),
     })
+    const console_ = captureConsole()
 
     stream.start()
     lastSocket(sockets).simulateOpen()
@@ -339,6 +341,8 @@ describe('RealtimeSpanStream', () => {
     expect(delays).toHaveLength(0)
     // Terminal auth state surfaced exactly once.
     expect(terminals).toEqual([{ reason: 'auth' }])
+    console_.expectLogged('[FakeWire] Socket closed', 'authentication rejected')
+    console_.restore()
   })
 
   it('gives up with a max-retries terminal state after N consecutive failures', async () => {
@@ -349,6 +353,7 @@ describe('RealtimeSpanStream', () => {
       maxConsecutiveFailures: 3,
       onTerminal: (state) => terminals.push(state),
     })
+    const console_ = captureConsole()
 
     stream.start()
     lastSocket(sockets).simulateOpen()
@@ -361,6 +366,8 @@ describe('RealtimeSpanStream', () => {
     }
 
     expect(terminals).toEqual([{ reason: 'max-retries' }])
+    console_.expectLogged('[FakeWire] Giving up after 3 consecutive reconnect failures')
+    console_.restore()
     const socketsAtGiveUp = sockets.length
 
     // A close after termination neither reconnects nor re-fires the terminal.
@@ -403,6 +410,7 @@ describe('RealtimeSpanStream', () => {
       sleep,
       onTerminal: (state) => terminals.push(state),
     })
+    const console_ = captureConsole()
 
     stream.start()
     lastSocket(sockets).simulateError('Unexpected server response: 401')
@@ -411,11 +419,14 @@ describe('RealtimeSpanStream', () => {
     expect(terminals).toEqual([{ reason: 'auth' }])
     expect(delays).toHaveLength(0)
     expect(sockets).toHaveLength(1)
+    console_.expectLogged('[FakeWire] Socket error', 'authentication rejected')
+    console_.restore()
   })
 
   it('completes the spans() iterator when it terminates on auth failure', async () => {
     const { wire, sockets } = makeFakeWire()
     const stream = new RealtimeSpanStream(wire, { sleep: instantSleep })
+    const console_ = captureConsole()
 
     stream.start()
     lastSocket(sockets).simulateOpen()
@@ -428,6 +439,8 @@ describe('RealtimeSpanStream', () => {
     lastSocket(sockets).simulateClose({ code: 4001 })
     await iterPromise // must resolve, not hang
     expect(seen).toHaveLength(0)
+    console_.expectLogged('[FakeWire] Socket closed', 'authentication rejected')
+    console_.restore()
   })
 
   it('never logs the transcript text on any lifecycle event', async () => {

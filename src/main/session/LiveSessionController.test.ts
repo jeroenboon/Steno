@@ -20,6 +20,7 @@ import Database from 'better-sqlite3'
 import { describe, it, expect, vi } from 'vitest'
 
 import { FakeASRProvider, FakeClock, FakeExtractionProvider } from '@shared/providers'
+import { captureConsole } from '@shared/testing/captureConsole'
 
 import { runMigrations } from '../db/migrate'
 import { actionRepo } from '../db/repos/actionRepo'
@@ -228,6 +229,8 @@ describe('start()', () => {
 
   it('falls back to FakeASRProvider when the ASR key is missing (no throw)', async () => {
     const { controller, sender, asr } = await buildHarness({ asrOk: false })
+    // The fallback is logged at runtime (operator-visible); suppress + assert.
+    const console_ = captureConsole()
 
     expect(() => {
       controller.start(MEETING_ID)
@@ -242,6 +245,8 @@ describe('start()', () => {
     asr.pushScriptedSpan(makeSpan('s1'))
     await flush()
     expect(sender.sentOn('transcript:span')).toHaveLength(0)
+    console_.expectLogged('[LiveTranscriber] ASR provider not ready at audio:start')
+    console_.restore()
   })
 })
 

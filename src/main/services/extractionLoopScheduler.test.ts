@@ -22,12 +22,13 @@
  */
 
 import Database from 'better-sqlite3'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 import type { AgendaItem, Meeting, MeetingId, Participant, TranscriptSpan } from '@shared/domain'
 import { OffAgenda } from '@shared/domain'
 import { FakeClock, FakeExtractionProvider } from '@shared/providers'
 import type { ExtractionRequest } from '@shared/providers'
+import { captureConsole, type CapturedConsole } from '@shared/testing/captureConsole'
 
 import { runMigrations } from '../db/migrate'
 import { actionRepo } from '../db/repos/actionRepo'
@@ -544,6 +545,17 @@ describe('final pass', () => {
 // ---------------------------------------------------------------------------
 
 describe('provider error handling', () => {
+  // Every test here forces the provider to throw, which the scheduler swallows
+  // and logs (a legitimate runtime signal). Suppress + assert so the green run
+  // stays quiet while the error-path coverage stands.
+  let console_: CapturedConsole
+  beforeEach(() => {
+    console_ = captureConsole()
+  })
+  afterEach(() => {
+    console_.restore()
+  })
+
   it('swallows a rolling-turn error and does not crash', async () => {
     const { clock, provider, scheduler } = buildHarness()
 
@@ -555,6 +567,9 @@ describe('provider error handling', () => {
 
     // Must NOT throw
     await expect(scheduler.tick(MTG_ID, CONTEXT)).resolves.toBeUndefined()
+    console_.expectLogged(
+      '[ExtractionLoopScheduler] Provider error on rolling turn: Network failure',
+    )
   })
 
   it('preserves prior proposed items after a provider error', async () => {
@@ -581,6 +596,9 @@ describe('provider error handling', () => {
 
     // The decision from turn 1 is still there
     expect(decisionRepo(db).listByMeeting(MTG_ID)).toHaveLength(1)
+    console_.expectLogged(
+      '[ExtractionLoopScheduler] Provider error on rolling turn: Transient failure',
+    )
   })
 
   it('a rolling error does not advance the sent-spans window', async () => {
@@ -606,6 +624,7 @@ describe('provider error handling', () => {
 
     expect(recorded).toHaveLength(1)
     expect(recorded[0]?.spans.map((s) => s.id)).toContain('s1')
+    console_.expectLogged('[ExtractionLoopScheduler] Provider error on rolling turn: oops')
   })
 
   it('swallows a final-pass error gracefully', async () => {
@@ -619,6 +638,7 @@ describe('provider error handling', () => {
     const endedMeeting: Meeting = { ...MEETING, state: 'ended' }
     // Must NOT throw
     await expect(scheduler.runFinalPass(endedMeeting, CONTEXT)).resolves.toBeUndefined()
+    console_.expectLogged('[ExtractionLoopScheduler] Provider error on final pass: LLM timeout')
   })
 })
 

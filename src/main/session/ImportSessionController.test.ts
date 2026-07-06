@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { FakeASRProvider, FakeClock, FakeExtractionProvider } from '@shared/providers'
 import type { AppSettings } from '@shared/settings/settingsSchema'
+import { captureConsole } from '@shared/testing/captureConsole'
 
 import { runMigrations } from '../db/migrate'
 import { actionRepo } from '../db/repos/actionRepo'
@@ -224,6 +225,7 @@ describe('ImportSessionController', () => {
     })
     const s = makeSender()
     const controller = makeController(repos, fakeAsr, fakeExtraction, s.sender)
+    const console_ = captureConsole()
 
     controller.start({
       meetingId: 'imp-infer-fail',
@@ -243,6 +245,8 @@ describe('ImportSessionController', () => {
     // The meeting still transitioned to Ended.
     expect(repos.meetingRepo.findById('imp-infer-fail')?.state).toBe('ended')
     expect(s.stages()[s.stages().length - 1]).toBe('done')
+    console_.expectLogged('[ImportSessionController] context inference failed')
+    console_.restore()
   })
 
   it('uses the user-supplied context and does not infer when inferContext is false', async () => {
@@ -279,6 +283,7 @@ describe('ImportSessionController', () => {
     fakeAsr.scriptBatchSpans([{ id: 'span-1', text: 'Iets gezegd', startMs: 0, endMs: 1000 }])
     const s = makeSender()
     const controller = makeController(repos, fakeAsr, null, s.sender)
+    const console_ = captureConsole()
 
     controller.start({
       meetingId: 'imp-degraded',
@@ -298,6 +303,8 @@ describe('ImportSessionController', () => {
     expect(repos.decisionRepo.listByMeeting('imp-degraded')).toHaveLength(0)
     expect(repos.meetingRepo.findById('imp-degraded')?.state).toBe('ended')
     expect(s.stages()[s.stages().length - 1]).toBe('done')
+    console_.expectLogged('[LiveExtractionRuntime] No extraction provider configured')
+    console_.restore()
   })
 
   it('emits an error and does not transcribe when the ASR provider is not configured', () => {
@@ -341,6 +348,7 @@ describe('ImportSessionController', () => {
     const fakeExtraction = new FakeExtractionProvider()
     const s = makeSender()
     const controller = makeController(repos, fakeAsr, fakeExtraction, s.sender)
+    const console_ = captureConsole()
 
     controller.start({
       meetingId: 'imp-fail',
@@ -360,5 +368,7 @@ describe('ImportSessionController', () => {
     expect(repos.discussionSummaryRepo.listByMeeting('imp-fail')).toHaveLength(0)
     // The final pass never ran, so the meeting was not marked ended.
     expect(repos.meetingRepo.findById('imp-fail')?.state).toBe('live')
+    console_.expectLogged('[ImportSessionController] Transcription failed')
+    console_.restore()
   })
 })
