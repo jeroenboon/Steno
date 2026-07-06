@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Windows Electron + TypeScript + React desktop app that transcribes live meetings (local Whisper via sherpa-onnx, or a bring-your-own cloud ASR) and, during the meeting, extracts structured **Decisions** and **Actions** that a note-taker monitors and corrects in real time.
 
-Read **[CONTEXT.md](CONTEXT.md)** before touching domain code — it is the authoritative glossary (Meeting, Decision, Action, Owner, Proposed/Confirmed, interim/final span, Egress State, etc.) and the terms in code match it exactly. Read the relevant **[docs/adr/](docs/adr/)** before changing the area an ADR covers (ADRs are numbered 0001–0025 to match the original build items). The non-negotiable **rules of engagement** are the [Engineering principles](#engineering-principles-rules-of-engagement) below.
+Read **[CONTEXT.md](CONTEXT.md)** before touching domain code — it is the authoritative glossary (Meeting, Decision, Action, Owner, Proposed/Confirmed, interim/final span, Egress State, etc.) and the terms in code match it exactly. Read the relevant **[docs/adr/](docs/adr/)** before changing the area an ADR covers (see [docs/adr/README.md](docs/adr/README.md) for the index and the numbering convention — the low numbers track the original build items, so there are gaps). The non-negotiable **rules of engagement** are the [Engineering principles](#engineering-principles-rules-of-engagement) below.
 
 ## Commands
 
