@@ -85,6 +85,25 @@ jobs:
       - name: Native ABI smoke test
         run: npm run test:native
 
+      # Coverage is measured for VISIBILITY ONLY (audit Q1): NO threshold gate —
+      # thresholds invite gaming. continue-on-error keeps it strictly additive so
+      # a coverage tooling hiccup never wedges a merge. pretest:coverage swaps the
+      # native ABI back to Node (like pretest) so Vitest can open better-sqlite3.
+      - name: Coverage (v8, non-gating)
+        continue-on-error: true
+        shell: pwsh
+        env:
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        run: |
+          npm run test:coverage 2>&1 | Tee-Object -FilePath coverage-output.txt
+          "## Test coverage (v8, non-gating — visibility only, no threshold)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Select-String -Path coverage-output.txt -Pattern '^(Statements|Branches|Functions|Lines)\s+:' |
+            ForEach-Object { $_.Line } |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
   # Supply-chain + secret hygiene. Split off the DoD gate so it runs in parallel
   # on cheap Linux (no native rebuild, no Electron download) and its findings
   # read separately from "does it build/pass". Advisory for now — promote to a
