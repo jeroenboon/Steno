@@ -36,6 +36,7 @@
  */
 
 import type { TranscriptSpan } from '@shared/domain/types'
+import type { AsrTerminalState } from '@shared/providers/asrTerminalState'
 
 // ---------------------------------------------------------------------------
 // WebSocket abstraction
@@ -110,10 +111,11 @@ export interface RealtimeAsrWire {
  * - `max-retries` — too many consecutive connect failures with no working
  *                   session in between: the endpoint is unreachable, so the
  *                   stream stops the endless backoff loop.
+ *
+ * Aligned with the shared `AsrTerminalState` DTO (single source of truth), which
+ * is the boundary contract the ASR port / IPC / renderer all speak.
  */
-export interface RealtimeTerminalState {
-  reason: 'auth' | 'max-retries'
-}
+export type RealtimeTerminalState = AsrTerminalState
 
 export interface RealtimeSpanStreamOptions {
   /** Async sleep, injected for deterministic tests. Defaults to setTimeout. */

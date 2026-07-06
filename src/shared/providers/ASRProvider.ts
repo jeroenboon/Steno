@@ -17,6 +17,7 @@
  */
 
 import type { TranscriptSpan } from '../domain/types'
+import type { AsrTerminalState } from './asrTerminalState'
 
 export interface ASRProvider {
   /** Open a streaming session. Must be called before pushAudioFrame(). */
@@ -51,4 +52,19 @@ export interface ASRProvider {
    * `provider.transcribeBatch !== undefined`.
    */
   transcribeBatch?(pcm: Uint8Array): Promise<TranscriptSpan[]>
+
+  /**
+   * Register an observer for a permanent terminal state (audit finding C4).
+   *
+   * A streaming provider fires this once when its socket gives up for good — a
+   * revoked/invalid key (`auth`) or the consecutive-failure ceiling
+   * (`max-retries`) — right before its spans() iterator completes. The observer
+   * (the runtime) surfaces it to the note-taker so a dead key does not just go
+   * quiet. The callback receives ONLY the reason enum, never a key or content.
+   *
+   * Optional — only realtime providers with a socket can terminate; batch/local
+   * providers (transcribeBatch, on-device) have no socket and simply never fire
+   * it. Callers must guard with `provider.onTerminal?.(...)`.
+   */
+  onTerminal?(cb: (state: AsrTerminalState) => void): void
 }

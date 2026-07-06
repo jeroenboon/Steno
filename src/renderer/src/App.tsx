@@ -14,7 +14,7 @@
 import React, { useEffect, useState } from 'react'
 
 import type { EgressState } from '@shared/ipc'
-import { ItemsChangedPayloadSchema } from '@shared/ipc'
+import { AsrTerminalPayloadSchema, ItemsChangedPayloadSchema } from '@shared/ipc'
 import { resolveAsrKeyRef, resolveExtractionKeyRef } from '@shared/settings/keyRefs'
 
 import { EgressIndicator } from './components/EgressIndicator'
@@ -80,6 +80,8 @@ export function App(): React.JSX.Element {
   const setRoute = useAppStore((s) => s.setRoute)
   const liveMeetingId = useAppStore((s) => s.liveMeetingId)
   const reconcileItems = useAppStore((s) => s.reconcileItems)
+  const asrTerminalReason = useAppStore((s) => s.asrTerminalReason)
+  const setAsrTerminalReason = useAppStore((s) => s.setAsrTerminalReason)
 
   const [egressState, setEgressState] = useState<EgressState>(DEFAULT_EGRESS)
   const [keysConfigured, setKeysConfigured] = useState<boolean | null>(null)
@@ -136,6 +138,16 @@ export function App(): React.JSX.Element {
     })
   }, [reconcileItems])
 
+  // ASR terminal state (audit C4). Main pushes the stop reason when live
+  // transcription gives up (revoked key / endpoint unreachable) and reason=null
+  // when a new session starts (clears it). The EgressIndicator renders it so the
+  // note-taker sees transcription stopped instead of the transcript going silent.
+  useEffect(() => {
+    return onValidated(window.api.onAsrTerminal, AsrTerminalPayloadSchema, (payload) => {
+      setAsrTerminalReason(payload.reason)
+    })
+  }, [setAsrTerminalReason])
+
   // A live recording session is in progress (not merely a meeting loaded for
   // Review) — this is what enables the Live tab, shows the live dot, and locks
   // the Draft tab.
@@ -176,7 +188,7 @@ export function App(): React.JSX.Element {
           })}
         </nav>
 
-        <EgressIndicator egressState={egressState} />
+        <EgressIndicator egressState={egressState} terminalReason={asrTerminalReason} />
       </header>
 
       {/* No-key banner — shown once we know keys are missing */}

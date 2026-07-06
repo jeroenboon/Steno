@@ -36,6 +36,9 @@ const nl = {
 
   // Egress indicator
   'egress.indicator.label': 'Gegevensverwerking',
+  // ASR terminal state — live transcription stopped for good (audit C4)
+  'egress.asr.stopped.auth': 'Transcriptie gestopt: sleutel geweigerd',
+  'egress.asr.stopped.max-retries': 'Transcriptie gestopt: verbinding verbroken',
 
   // Draft screen (item 0014)
   'draft.paste.heading': 'Agenda plakken',

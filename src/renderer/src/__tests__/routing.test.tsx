@@ -43,6 +43,7 @@ vi.stubGlobal('api', {
   onAgendaChanged: vi.fn().mockReturnValue(() => undefined),
   // Running summary (item 0020)
   onSummaryChanged: vi.fn().mockReturnValue(() => undefined),
+  onAsrTerminal: vi.fn().mockReturnValue(() => undefined),
   summaryQuery: vi.fn().mockResolvedValue({ answer: '' }),
   // Item note-taker actions (item 0018)
   itemConfirm: vi.fn().mockResolvedValue({ state: 'confirmed' }),

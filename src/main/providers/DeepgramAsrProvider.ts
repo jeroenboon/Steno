@@ -41,9 +41,14 @@ import WebSocketImpl from 'ws'
 import { z } from 'zod'
 
 import { TranscriptSpanSchema, type TranscriptSpan } from '@shared/domain/types'
-import type { ASRProvider } from '@shared/providers'
+import type { ASRProvider, AsrTerminalState } from '@shared/providers'
 
-import { RealtimeSpanStream, type RealtimeAsrWire, type WebSocketLike } from './realtimeSpanStream'
+import {
+  RealtimeSpanStream,
+  type RealtimeAsrWire,
+  type RealtimeSpanStreamOptions,
+  type WebSocketLike,
+} from './realtimeSpanStream'
 
 // Re-export so existing importers (and tests) can keep sourcing the WebSocket
 // surface from here; the canonical definition now lives in RealtimeSpanStream.
@@ -189,6 +194,8 @@ export class DeepgramAsrProvider implements ASRProvider {
   private readonly _language: string
   private readonly _fetch: typeof globalThis.fetch
   private readonly _stream: RealtimeSpanStream
+  /** Terminal-state observer registered via onTerminal(); undefined until set. */
+  private _onTerminal: ((state: AsrTerminalState) => void) | undefined = undefined
 
   constructor(options: DeepgramAsrProviderOptions) {
     this._apiKey = options.apiKey
@@ -213,10 +220,20 @@ export class DeepgramAsrProvider implements ASRProvider {
       },
     }
 
-    const streamOptions: { sleep?: (ms: number) => Promise<void>; maxBackoffMs?: number } = {}
+    // Forward the stream's terminal state out through the port. The stream owns
+    // the auth/max-retries classification; the adapter only relays it to whoever
+    // registered via onTerminal() (the runtime).
+    const streamOptions: RealtimeSpanStreamOptions = {
+      onTerminal: (state) => this._onTerminal?.(state),
+    }
     if (options.sleep !== undefined) streamOptions.sleep = options.sleep
     if (options.maxBackoffMs !== undefined) streamOptions.maxBackoffMs = options.maxBackoffMs
     this._stream = new RealtimeSpanStream(wire, streamOptions)
+  }
+
+  /** Register the terminal-state observer (ASRProvider port, audit C4). */
+  onTerminal(cb: (state: AsrTerminalState) => void): void {
+    this._onTerminal = cb
   }
 
   // -------------------------------------------------------------------------

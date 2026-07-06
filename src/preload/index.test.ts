@@ -130,4 +130,25 @@ describe('preload bridge — subscribe helper (audit A5)', () => {
     unsub()
     expect(removeListener).toHaveBeenCalledWith('transcript:span', listener)
   })
+
+  it('registers onAsrTerminal on the asr:terminal channel and unsubscribes (audit C4)', async () => {
+    const api = await loadApi()
+
+    const received: unknown[] = []
+    const unsub = api.onAsrTerminal((payload) => {
+      received.push(payload)
+    })
+
+    const call = on.mock.calls.find(([channel]) => channel === 'asr:terminal')
+    expect(call).toBeDefined()
+    const listener = call?.[1] as (event: unknown, payload: unknown) => void
+
+    // Reason-only payload is forwarded to the caller's callback.
+    const payload = { reason: 'auth' }
+    listener({}, payload)
+    expect(received).toEqual([payload])
+
+    unsub()
+    expect(removeListener).toHaveBeenCalledWith('asr:terminal', listener)
+  })
 })
