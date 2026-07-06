@@ -132,6 +132,7 @@ import type { Clock } from '@shared/providers'
 import type { AudioCaptureBridge } from './audio/AudioCaptureBridge'
 import type { agendaItemRepo } from './db/repos/agendaItemRepo'
 import type { meetingRepo } from './db/repos/meetingRepo'
+import type { participantRepo } from './db/repos/participantRepo'
 import type { ModelDownloader } from './providers/sherpa/ModelDownloader'
 import type { ItemLifecycleService } from './services/itemLifecycleService'
 import type { ConnectionTestResult } from './settings/connectionTest'
@@ -280,10 +281,19 @@ export interface IpcRegistryDependencies {
   /**
    * Agenda repo for grooming Proposed agenda items live (ADR 0029):
    * agendaItem:confirm and agendaItem:editAndConfirm persist through it so a
-   * confirmed item becomes a live routing bucket immediately. When absent those
-   * channels throw "not available".
+   * confirmed item becomes a live routing bucket immediately. It also backs the
+   * Draft-screen agendaItem:add / agendaItem:remove handlers so a prepared
+   * agenda actually reaches the DB (audit C1). When absent those channels throw
+   * "not available" (grooming) or degrade to a no-op persist (add/remove).
    */
   agendaItemRepo?: ReturnType<typeof agendaItemRepo>
+  /**
+   * Participant repo backing the Draft-screen participant:add / participant:remove
+   * handlers so a prepared participant list actually reaches the DB (audit C1).
+   * Without it owner assignment has no participants to match against and
+   * meeting:load restores none. When absent add/remove degrade to a no-op persist.
+   */
+  participantRepo?: ReturnType<typeof participantRepo>
   /**
    * Pause/resume the active Live meeting. Wired in main/index.ts to persist the
    * paused flag (MeetingLifecycleService) and forward to the live runtime
@@ -367,7 +377,7 @@ function makeHandleMeetingCreate(deps: IpcRegistryDependencies) {
   }
 }
 
-function makeHandleAgendaItemAdd(): (raw: unknown) => AgendaItemAddResponse {
+function makeHandleAgendaItemAdd(deps: IpcRegistryDependencies) {
   return function handleAgendaItemAdd(raw: unknown): AgendaItemAddResponse {
     const req = AgendaItemAddRequestSchema.parse(raw)
 
@@ -378,18 +388,24 @@ function makeHandleAgendaItemAdd(): (raw: unknown) => AgendaItemAddResponse {
       state: 'confirmed',
     }
 
+    // Persist against the real meeting so rolling-extraction routing sees the
+    // agenda and meeting:load restores it (audit C1). Optional dep keeps the
+    // registry unit-testable without a DB.
+    deps.agendaItemRepo?.insert(agendaItem, req.meetingId)
+
     return AgendaItemAddResponseSchema.parse(agendaItem)
   }
 }
 
-function makeHandleAgendaItemRemove(): (raw: unknown) => AgendaItemRemoveResponse {
+function makeHandleAgendaItemRemove(deps: IpcRegistryDependencies) {
   return function handleAgendaItemRemove(raw: unknown): AgendaItemRemoveResponse {
-    AgendaItemRemoveRequestSchema.parse(raw)
+    const req = AgendaItemRemoveRequestSchema.parse(raw)
+    deps.agendaItemRepo?.delete(req.agendaItemId)
     return AgendaItemRemoveResponseSchema.parse({ ok: true })
   }
 }
 
-function makeHandleParticipantAdd(): (raw: unknown) => ParticipantAddResponse {
+function makeHandleParticipantAdd(deps: IpcRegistryDependencies) {
   return function handleParticipantAdd(raw: unknown): ParticipantAddResponse {
     const req = ParticipantAddRequestSchema.parse(raw)
 
@@ -398,13 +414,18 @@ function makeHandleParticipantAdd(): (raw: unknown) => ParticipantAddResponse {
       name: req.name,
     }
 
+    // Persist against the real meeting so owner assignment has a participant list
+    // and meeting:load restores it (audit C1).
+    deps.participantRepo?.insert(participant, req.meetingId)
+
     return ParticipantAddResponseSchema.parse(participant)
   }
 }
 
-function makeHandleParticipantRemove(): (raw: unknown) => ParticipantRemoveResponse {
+function makeHandleParticipantRemove(deps: IpcRegistryDependencies) {
   return function handleParticipantRemove(raw: unknown): ParticipantRemoveResponse {
-    ParticipantRemoveRequestSchema.parse(raw)
+    const req = ParticipantRemoveRequestSchema.parse(raw)
+    deps.participantRepo?.delete(req.participantId)
     return ParticipantRemoveResponseSchema.parse({ ok: true })
   }
 }
@@ -770,10 +791,10 @@ export function createIpcRegistry(deps: IpcRegistryDependencies): IpcRegistry {
     'secret:has': makeHandleSecretHas(deps),
     'provider:testConnection': makeHandleProviderTestConnection(deps),
     'meeting:create': makeHandleMeetingCreate(deps),
-    'agendaItem:add': makeHandleAgendaItemAdd(),
-    'agendaItem:remove': makeHandleAgendaItemRemove(),
-    'participant:add': makeHandleParticipantAdd(),
-    'participant:remove': makeHandleParticipantRemove(),
+    'agendaItem:add': makeHandleAgendaItemAdd(deps),
+    'agendaItem:remove': makeHandleAgendaItemRemove(deps),
+    'participant:add': makeHandleParticipantAdd(deps),
+    'participant:remove': makeHandleParticipantRemove(deps),
     'meeting:start': makeHandleMeetingStart(deps),
     'audio:start': makeHandleAudioStart(deps),
     'audio:stop': makeHandleAudioStop(deps),
