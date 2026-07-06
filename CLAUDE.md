@@ -126,7 +126,7 @@ The standard for every change, not suggestions. Most are expanded in the Archite
 11. **Privacy: consent + transparency are the invariants.** No surprise egress, no logging of content/secrets; data goes only to the provider the user configured; the egress situation is always visible; the most-private viable option is the default where there's a choice (ADR 0003).
 12. **Data safety.** Autosave to SQLite every extraction turn (a crash loses at most the last turn); forward-only versioned migrations (ADR 0006).
 13. **CI mirrors the DoD gate.** build + lint + format:check + test on every push.
-14. **Dependency hygiene.** Commit the lockfile, pin versions, keep deps minimal.
+14. **Dependency hygiene.** Commit the lockfile, pin versions, keep deps minimal. `zod` is intentionally pinned exact (not caret) because Zod 4 minor releases have changed validation/inference behavior and we validate every boundary with it, so a bump must be deliberate and tested.
 15. **i18n + keyboard-first.** UI strings externalized, Dutch default; every confirm/dismiss/edit has a keyboard path.
 
 ## Conventions
