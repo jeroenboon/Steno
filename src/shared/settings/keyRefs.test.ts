@@ -36,6 +36,22 @@ describe('resolveExtractionKeyRef', () => {
     }
     expect(resolveExtractionKeyRef(settings)).toBe('openai')
   })
+
+  it('returns the configured keyRef for a local extractor (non-null even without a stored secret)', () => {
+    const settings: AppSettings = {
+      asrProvider: 'local-parakeet',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: {
+        preset: 'local-custom',
+        baseUrl: 'http://localhost:1234/v1',
+        model: 'local-model',
+        keyRef: 'local',
+        displayName: 'Lokaal',
+      },
+    }
+    expect(resolveExtractionKeyRef(settings)).toBe('local')
+  })
 })
 
 describe('resolveAsrKeyRef', () => {

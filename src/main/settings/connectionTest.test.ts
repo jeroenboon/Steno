@@ -212,6 +212,58 @@ describe('testProviderConnection', () => {
     expect(call[1].headers).toMatchObject({ 'api-key': 'az-speech' })
   })
 
+  it('probes a local endpoint unauthenticated when no key is stored (key optional)', async () => {
+    const storage = new MemorySecretStorage()
+    const settings: AppSettings = {
+      asrProvider: 'local-parakeet',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: {
+        preset: 'local-custom',
+        baseUrl: 'http://localhost:1234/v1',
+        model: 'local-model',
+        keyRef: 'local',
+        displayName: 'Lokaal',
+      },
+    }
+    const fetchMock = vi.fn().mockResolvedValue(okResponse())
+
+    const result = await testProviderConnection({
+      role: 'extraction',
+      settings,
+      storage,
+      fetch: fetchMock,
+    })
+
+    expect(result).toEqual({ ok: true })
+    const call = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(call[0]).toBe('http://localhost:1234/v1/models')
+    expect(call[1].headers).not.toHaveProperty('Authorization')
+  })
+
+  it('attaches Bearer auth to a local probe when a key is stored', async () => {
+    const storage = new MemorySecretStorage()
+    storage.setSecret('local', 'llama-key')
+    const settings: AppSettings = {
+      asrProvider: 'local-parakeet',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: {
+        preset: 'local-custom',
+        baseUrl: 'http://localhost:1234/v1',
+        model: 'local-model',
+        keyRef: 'local',
+        displayName: 'Lokaal',
+      },
+    }
+    const fetchMock = vi.fn().mockResolvedValue(okResponse())
+
+    await testProviderConnection({ role: 'extraction', settings, storage, fetch: fetchMock })
+
+    const call = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(call[1].headers).toMatchObject({ Authorization: 'Bearer llama-key' })
+  })
+
   it('returns no-key when the configured key is not stored', async () => {
     const storage = new MemorySecretStorage()
     const settings: AppSettings = {

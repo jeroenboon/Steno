@@ -131,6 +131,34 @@ export const OpenAICompatibleConfigSchema = z.object({
 export type OpenAICompatibleConfig = z.infer<typeof OpenAICompatibleConfigSchema>
 
 /**
+ * Config for a LOCAL OpenAI-compatible extraction endpoint (LM Studio, Ollama,
+ * llama.cpp, or any self-hosted server). Modelled as its own extraction
+ * discriminator rather than a preset within `openai-compatible` because its
+ * egress is on-device and its API key is optional — the discriminator is what
+ * makes `computeEgressState` report `notes: 'local'` cleanly (ADR 0040).
+ *
+ * `keyRef` is still a required non-empty name so the shared key-resolution stays
+ * non-null, but the STORED secret is optional: a keyless local server simply has
+ * no secret under that ref, and the factory then omits the Authorization header.
+ * `preset` is prefill-only (not egress-load-bearing); the named runtime presets
+ * (lmstudio/ollama/llamacpp) are a follow-up, so for now only `local-custom`.
+ */
+export const LocalExtractionConfigSchema = z.object({
+  /** Preset identifier. Prefill-only; named runtimes land in a follow-up slice. */
+  preset: z.enum(['local-custom']).default('local-custom'),
+  /** Base URL of the local server, e.g. http://localhost:1234/v1 */
+  baseUrl: z.url(),
+  /** Model identifier as the local runtime names it. */
+  model: z.string().min(1),
+  /** Key for SecretStorage lookup — never the raw value. The stored secret is optional. */
+  keyRef: z.string().min(1),
+  /** Human-readable name shown in the UI. */
+  displayName: z.string().min(1),
+})
+
+export type LocalExtractionConfig = z.infer<typeof LocalExtractionConfigSchema>
+
+/**
  * Config for Azure OpenAI extraction endpoints.
  * Requires Azure-specific fields: endpoint, deployment, apiVersion, model, keyRef, displayName.
  *
@@ -239,6 +267,7 @@ function providerVariant<AsrShape extends z.ZodRawShape, ExtShape extends z.ZodR
       anthropic: AnthropicConfigSchema,
       openaiCompatible: z.undefined().optional(),
       azureOpenAI: z.undefined().optional(),
+      local: z.undefined().optional(),
       deepgram: z.undefined().optional(),
       openaiAudio: z.undefined().optional(),
       mistralVoxtral: z.undefined().optional(),
@@ -275,6 +304,10 @@ const extAzureOpenAI = {
   extractionProvider: z.literal('azure-openai'),
   azureOpenAI: AzureOpenAIConfigSchema,
 }
+const extLocal = {
+  extractionProvider: z.literal('local'),
+  local: LocalExtractionConfigSchema,
+}
 
 // Enumerated explicitly (not `.map`) so each member keeps its precise
 // per-variant `z.infer` type and the array stays a tuple `z.union` accepts.
@@ -297,6 +330,12 @@ export const AppSettingsSchema = z.union([
   providerVariant(asrOpenAIAudio, extAzureOpenAI),
   providerVariant(asrMistralVoxtral, extAzureOpenAI),
   providerVariant(asrAzureSpeech, extAzureOpenAI),
+  // Local extraction × each ASR
+  providerVariant(asrLocalParakeet, extLocal),
+  providerVariant(asrDeepgram, extLocal),
+  providerVariant(asrOpenAIAudio, extLocal),
+  providerVariant(asrMistralVoxtral, extLocal),
+  providerVariant(asrAzureSpeech, extLocal),
 ])
 
 export type AppSettings = z.infer<typeof AppSettingsSchema>

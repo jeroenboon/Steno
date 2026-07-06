@@ -23,6 +23,10 @@ export function resolveExtractionKeyRef(settings: AppSettings): string {
       return settings.openaiCompatible.keyRef
     case 'azure-openai':
       return settings.azureOpenAI.keyRef
+    case 'local':
+      // Non-null by contract even though the stored secret may be absent: the
+      // keyRef names where a key WOULD live if the local server requires one.
+      return settings.local.keyRef
   }
 }
 

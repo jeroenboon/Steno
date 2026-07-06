@@ -49,6 +49,11 @@ interface Probe {
   url: string
   keyRef: string
   authHeaders: (key: string) => Record<string, string>
+  /**
+   * When true, a missing stored secret is not an error: the probe runs
+   * unauthenticated. Used by local endpoints, whose key is optional (ADR 0040).
+   */
+  keyOptional?: boolean
 }
 
 const OPENAI_AUDIO_BASE_URL = 'https://api.openai.com/v1'
@@ -75,15 +80,18 @@ export async function testProviderConnection(
   }
 
   const key = opts.storage.getSecret(probe.keyRef)
-  if (key === null) {
+  if (key === null && probe.keyOptional !== true) {
     return { ok: false, error: 'no-key' }
   }
+
+  // A keyless (optional-key) probe runs unauthenticated; otherwise attach auth.
+  const headers = key === null ? {} : probe.authHeaders(key)
 
   const doFetch = opts.fetch ?? globalThis.fetch
   try {
     const response = await doFetch(probe.url, {
       method: 'GET',
-      headers: probe.authHeaders(key),
+      headers,
     })
     if (response.ok) return { ok: true }
     return { ok: false, error: `HTTP ${String(response.status)}` }
@@ -129,6 +137,19 @@ function resolveExtractionProbe(settings: AppSettings): Probe | null {
         url: azureModelsUrl(cfg.endpoint, cfg.apiVersion),
         keyRef: cfg.keyRef,
         authHeaders: apiKeyHeaders,
+      }
+    }
+    case 'local': {
+      // Local OpenAI-compatible server: probe /models, unauthenticated when no
+      // key is stored (Bearer only if the user set one). Rich failure hints are
+      // a follow-up (issue #89); here it just resolves and never errors on no-key.
+      const cfg = settings.local
+      const baseUrl = cfg.baseUrl.replace(/\/$/, '')
+      return {
+        url: `${baseUrl}/models`,
+        keyRef: cfg.keyRef,
+        authHeaders: bearer,
+        keyOptional: true,
       }
     }
   }

@@ -71,15 +71,39 @@ function errorResponse(status: number): Response {
 
 function makeProvider(
   fetchImpl: typeof globalThis.fetch,
-  overrides: Partial<{ displayName: string; baseUrl: string; model: string }> = {},
+  overrides: Partial<{
+    apiKey: string | undefined
+    displayName: string
+    baseUrl: string
+    model: string
+    sendCacheKey: boolean
+  }> = {},
 ) {
-  return new OpenAICompatibleExtractionProvider({
-    apiKey: 'test-key',
+  // apiKey is omitted entirely when overridden to undefined (keyless local
+  // server); default to a test key when not overridden at all.
+  const apiKey = 'apiKey' in overrides ? overrides.apiKey : 'test-key'
+  const opts = {
     baseUrl: overrides.baseUrl ?? 'https://api.openai.com/v1',
     model: overrides.model ?? 'gpt-4o-mini',
     displayName: overrides.displayName ?? 'OpenAI',
     fetch: fetchImpl,
-  })
+    ...(apiKey === undefined ? {} : { apiKey }),
+    ...(overrides.sendCacheKey === undefined ? {} : { sendCacheKey: overrides.sendCacheKey }),
+  }
+  return new OpenAICompatibleExtractionProvider(opts)
+}
+
+/** Read the parsed request body of the Nth fetch call. */
+function requestBody(fetchMock: ReturnType<typeof vi.fn>, call = 0): Record<string, unknown> {
+  return JSON.parse((fetchMock.mock.calls[call]?.[1] as RequestInit).body as string) as Record<
+    string,
+    unknown
+  >
+}
+
+/** Read the request headers of the Nth fetch call. */
+function requestHeaders(fetchMock: ReturnType<typeof vi.fn>, call = 0): Record<string, string> {
+  return (fetchMock.mock.calls[call]?.[1] as RequestInit).headers as Record<string, string>
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +269,37 @@ describe('OpenAICompatibleExtractionProvider.extract', () => {
     expect((body1.prompt_cache_key as string).length).toBeGreaterThan(0)
     // Identical agenda/participants prefix → identical routing key → cache hit.
     expect(body2.prompt_cache_key).toBe(body1.prompt_cache_key)
+  })
+
+  it('omits prompt_cache_key when sendCacheKey is false (local endpoints)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(validExtraction)))
+    const provider = makeProvider(fetchMock, { sendCacheKey: false })
+
+    await provider.extract(extractionRequest)
+
+    const body = requestBody(fetchMock)
+    expect('prompt_cache_key' in body).toBe(false)
+    // The rest of the body is unchanged: json_object mode still requested.
+    expect(body.response_format).toEqual({ type: 'json_object' })
+  })
+
+  it('omits the Authorization header when no apiKey is given (keyless local server)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(validExtraction)))
+    const provider = makeProvider(fetchMock, { apiKey: undefined })
+
+    const result = await provider.extract(extractionRequest)
+
+    expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
+    expect('Authorization' in requestHeaders(fetchMock)).toBe(false)
+  })
+
+  it('still sends the Authorization header when an apiKey is given', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(validExtraction)))
+    const provider = makeProvider(fetchMock, { apiKey: 'local-secret' })
+
+    await provider.extract(extractionRequest)
+
+    expect(requestHeaders(fetchMock).Authorization).toBe('Bearer local-secret')
   })
 
   it('tags error logs with the vendor displayName', async () => {

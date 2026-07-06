@@ -764,6 +764,103 @@ describe('SettingsScreen — extraction provider presets (Phase 1.2)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Local extraction provider (ADR 0040)
+// ---------------------------------------------------------------------------
+
+describe('SettingsScreen — local extraction', () => {
+  beforeEach(() => {
+    setup()
+  })
+
+  it('offers a local (on-device) extraction option', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => {
+      expect(screen.getByTestId('extraction-provider-select')).toBeDefined()
+    })
+    const select = screen.getByTestId('extraction-provider-select')
+    const localOption = Array.from((select as HTMLSelectElement).options).find(
+      (o) => o.value === 'local',
+    )
+    expect(localOption).toBeDefined()
+  })
+
+  it('reveals the local config fields when local is selected', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('extraction-provider-select'))
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'local' } })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('local-base-url')).toBeDefined()
+      expect(screen.getByTestId('local-model')).toBeDefined()
+    })
+  })
+
+  it('persists extractionProvider "local" with the entered base URL + model on save', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('extraction-provider-select'))
+
+    const select = screen.getByTestId('extraction-provider-select')
+    act(() => {
+      fireEvent.change(select, { target: { value: 'local' } })
+    })
+
+    await waitFor(() => screen.getByTestId('local-model'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('local-base-url'), {
+        target: { value: 'http://localhost:1234/v1' },
+      })
+      fireEvent.change(screen.getByTestId('local-model'), { target: { value: 'my-local-model' } })
+    })
+
+    act(() => {
+      fireEvent.click(screen.getByTestId('save-local'))
+    })
+
+    await waitFor(() => {
+      expect(
+        mockApi.settingsSet.mock.calls.some((c) => {
+          const json = JSON.stringify(c[0])
+          return (
+            json.includes('"extractionProvider":"local"') &&
+            json.includes('"model":"my-local-model"') &&
+            json.includes('"preset":"local-custom"')
+          )
+        }),
+      ).toBe(true)
+    })
+  })
+
+  it('does not send an API key in the settings:set payload for local', async () => {
+    render(<SettingsScreen />)
+    await waitFor(() => screen.getByTestId('extraction-provider-select'))
+
+    act(() => {
+      fireEvent.change(screen.getByTestId('extraction-provider-select'), {
+        target: { value: 'local' },
+      })
+    })
+    await waitFor(() => screen.getByTestId('local-model'))
+    act(() => {
+      fireEvent.change(screen.getByTestId('local-model'), { target: { value: 'm' } })
+    })
+    act(() => {
+      fireEvent.click(screen.getByTestId('save-local'))
+    })
+
+    await waitFor(() => {
+      expect(mockApi.settingsSet).toHaveBeenCalled()
+    })
+    for (const call of mockApi.settingsSet.mock.calls) {
+      expect(JSON.stringify(call[0])).not.toContain('secret')
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Phase 3.4: import-only cloud ASR providers (OpenAI / Mistral / Azure Speech)
 // ---------------------------------------------------------------------------
 
