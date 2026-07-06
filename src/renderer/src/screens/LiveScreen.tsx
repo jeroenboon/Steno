@@ -31,6 +31,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 
 import { OffAgenda } from '@shared/domain/types'
 
+import { LiveSessionControls } from '../components/LiveSessionControls'
 import { MarginLeaders } from '../components/MarginLeaders'
 import { NudgePanel } from '../components/NudgePanel'
 import { RunningSummaryPanel } from '../components/RunningSummaryPanel'
@@ -444,9 +445,6 @@ export function LiveScreen(): React.JSX.Element {
   // --- Store ---
   const micPermission = useAppStore((s) => s.micPermission)
   const transcriptSpans = useAppStore((s) => s.transcriptSpans)
-  const captureMode = useAppStore((s) => s.captureMode)
-  const loopbackState = useAppStore((s) => s.loopbackState)
-  const setCaptureMode = useAppStore((s) => s.setCaptureMode)
 
   const proposedDecisions = useAppStore((s) => s.proposedDecisions)
   const proposedActions = useAppStore((s) => s.proposedActions)
@@ -783,87 +781,7 @@ export function LiveScreen(): React.JSX.Element {
       {/* ------------------------------------------------------------------ */}
       {/* Session controls (loopback toggle + mic status) */}
       {/* ------------------------------------------------------------------ */}
-      <div className="live-controls">
-        <section className="screen__body screen__body--loopback-toggle">
-          <label htmlFor="capture-mode-select" className="loopback-toggle__label">
-            {t('live.loopback.toggle.label')}
-          </label>
-          <select
-            id="capture-mode-select"
-            data-testid="capture-mode-select"
-            value={captureMode}
-            onChange={(e) => {
-              const value = e.target.value
-              if (value === 'remote' || value === 'mic-only') {
-                setCaptureMode(value)
-              }
-            }}
-            disabled={micPermission !== 'unknown'}
-            className="loopback-toggle__select"
-          >
-            <option value="remote">{t('live.loopback.mode.remote')}</option>
-            <option value="mic-only">{t('live.loopback.mode.mic-only')}</option>
-          </select>
-
-          {loopbackState === 'denied' && (
-            <p
-              className="loopback-status loopback-status--denied"
-              role="status"
-              data-testid="loopback-denied-message"
-            >
-              {t('live.loopback.state.denied')}
-            </p>
-          )}
-          {loopbackState === 'active' && (
-            <p
-              className="loopback-status loopback-status--active"
-              role="status"
-              data-testid="loopback-active-message"
-            >
-              {t('live.loopback.state.active')}
-            </p>
-          )}
-          {loopbackState === 'off' && (
-            <p
-              className="loopback-status loopback-status--off"
-              role="status"
-              data-testid="loopback-off-message"
-            >
-              {t('live.loopback.state.off')}
-            </p>
-          )}
-        </section>
-
-        <section
-          className="screen__body"
-          data-testid="mic-status"
-          data-mic-permission={micPermission}
-        >
-          {micPermission === 'denied' && (
-            <p className="mic-denied-message" role="alert" data-testid="mic-denied-message">
-              {t('live.mic.denied')}
-            </p>
-          )}
-          {micPermission === 'unknown' && (
-            <p className="mic-starting-message" data-testid="mic-starting-message">
-              {t('live.mic.starting')}
-            </p>
-          )}
-          {micPermission === 'granted' && (
-            <div className="mic-active-row">
-              <p className="mic-active-message" data-testid="mic-active-message">
-                {t('live.mic.active')}
-              </p>
-              <div className="audio-level-meter" aria-hidden="true">
-                <div
-                  className="audio-level-bar"
-                  style={{ width: String(Math.min(100, audioLevel * 400)) + '%' }}
-                />
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
+      <LiveSessionControls audioLevel={audioLevel} />
 
       <div className="live-layout" ref={liveLayoutRef}>
         <MarginLeaders containerRef={liveLayoutRef} recomputeKey={leaderRecomputeKey} />
