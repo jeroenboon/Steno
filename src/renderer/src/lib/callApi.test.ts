@@ -25,7 +25,7 @@ describe('callApi', () => {
 
   it('returns false and logs [label] failed on rejection, without rethrowing', async () => {
     const err = new Error('boom')
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     const ok = await callApi('Test action', () => Promise.reject(err))
     expect(ok).toBe(false)
     expect(spy).toHaveBeenCalledWith('[Test action] failed:', err)
