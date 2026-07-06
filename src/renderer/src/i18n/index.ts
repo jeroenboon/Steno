@@ -205,6 +205,13 @@ const nl = {
   'settings.test.network': 'Geen verbinding. Controleer de URL en je internet.',
   'settings.test.unavailable': 'Testen is hier niet beschikbaar',
   'settings.test.failed': 'Afgewezen',
+  // Local runtime hints (ADR 0040 §5)
+  'settings.test.local.unreachable':
+    'Kon de lokale server niet bereiken. Draait je runtime en klopt de poort in de basis-URL?',
+  'settings.test.local.modelMissing':
+    'Server bereikt, maar het model werd niet gevonden. Is het model geladen in je runtime?',
+  'settings.test.local.auth':
+    'De server vraagt om een sleutel. Vul een API-sleutel in (bijv. llama.cpp met --api-key).',
 
   // Shared vendor key notice (Phase 5.2)
   'settings.sharedKey.notice':

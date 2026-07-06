@@ -264,6 +264,110 @@ describe('testProviderConnection', () => {
     expect(call[1].headers).toMatchObject({ Authorization: 'Bearer llama-key' })
   })
 
+  it('maps a transport failure on a local probe to the local-unreachable hint code', async () => {
+    const storage = new MemorySecretStorage()
+    const settings: AppSettings = {
+      asrProvider: 'local-parakeet',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: {
+        preset: 'local-custom',
+        baseUrl: 'http://localhost:1234/v1',
+        model: 'local-model',
+        keyRef: 'local',
+        displayName: 'Lokaal',
+      },
+    }
+    const fetchMock = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'))
+
+    const result = await testProviderConnection({
+      role: 'extraction',
+      settings,
+      storage,
+      fetch: fetchMock,
+    })
+
+    expect(result).toEqual({ ok: false, error: 'local-unreachable' })
+  })
+
+  it('maps HTTP 404 on a local probe to the local-model-missing hint code', async () => {
+    const storage = new MemorySecretStorage()
+    const settings: AppSettings = {
+      asrProvider: 'local-parakeet',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: {
+        preset: 'local-custom',
+        baseUrl: 'http://localhost:1234/v1',
+        model: 'local-model',
+        keyRef: 'local',
+        displayName: 'Lokaal',
+      },
+    }
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(404))
+
+    const result = await testProviderConnection({
+      role: 'extraction',
+      settings,
+      storage,
+      fetch: fetchMock,
+    })
+
+    expect(result).toEqual({ ok: false, error: 'local-model-missing' })
+  })
+
+  it('maps HTTP 401/403 on a local probe to the local-auth hint code', async () => {
+    const storage = new MemorySecretStorage()
+    const settings: AppSettings = {
+      asrProvider: 'local-parakeet',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: {
+        preset: 'local-custom',
+        baseUrl: 'http://localhost:1234/v1',
+        model: 'local-model',
+        keyRef: 'local',
+        displayName: 'Lokaal',
+      },
+    }
+    for (const status of [401, 403]) {
+      const fetchMock = vi.fn().mockResolvedValue(okResponse(status))
+      const result = await testProviderConnection({
+        role: 'extraction',
+        settings,
+        storage,
+        fetch: fetchMock,
+      })
+      expect(result).toEqual({ ok: false, error: 'local-auth' })
+    }
+  })
+
+  it('falls back to the generic HTTP status for other local non-ok responses', async () => {
+    const storage = new MemorySecretStorage()
+    const settings: AppSettings = {
+      asrProvider: 'local-parakeet',
+      extractionProvider: 'local',
+      primaryLanguage: 'nl',
+      local: {
+        preset: 'local-custom',
+        baseUrl: 'http://localhost:1234/v1',
+        model: 'local-model',
+        keyRef: 'local',
+        displayName: 'Lokaal',
+      },
+    }
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(500))
+
+    const result = await testProviderConnection({
+      role: 'extraction',
+      settings,
+      storage,
+      fetch: fetchMock,
+    })
+
+    expect(result).toEqual({ ok: false, error: 'HTTP 500' })
+  })
+
   it('returns no-key when the configured key is not stored', async () => {
     const storage = new MemorySecretStorage()
     const settings: AppSettings = {
