@@ -8,6 +8,7 @@
  * strings), distinct from the persisted AppSettings config blocks.
  */
 
+import type { LocalPreset } from '../../../shared/providers'
 import { t } from '../i18n'
 
 export interface CustomFields {
@@ -71,6 +72,8 @@ export function validateCustomFields(fields: CustomFields): CustomValidationErro
  * fixed by the parent, so they are not part of the editable form.
  */
 export interface LocalFields {
+  /** Prefill-only runtime preset (not egress-load-bearing; ADR 0040). */
+  preset: LocalPreset
   baseUrl: string
   model: string
 }
