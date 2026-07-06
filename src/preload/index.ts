@@ -7,130 +7,55 @@
  * - The exposed API surface must exactly match the RendererApi type from
  *   @shared/ipc so the renderer gets full TypeScript coverage with zero
  *   raw ipcRenderer usage.
+ *
+ * The object below is a thin, declarative mapping: request/response channels go
+ * through `invoke()` (which Zod-validates the response — audit C8), push
+ * channels through `subscribe()`, and the two fire-and-forget frame channels
+ * through ipcRenderer.send. See ./bridge.ts for the helpers.
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
 
-import type { TranscriptSpan } from '@shared/domain/types'
-import type {
-  RendererApi,
-  SettingsSetRequest,
-  EgressState,
-  SettingsGetResponse,
-  SettingsSetResponse,
-  SecretSetRequest,
-  SecretSetResponse,
-  SecretHasRequest,
-  SecretHasResponse,
-  ProviderTestConnectionRequest,
-  ProviderTestConnectionResponse,
-  MeetingCreateRequest,
-  MeetingCreateResponse,
-  AgendaItemAddRequest,
-  AgendaItemAddResponse,
-  AgendaItemRemoveRequest,
-  AgendaItemRemoveResponse,
-  ParticipantAddRequest,
-  ParticipantAddResponse,
-  ParticipantRemoveRequest,
-  ParticipantRemoveResponse,
-  MeetingEndRequest,
-  MeetingEndResponse,
-  AudioStartRequest,
-  AudioStartResponse,
-  AudioStopResponse,
-  UnsubscribeFn,
-  ItemsChangedPayload,
-  ItemsSummariesPayload,
-  ItemConfirmRequest,
-  ItemConfirmResponse,
-  ItemEditAndConfirmRequest,
-  ItemEditAndConfirmResponse,
-  ItemDismissRequest,
-  ItemDismissResponse,
-  ItemCreateConfirmedRequest,
-  ItemCreateConfirmedResponse,
-  NudgesChangedPayload,
-  SummaryChangedPayload,
-  SummaryQueryRequest,
-  SummaryQueryResponse,
-  ExportMarkdownRequest,
-  ExportMarkdownResponse,
-  ExportCopyMarkdownRequest,
-  ExportCopyMarkdownResponse,
-  TranscriptCopyRequest,
-  TranscriptCopyResponse,
-  MeetingListRequest,
-  MeetingListResponse,
-  MeetingLoadRequest,
-  MeetingLoadResponse,
-  MeetingDeleteRequest,
-  MeetingDeleteResponse,
-  ModelStatusRequest,
-  ModelStatusResponse,
-  ModelDownloadRequest,
-  ModelDownloadResponse,
-  ModelProgressEvent,
-  ImportStartRequest,
-  ImportStartResponse,
-  ImportFinishRequest,
-  ImportFinishResponse,
-  ImportProgressEvent,
-  ContextInferFromTextRequest,
-  ContextInferFromTextResponse,
-  AgendaChangedPayload,
-  AgendaItemConfirmRequest,
-  AgendaItemConfirmResponse,
-  AgendaItemEditAndConfirmRequest,
-  AgendaItemEditAndConfirmResponse,
-  MeetingPauseRequest,
-  MeetingPauseResponse,
-  MeetingResumeRequest,
-  MeetingResumeResponse,
-} from '@shared/ipc'
+import type { RendererApi, EgressState } from '@shared/ipc'
+
+import { invoke, subscribe } from './bridge'
 
 const api: RendererApi = {
-  ping: () => ipcRenderer.invoke('ping', {}) as Promise<{ pong: true }>,
-  settingsGet: () => ipcRenderer.invoke('settings:get', {}) as Promise<SettingsGetResponse>,
-  settingsSet: (settings: SettingsSetRequest) =>
-    ipcRenderer.invoke('settings:set', settings) as Promise<SettingsSetResponse>,
-  egressState: () => ipcRenderer.invoke('egress:state', {}) as Promise<EgressState>,
-  meetingCreate: (req: MeetingCreateRequest) =>
-    ipcRenderer.invoke('meeting:create', req) as Promise<MeetingCreateResponse>,
-  agendaItemAdd: (req: AgendaItemAddRequest) =>
-    ipcRenderer.invoke('agendaItem:add', req) as Promise<AgendaItemAddResponse>,
-  agendaItemRemove: (req: AgendaItemRemoveRequest) =>
-    ipcRenderer.invoke('agendaItem:remove', req) as Promise<AgendaItemRemoveResponse>,
-  participantAdd: (req: ParticipantAddRequest) =>
-    ipcRenderer.invoke('participant:add', req) as Promise<ParticipantAddResponse>,
-  participantRemove: (req: ParticipantRemoveRequest) =>
-    ipcRenderer.invoke('participant:remove', req) as Promise<ParticipantRemoveResponse>,
+  ping: () => invoke('ping', {}),
+  settingsGet: () => invoke('settings:get', {}),
+  settingsSet: (settings) => invoke('settings:set', settings),
+  // egress:state's response schema validates the `cloud:` prefix at runtime via
+  // startsWith(), which infers statically as `string`; EgressState narrows that
+  // to a template-literal type. The response is still Zod-validated by invoke();
+  // this cast only re-narrows the static type to the domain type.
+  egressState: () => invoke('egress:state', {}) as Promise<EgressState>,
+  meetingCreate: (req) => invoke('meeting:create', req),
+  agendaItemAdd: (req) => invoke('agendaItem:add', req),
+  agendaItemRemove: (req) => invoke('agendaItem:remove', req),
+  participantAdd: (req) => invoke('participant:add', req),
+  participantRemove: (req) => invoke('participant:remove', req),
 
   // ---------------------------------------------------------------------------
   // Secrets (item 0016) — write-only; no secret:get channel
   // ---------------------------------------------------------------------------
 
-  secretSet: (req: SecretSetRequest) =>
-    ipcRenderer.invoke('secret:set', req) as Promise<SecretSetResponse>,
-  secretHas: (req: SecretHasRequest) =>
-    ipcRenderer.invoke('secret:has', req) as Promise<SecretHasResponse>,
+  secretSet: (req) => invoke('secret:set', req),
+  secretHas: (req) => invoke('secret:has', req),
 
-  providerTestConnection: (req: ProviderTestConnectionRequest) =>
-    ipcRenderer.invoke('provider:testConnection', req) as Promise<ProviderTestConnectionResponse>,
+  providerTestConnection: (req) => invoke('provider:testConnection', req),
 
   // ---------------------------------------------------------------------------
   // Audio capture (item 0015)
   // ---------------------------------------------------------------------------
 
-  audioStart: (req: AudioStartRequest) =>
-    ipcRenderer.invoke('audio:start', req) as Promise<AudioStartResponse>,
-  audioStop: () => ipcRenderer.invoke('audio:stop', {}) as Promise<AudioStopResponse>,
+  audioStart: (req) => invoke('audio:start', req),
+  audioStop: () => invoke('audio:stop', {}),
 
   /**
    * Fire-and-forget: send a PCM frame to main without waiting for a response.
    * Uses ipcRenderer.send (one-way), not invoke, to minimise per-frame overhead.
    */
-  audioSendFrame: (frame: Uint8Array) => {
+  audioSendFrame: (frame) => {
     ipcRenderer.send('audio:frame', frame)
   },
 
@@ -138,193 +63,98 @@ const api: RendererApi = {
    * Subscribe to transcript spans pushed by main via webContents.send.
    * Returns an unsubscribe function (the preload holds no global listener state).
    */
-  onTranscriptSpan: (cb: (span: TranscriptSpan) => void): UnsubscribeFn => {
-    const listener = (_event: Electron.IpcRendererEvent, span: TranscriptSpan) => {
-      cb(span)
-    }
-    ipcRenderer.on('transcript:span', listener)
-    return () => {
-      ipcRenderer.removeListener('transcript:span', listener)
-    }
-  },
+  onTranscriptSpan: (cb) => subscribe('transcript:span', cb),
 
   /**
    * Subscribe to proposed-item updates pushed from main (item 0018).
    * Fired after every rolling extraction turn or final pass that proposes ≥1 item.
-   * Returns an unsubscribe function.
    */
-  onItemsChanged: (cb: (payload: ItemsChangedPayload) => void): UnsubscribeFn => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: ItemsChangedPayload) => {
-      cb(payload)
-    }
-    ipcRenderer.on('items:changed', listener)
-    return () => {
-      ipcRenderer.removeListener('items:changed', listener)
-    }
-  },
+  onItemsChanged: (cb) => subscribe('items:changed', cb),
 
   /**
    * Subscribe to Discussion Summary events pushed from main (item 0018).
    * Fired exactly once after the final extraction pass completes (meeting end).
-   * Returns an unsubscribe function.
    */
-  onItemsSummaries: (cb: (payload: ItemsSummariesPayload) => void): UnsubscribeFn => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: ItemsSummariesPayload) => {
-      cb(payload)
-    }
-    ipcRenderer.on('items:summaries', listener)
-    return () => {
-      ipcRenderer.removeListener('items:summaries', listener)
-    }
-  },
+  onItemsSummaries: (cb) => subscribe('items:summaries', cb),
 
   // ---------------------------------------------------------------------------
   // Item note-taker actions (item 0018)
   // ---------------------------------------------------------------------------
 
-  itemConfirm: (req: ItemConfirmRequest) =>
-    ipcRenderer.invoke('item:confirm', req) as Promise<ItemConfirmResponse>,
-
-  itemEditAndConfirm: (req: ItemEditAndConfirmRequest) =>
-    ipcRenderer.invoke('item:editAndConfirm', req) as Promise<ItemEditAndConfirmResponse>,
-
-  itemDismiss: (req: ItemDismissRequest) =>
-    ipcRenderer.invoke('item:dismiss', req) as Promise<ItemDismissResponse>,
-
-  itemCreateConfirmed: (req: ItemCreateConfirmedRequest) =>
-    ipcRenderer.invoke('item:createConfirmed', req) as Promise<ItemCreateConfirmedResponse>,
+  itemConfirm: (req) => invoke('item:confirm', req),
+  itemEditAndConfirm: (req) => invoke('item:editAndConfirm', req),
+  itemDismiss: (req) => invoke('item:dismiss', req),
+  itemCreateConfirmed: (req) => invoke('item:createConfirmed', req),
 
   // ---------------------------------------------------------------------------
   // Nudges (item 0019)
   // ---------------------------------------------------------------------------
 
-  onNudgesChanged: (cb: (payload: NudgesChangedPayload) => void): UnsubscribeFn => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: NudgesChangedPayload) => {
-      cb(payload)
-    }
-    ipcRenderer.on('nudges:changed', listener)
-    return () => {
-      ipcRenderer.removeListener('nudges:changed', listener)
-    }
-  },
+  onNudgesChanged: (cb) => subscribe('nudges:changed', cb),
 
   // ---------------------------------------------------------------------------
   // Running summary (item 0020)
   // ---------------------------------------------------------------------------
 
-  onSummaryChanged: (cb: (payload: SummaryChangedPayload) => void): UnsubscribeFn => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: SummaryChangedPayload) => {
-      cb(payload)
-    }
-    ipcRenderer.on('summary:changed', listener)
-    return () => {
-      ipcRenderer.removeListener('summary:changed', listener)
-    }
-  },
+  onSummaryChanged: (cb) => subscribe('summary:changed', cb),
+  summaryQuery: (req) => invoke('summary:query', req),
 
-  summaryQuery: (req: SummaryQueryRequest) =>
-    ipcRenderer.invoke('summary:query', req) as Promise<SummaryQueryResponse>,
+  meetingEnd: (req) => invoke('meeting:end', req),
 
-  meetingEnd: (req: MeetingEndRequest) =>
-    ipcRenderer.invoke('meeting:end', req) as Promise<MeetingEndResponse>,
+  exportMarkdown: (req) => invoke('export:markdown', req),
+  exportCopyMarkdown: (req) => invoke('export:copyMarkdown', req),
 
-  exportMarkdown: (req: ExportMarkdownRequest) =>
-    ipcRenderer.invoke('export:markdown', req) as Promise<ExportMarkdownResponse>,
-  exportCopyMarkdown: (req: ExportCopyMarkdownRequest) =>
-    ipcRenderer.invoke('export:copyMarkdown', req) as Promise<ExportCopyMarkdownResponse>,
-
-  transcriptCopy: (req: TranscriptCopyRequest) =>
-    ipcRenderer.invoke('transcript:copy', req) as Promise<TranscriptCopyResponse>,
+  transcriptCopy: (req) => invoke('transcript:copy', req),
 
   // ---------------------------------------------------------------------------
   // Meeting history (item 0023)
   // ---------------------------------------------------------------------------
 
-  meetingList: (req: MeetingListRequest) =>
-    ipcRenderer.invoke('meeting:list', req) as Promise<MeetingListResponse>,
-  meetingLoad: (req: MeetingLoadRequest) =>
-    ipcRenderer.invoke('meeting:load', req) as Promise<MeetingLoadResponse>,
-  meetingDelete: (req: MeetingDeleteRequest) =>
-    ipcRenderer.invoke('meeting:delete', req) as Promise<MeetingDeleteResponse>,
+  meetingList: (req) => invoke('meeting:list', req),
+  meetingLoad: (req) => invoke('meeting:load', req),
+  meetingDelete: (req) => invoke('meeting:delete', req),
 
   // ---------------------------------------------------------------------------
   // Local model management (item 0024)
   // ---------------------------------------------------------------------------
 
-  modelStatus: (req: ModelStatusRequest) =>
-    ipcRenderer.invoke('model:status', req) as Promise<ModelStatusResponse>,
-  modelDownload: (req: ModelDownloadRequest) =>
-    ipcRenderer.invoke('model:download', req) as Promise<ModelDownloadResponse>,
+  modelStatus: (req) => invoke('model:status', req),
+  modelDownload: (req) => invoke('model:download', req),
 
-  onModelProgress: (cb: (evt: ModelProgressEvent) => void): UnsubscribeFn => {
-    const listener = (_event: Electron.IpcRendererEvent, evt: ModelProgressEvent) => {
-      cb(evt)
-    }
-    ipcRenderer.on('model:progress', listener)
-    return () => {
-      ipcRenderer.removeListener('model:progress', listener)
-    }
-  },
+  onModelProgress: (cb) => subscribe('model:progress', cb),
 
   // ---------------------------------------------------------------------------
   // Audio-file import (item 0026)
   // ---------------------------------------------------------------------------
 
-  importStart: (req: ImportStartRequest) =>
-    ipcRenderer.invoke('import:start', req) as Promise<ImportStartResponse>,
+  importStart: (req) => invoke('import:start', req),
 
   /** Fire-and-forget: send a decoded PCM frame for the active import. */
-  importSendFrame: (frame: Uint8Array) => {
+  importSendFrame: (frame) => {
     ipcRenderer.send('import:frame', frame)
   },
 
-  importFinish: (req: ImportFinishRequest) =>
-    ipcRenderer.invoke('import:finish', req) as Promise<ImportFinishResponse>,
+  importFinish: (req) => invoke('import:finish', req),
 
-  onImportProgress: (cb: (evt: ImportProgressEvent) => void): UnsubscribeFn => {
-    const listener = (_event: Electron.IpcRendererEvent, evt: ImportProgressEvent) => {
-      cb(evt)
-    }
-    ipcRenderer.on('import:progress', listener)
-    return () => {
-      ipcRenderer.removeListener('import:progress', listener)
-    }
-  },
+  onImportProgress: (cb) => subscribe('import:progress', cb),
 
   // ---------------------------------------------------------------------------
   // Paste an agenda (ADR 0029)
   // ---------------------------------------------------------------------------
 
-  inferContextFromText: (req: ContextInferFromTextRequest) =>
-    ipcRenderer.invoke('context:inferFromText', req) as Promise<ContextInferFromTextResponse>,
+  inferContextFromText: (req) => invoke('context:inferFromText', req),
 
   // ---------------------------------------------------------------------------
   // Live agenda grooming (ADR 0029)
   // ---------------------------------------------------------------------------
 
-  onAgendaChanged: (cb: (payload: AgendaChangedPayload) => void): UnsubscribeFn => {
-    const listener = (_event: Electron.IpcRendererEvent, payload: AgendaChangedPayload) => {
-      cb(payload)
-    }
-    ipcRenderer.on('agenda:changed', listener)
-    return () => {
-      ipcRenderer.removeListener('agenda:changed', listener)
-    }
-  },
+  onAgendaChanged: (cb) => subscribe('agenda:changed', cb),
 
-  agendaItemConfirm: (req: AgendaItemConfirmRequest) =>
-    ipcRenderer.invoke('agendaItem:confirm', req) as Promise<AgendaItemConfirmResponse>,
+  agendaItemConfirm: (req) => invoke('agendaItem:confirm', req),
+  agendaItemEditAndConfirm: (req) => invoke('agendaItem:editAndConfirm', req),
 
-  agendaItemEditAndConfirm: (req: AgendaItemEditAndConfirmRequest) =>
-    ipcRenderer.invoke(
-      'agendaItem:editAndConfirm',
-      req,
-    ) as Promise<AgendaItemEditAndConfirmResponse>,
-
-  meetingPause: (req: MeetingPauseRequest) =>
-    ipcRenderer.invoke('meeting:pause', req) as Promise<MeetingPauseResponse>,
-  meetingResume: (req: MeetingResumeRequest) =>
-    ipcRenderer.invoke('meeting:resume', req) as Promise<MeetingResumeResponse>,
+  meetingPause: (req) => invoke('meeting:pause', req),
+  meetingResume: (req) => invoke('meeting:resume', req),
 }
 
 contextBridge.exposeInMainWorld('api', api)

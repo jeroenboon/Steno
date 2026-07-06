@@ -811,6 +811,98 @@ export type IpcChannel =
 export type IpcOnewayChannel = 'audio:frame' | 'import:frame'
 
 // ---------------------------------------------------------------------------
+// Channel schema registry — the single map from channel → {request, response}
+// Zod schemas.
+//
+// This is the machine-readable form of the contract that the individual
+// *RequestSchema / *ResponseSchema exports above already declare by hand. The
+// preload's generic invoke() helper uses it to Zod-validate every response at
+// the renderer boundary (rule #7), replacing the old per-method `as Promise<…>`
+// casts. `satisfies Record<IpcChannel, …>` makes the compiler prove every
+// channel has exactly one entry, so the union and this map cannot drift.
+// ---------------------------------------------------------------------------
+
+export const ipcChannelSchemas = {
+  ping: { request: PingRequestSchema, response: PingResponseSchema },
+  'settings:get': { request: SettingsGetRequestSchema, response: SettingsGetResponseSchema },
+  'settings:set': { request: SettingsSetRequestSchema, response: SettingsSetResponseSchema },
+  'egress:state': { request: EgressStateGetRequestSchema, response: EgressStateGetResponseSchema },
+  'secret:set': { request: SecretSetRequestSchema, response: SecretSetResponseSchema },
+  'secret:has': { request: SecretHasRequestSchema, response: SecretHasResponseSchema },
+  'provider:testConnection': {
+    request: ProviderTestConnectionRequestSchema,
+    response: ProviderTestConnectionResponseSchema,
+  },
+  'meeting:create': { request: MeetingCreateRequestSchema, response: MeetingCreateResponseSchema },
+  'agendaItem:add': { request: AgendaItemAddRequestSchema, response: AgendaItemAddResponseSchema },
+  'agendaItem:remove': {
+    request: AgendaItemRemoveRequestSchema,
+    response: AgendaItemRemoveResponseSchema,
+  },
+  'participant:add': {
+    request: ParticipantAddRequestSchema,
+    response: ParticipantAddResponseSchema,
+  },
+  'participant:remove': {
+    request: ParticipantRemoveRequestSchema,
+    response: ParticipantRemoveResponseSchema,
+  },
+  'meeting:end': { request: MeetingEndRequestSchema, response: MeetingEndResponseSchema },
+  'audio:start': { request: AudioStartRequestSchema, response: AudioStartResponseSchema },
+  'audio:stop': { request: AudioStopRequestSchema, response: AudioStopResponseSchema },
+  'item:confirm': { request: ItemConfirmRequestSchema, response: ItemConfirmResponseSchema },
+  'item:editAndConfirm': {
+    request: ItemEditAndConfirmRequestSchema,
+    response: ItemEditAndConfirmResponseSchema,
+  },
+  'item:dismiss': { request: ItemDismissRequestSchema, response: ItemDismissResponseSchema },
+  'item:createConfirmed': {
+    request: ItemCreateConfirmedRequestSchema,
+    response: ItemCreateConfirmedResponseSchema,
+  },
+  'summary:query': { request: SummaryQueryRequestSchema, response: SummaryQueryResponseSchema },
+  'export:markdown': {
+    request: ExportMarkdownRequestSchema,
+    response: ExportMarkdownResponseSchema,
+  },
+  'export:copyMarkdown': {
+    request: ExportCopyMarkdownRequestSchema,
+    response: ExportCopyMarkdownResponseSchema,
+  },
+  'transcript:copy': {
+    request: TranscriptCopyRequestSchema,
+    response: TranscriptCopyResponseSchema,
+  },
+  'meeting:list': { request: MeetingListRequestSchema, response: MeetingListResponseSchema },
+  'meeting:load': { request: MeetingLoadRequestSchema, response: MeetingLoadResponseSchema },
+  'meeting:delete': { request: MeetingDeleteRequestSchema, response: MeetingDeleteResponseSchema },
+  'model:status': { request: ModelStatusRequestSchema, response: ModelStatusResponseSchema },
+  'model:download': { request: ModelDownloadRequestSchema, response: ModelDownloadResponseSchema },
+  'import:start': { request: ImportStartRequestSchema, response: ImportStartResponseSchema },
+  'import:finish': { request: ImportFinishRequestSchema, response: ImportFinishResponseSchema },
+  'context:inferFromText': {
+    request: ContextInferFromTextRequestSchema,
+    response: ContextInferFromTextResponseSchema,
+  },
+  'agendaItem:confirm': {
+    request: AgendaItemConfirmRequestSchema,
+    response: AgendaItemConfirmResponseSchema,
+  },
+  'agendaItem:editAndConfirm': {
+    request: AgendaItemEditAndConfirmRequestSchema,
+    response: AgendaItemEditAndConfirmResponseSchema,
+  },
+  'meeting:pause': { request: MeetingPauseRequestSchema, response: MeetingPauseResponseSchema },
+  'meeting:resume': { request: MeetingResumeRequestSchema, response: MeetingResumeResponseSchema },
+} satisfies Record<IpcChannel, { request: z.ZodType; response: z.ZodType }>
+
+/** Request payload type for a given invoke channel (derived from the registry). */
+export type IpcRequest<C extends IpcChannel> = z.infer<(typeof ipcChannelSchemas)[C]['request']>
+
+/** Response payload type for a given invoke channel (derived from the registry). */
+export type IpcResponse<C extends IpcChannel> = z.infer<(typeof ipcChannelSchemas)[C]['response']>
+
+// ---------------------------------------------------------------------------
 // Typed preload API surface exposed to the renderer via contextBridge
 // ---------------------------------------------------------------------------
 
