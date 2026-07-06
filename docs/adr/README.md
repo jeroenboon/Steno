@@ -39,5 +39,6 @@ So a missing number is expected, not a lost file. The directory currently runs t
 | [0036](0036-asr-terminal-state-surfaced-to-egress-indicator.md)                  | ASR terminal state surfaced end-to-end to the EgressIndicator                      |
 | [0037](0037-drop-framer-motion-for-css-only-live-animation.md)                   | Drop framer-motion for CSS-only Live-screen animation                              |
 | [0038](0038-ipc-registry-grouped-role-interfaces.md)                             | IPC registry dependencies as grouped role interfaces                               |
+| [0039](0039-shared-extraction-session-core.md)                                   | Shared `ExtractionSession` core composed by both session controllers               |
 
 When you add an ADR, add a row here (and take the next free number).

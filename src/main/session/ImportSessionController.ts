@@ -36,8 +36,8 @@ import type { discussionSummaryRepo } from '../db/repos/discussionSummaryRepo'
 import type { meetingRepo } from '../db/repos/meetingRepo'
 import type { participantRepo } from '../db/repos/participantRepo'
 import type { transcriptSpanRepo } from '../db/repos/transcriptSpanRepo'
+import { ExtractionSession } from '../services/extractionSession'
 import { persistInferredContext } from '../services/inferredContextPersistence'
-import { LiveExtractionRuntime } from '../services/liveExtractionRuntime'
 import { MeetingLifecycleService } from '../services/meetingLifecycleService'
 import { tryBuildAsrProvider, tryBuildExtractionProvider } from '../settings/providerFactory'
 import type { SecretStorage } from '../settings/SecretStorage'
@@ -292,9 +292,14 @@ export class ImportSessionController {
   }
 
   /**
-   * Run the final extraction pass via LiveExtractionRuntime so summaries and
-   * proposed items are produced and persisted exactly as for a live meeting.
-   * When no extraction provider is configured, the runtime degrades (no notes).
+   * Run the final extraction pass via the shared ExtractionSession core so
+   * summaries and proposed items are produced and persisted exactly as for a live
+   * meeting (audit A3). Import composes the core directly rather than building a
+   * whole live runtime — none of the live-only concerns (rolling cadence, agenda
+   * scheduler, running summary) apply here. No agendaItemRepo is wired, so the
+   * end-of-meeting agenda:changed push is skipped; Review reads the agenda via
+   * meeting:load instead. When no extraction provider is configured the meeting
+   * degrades to no notes (finish() still marks it Ended).
    */
   private async _runFinalPass(
     provider: ExtractionProvider | null,
@@ -309,28 +314,28 @@ export class ImportSessionController {
       primaryLanguage: meeting.primaryLanguage,
     }
 
-    const schedulerDeps =
-      provider !== null
-        ? {
-            provider,
-            discussionSummaryRepo: this._dsRepo,
-            spanRepo: this._spanRepo,
-            clock: this._clock,
-          }
-        : null
+    if (provider === null) {
+      console.warn(
+        '[ImportSessionController] No extraction provider configured. ' +
+          'The imported meeting will have no notes. ' +
+          'Configure an extraction API key in Settings to enable item extraction.',
+      )
+      return
+    }
 
-    const runtime = new LiveExtractionRuntime({
+    const core = new ExtractionSession({
       meetingId,
-      context,
-      schedulerDeps,
+      sender: this._sender,
+      provider,
+      clock: this._clock,
       decisionsRepo: this._decisionRepo,
       actionsRepo: this._actionRepo,
       spanRepo: this._spanRepo,
       dsRepo: this._dsRepo,
-      sender: this._sender,
+      getContext: () => context,
     })
 
-    await runtime.endMeeting(meeting)
+    await core.runFinalPass(meeting, context)
   }
 
   private _emitProgress(stage: ImportProgressStage, extra?: { error: string }): void {
