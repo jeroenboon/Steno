@@ -185,53 +185,9 @@ beforeEach(() => {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('LiveScreen — finalising the meeting', () => {
-  it('shows a generating-notes overlay while the final pass runs', async () => {
-    // meetingEnd resolves only after the whole final pass; hold it open so the
-    // overlay is observable (in production it clears when we navigate to Review).
-    let resolveEnd!: (v: { ok: true }) => void
-    mockApi.meetingEnd.mockReturnValueOnce(
-      new Promise<{ ok: true }>((res) => {
-        resolveEnd = res
-      }),
-    )
-
-    const user = userEvent.setup()
-    render(<LiveScreen />)
-
-    expect(screen.queryByTestId('live-ending-overlay')).not.toBeInTheDocument()
-    await user.click(await screen.findByTestId('end-meeting-btn'))
-
-    expect(await screen.findByTestId('live-ending-overlay')).toBeInTheDocument()
-    expect(screen.getByTestId('end-meeting-btn')).toBeDisabled()
-
-    // Let the pass finish so the promise settles cleanly.
-    await act(async () => {
-      resolveEnd({ ok: true })
-      await Promise.resolve()
-    })
-  })
-
-  it('clears a stale finalising overlay when a new live session begins', async () => {
-    // LiveScreen is mounted permanently, so the endingMeeting flag from a
-    // finished meeting must not leak into the next one. End a meeting (overlay
-    // shows), then resume/start another (liveMeetingId changes): the overlay
-    // must clear so the new session is not blocked.
-    mockApi.meetingEnd.mockResolvedValue({ ok: true })
-    const user = userEvent.setup()
-    render(<LiveScreen />)
-
-    await user.click(await screen.findByTestId('end-meeting-btn'))
-    expect(await screen.findByTestId('live-ending-overlay')).toBeInTheDocument()
-
-    await act(async () => {
-      useAppStore.setState({ activeMeeting: 'resumed-session', liveMeetingId: 'resumed-session' })
-      await Promise.resolve()
-    })
-
-    expect(screen.queryByTestId('live-ending-overlay')).not.toBeInTheDocument()
-  })
-})
+// Header behaviour (title, pause/resume, the finalising overlay + its
+// stale-overlay clearing) is covered in LiveHeader.test.tsx now that the header
+// is its own store-connected component (A1).
 
 describe('LiveScreen — guard: no active meeting', () => {
   it('shows empty state when activeMeeting is null', async () => {
@@ -525,20 +481,7 @@ describe('LiveScreen — item 0018 items UI', () => {
 // Pause / resume
 // ---------------------------------------------------------------------------
 
-describe('LiveScreen — pause/resume', () => {
-  it('pauses the meeting and toggles to a resume control', async () => {
-    const user = userEvent.setup()
-    render(<LiveScreen />)
-
-    await user.click(screen.getByRole('button', { name: /pauzeren/i }))
-    expect(mockApi.meetingPause).toHaveBeenCalledWith({ meetingId: 'active-session' })
-
-    // The control flips to resume.
-    const resumeBtn = await screen.findByRole('button', { name: /hervatten/i })
-    await user.click(resumeBtn)
-    expect(mockApi.meetingResume).toHaveBeenCalledWith({ meetingId: 'active-session' })
-  })
-})
+// Pause/resume controls are covered in LiveHeader.test.tsx (A1).
 
 // ---------------------------------------------------------------------------
 // Live agenda grooming (ADR 0029)

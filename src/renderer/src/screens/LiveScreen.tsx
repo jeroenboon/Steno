@@ -27,10 +27,11 @@
  * animation — see the ADR.
  */
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 
 import { OffAgenda } from '@shared/domain/types'
 
+import { LiveHeader } from '../components/LiveHeader'
 import { LiveSessionControls } from '../components/LiveSessionControls'
 import { MarginLeaders } from '../components/MarginLeaders'
 import { NudgePanel } from '../components/NudgePanel'
@@ -455,8 +456,6 @@ export function LiveScreen(): React.JSX.Element {
   const participants = useAppStore((s) => s.participants)
   const activeMeeting = useAppStore((s) => s.activeMeeting)
   const liveMeetingId = useAppStore((s) => s.liveMeetingId)
-  const setLiveMeetingId = useAppStore((s) => s.setLiveMeetingId)
-  const meetingTitle = useAppStore((s) => s.meetingTitle)
   const setRoute = useAppStore((s) => s.setRoute)
 
   const nudges = useAppStore((s) => s.nudges)
@@ -481,16 +480,6 @@ export function LiveScreen(): React.JSX.Element {
   const transcriptOpen = useAppStore((s) => s.transcriptOpen)
   const [editState, setEditState] = useState<EditState | null>(null)
   const [addingKind, setAddingKind] = useState<ItemKind | null>(null)
-  const [endingMeeting, setEndingMeeting] = useState(false)
-  const [paused, setPaused] = useState(false)
-
-  // LiveScreen is mounted permanently (only hidden via CSS), so endingMeeting
-  // must not leak from a finished meeting into the next one. Clear it whenever a
-  // new or resumed recording session begins — otherwise the finalising overlay
-  // from the previous meeting would block the incoming Live screen.
-  useEffect(() => {
-    if (liveMeetingId !== null) setEndingMeeting(false)
-  }, [liveMeetingId])
   // Inline edit state for a Proposed agenda item being groomed (ADR 0029).
   const [agendaEdit, setAgendaEdit] = useState<{ id: string; title: string } | null>(null)
 
@@ -594,45 +583,6 @@ export function LiveScreen(): React.JSX.Element {
     }
   }, [agendaEdit, agendaItems, setAgendaItems])
 
-  const handleTogglePause = useCallback(async () => {
-    if (activeMeeting === null) return
-    if (paused) {
-      const ok = await callApi('LiveScreen resume', () =>
-        window.api.meetingResume({ meetingId: activeMeeting }),
-      )
-      if (ok) {
-        setCapturePaused(false)
-        setPaused(false)
-      }
-    } else {
-      const ok = await callApi('LiveScreen pause', () =>
-        window.api.meetingPause({ meetingId: activeMeeting }),
-      )
-      if (ok) {
-        setCapturePaused(true)
-        setPaused(true)
-      }
-    }
-  }, [activeMeeting, paused, setCapturePaused])
-
-  const handleEndMeeting = useCallback(async () => {
-    if (activeMeeting === null || endingMeeting) return
-    setEndingMeeting(true)
-    const ok = await callApi('LiveScreen meetingEnd', () =>
-      window.api.meetingEnd({ meetingId: activeMeeting }),
-    )
-    if (ok) {
-      // The recording session is over: clear the live id so useLiveSession tears
-      // down audio capture. activeMeeting stays set so Review can read the meeting.
-      setLiveMeetingId(null)
-      // Navigation to 'review' happens when items:summaries arrives.
-      // If the runtime has no provider, items:summaries may not fire — navigate anyway.
-      setRoute('review')
-    } else {
-      setEndingMeeting(false)
-    }
-  }, [activeMeeting, endingMeeting, setLiveMeetingId, setRoute])
-
   const handleManualAdd = useCallback(
     async (kind: ItemKind, text: string) => {
       if (activeMeeting === null) return
@@ -721,62 +671,9 @@ export function LiveScreen(): React.JSX.Element {
       className={`screen screen--live screen--live-items${isRecording ? ' screen--live--recording' : ''}`}
     >
       {/* ------------------------------------------------------------------ */}
-      {/* Finalising overlay — the final pass runs synchronously inside      */}
-      {/* meetingEnd (inference + extraction + per-agenda summaries, several  */}
-      {/* seconds of provider calls). Make that wait explicit so ending the   */}
-      {/* meeting never looks frozen; it clears when we navigate to Review.   */}
+      {/* Header (title + pause/end + finalising overlay) */}
       {/* ------------------------------------------------------------------ */}
-      {endingMeeting && (
-        <div
-          className="live-ending-overlay"
-          data-testid="live-ending-overlay"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="live-ending-overlay__card">
-            <span className="live-ending-overlay__spinner" aria-hidden="true" />
-            <p className="live-ending-overlay__title">{t('live.ending.title')}</p>
-            <p className="live-ending-overlay__subtitle">{t('live.ending.subtitle')}</p>
-          </div>
-        </div>
-      )}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Header */}
-      {/* ------------------------------------------------------------------ */}
-      <header className="live-header">
-        <div className="live-header__heading">
-          {isRecording && <span className="live-rec-dot" aria-hidden="true" />}
-          <h1 className="screen__title live-header__title">
-            {meetingTitle.length > 0 ? meetingTitle : t('screen.live.title')}
-          </h1>
-        </div>
-        <div className="live-header__actions">
-          <button
-            type="button"
-            className="btn btn--ghost live-pause-btn"
-            data-testid="pause-meeting-btn"
-            disabled={endingMeeting}
-            onClick={() => {
-              void handleTogglePause()
-            }}
-          >
-            {paused ? t('live.resume.button') : t('live.pause.button')}
-          </button>
-          <button
-            type="button"
-            className="btn btn--secondary live-end-btn"
-            data-testid="end-meeting-btn"
-            disabled={endingMeeting}
-            aria-busy={endingMeeting}
-            onClick={() => {
-              void handleEndMeeting()
-            }}
-          >
-            {endingMeeting ? t('live.end.busy') : t('live.end.button')}
-          </button>
-        </div>
-      </header>
+      <LiveHeader setCapturePaused={setCapturePaused} />
 
       {/* ------------------------------------------------------------------ */}
       {/* Session controls (loopback toggle + mic status) */}
