@@ -64,4 +64,49 @@ describe('TestConnectionButton', () => {
       )
     })
   })
+
+  it('shows a local "server unreachable" hint including the endpoint', async () => {
+    providerTestConnection.mockResolvedValue({ ok: false, error: 'local-unreachable' })
+    render(
+      <TestConnectionButton
+        role="extraction"
+        testId="test-extraction"
+        endpoint="http://localhost:1234/v1"
+      />,
+    )
+
+    fireEvent.click(screen.getByTestId('test-extraction'))
+
+    await waitFor(() => {
+      const text = screen.getByTestId('test-extraction-result').textContent
+      expect(text).toContain('Kon de lokale server niet bereiken')
+      expect(text).toContain('http://localhost:1234/v1')
+    })
+  })
+
+  it('shows a local "model not loaded" hint on local-model-missing', async () => {
+    providerTestConnection.mockResolvedValue({ ok: false, error: 'local-model-missing' })
+    render(<TestConnectionButton role="extraction" testId="test-extraction" />)
+
+    fireEvent.click(screen.getByTestId('test-extraction'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('test-extraction-result').textContent).toContain(
+        'model werd niet gevonden',
+      )
+    })
+  })
+
+  it('shows a local "key required" hint on local-auth', async () => {
+    providerTestConnection.mockResolvedValue({ ok: false, error: 'local-auth' })
+    render(<TestConnectionButton role="extraction" testId="test-extraction" />)
+
+    fireEvent.click(screen.getByTestId('test-extraction'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('test-extraction-result').textContent).toContain(
+        'vraagt om een sleutel',
+      )
+    })
+  })
 })

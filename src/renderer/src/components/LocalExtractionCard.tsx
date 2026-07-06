@@ -172,7 +172,11 @@ export function LocalExtractionCard(props: LocalExtractionCardProps): React.JSX.
 
       <p className="settings-local-extraction__hint">{t('settings.local.hint')}</p>
 
-      <TestConnectionButton role="extraction" testId="test-extraction-connection" />
+      <TestConnectionButton
+        role="extraction"
+        testId="test-extraction-connection"
+        endpoint={fields.baseUrl}
+      />
     </div>
   )
 }

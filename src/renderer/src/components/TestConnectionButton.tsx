@@ -19,6 +19,13 @@ interface TestConnectionButtonProps {
   role: 'asr' | 'extraction'
   /** Base test id; the result line uses `${testId}-result`. */
   testId: string
+  /**
+   * The configured endpoint (local base URL), appended to the "server
+   * unreachable" hint so the user can check the address/port. Taken from the
+   * card's own form state — it never travels through the probe result, keeping
+   * the "no URL in the IPC result" privacy rule (ADR 0040 §5).
+   */
+  endpoint?: string
 }
 
 type Phase =
@@ -27,7 +34,10 @@ type Phase =
   | { phase: 'done'; result: ProviderTestConnectionResponse }
 
 /** Map a probe result to a human line + ok flag. Never echoes the key. */
-function describeResult(result: ProviderTestConnectionResponse): { text: string; ok: boolean } {
+function describeResult(
+  result: ProviderTestConnectionResponse,
+  endpoint?: string,
+): { text: string; ok: boolean } {
   if (result.ok) return { ok: true, text: t('settings.test.ok') }
   switch (result.error) {
     case 'no-key':
@@ -36,6 +46,14 @@ function describeResult(result: ProviderTestConnectionResponse): { text: string;
       return { ok: false, text: t('settings.test.network') }
     case 'unavailable':
       return { ok: false, text: t('settings.test.unavailable') }
+    case 'local-unreachable': {
+      const base = t('settings.test.local.unreachable')
+      return { ok: false, text: endpoint !== undefined ? `${base} (${endpoint})` : base }
+    }
+    case 'local-model-missing':
+      return { ok: false, text: t('settings.test.local.modelMissing') }
+    case 'local-auth':
+      return { ok: false, text: t('settings.test.local.auth') }
     default:
       // e.g. 'HTTP 401' — surface the status so the user can act on it.
       return { ok: false, text: `${t('settings.test.failed')} (${result.error})` }
@@ -55,7 +73,7 @@ export function TestConnectionButton(props: TestConnectionButtonProps): React.JS
     }
   }
 
-  const message = state.phase === 'done' ? describeResult(state.result) : null
+  const message = state.phase === 'done' ? describeResult(state.result, props.endpoint) : null
 
   return (
     <div className="settings-test-conn">
