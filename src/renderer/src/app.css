@@ -861,9 +861,53 @@ body::before {
   }
 }
 
+/* Accordion + crossfade animations (ADR 0037) — the CSS replacements for the
+   framer-motion height:0→auto and mode="wait" swaps on the Live screen.
+   interpolate-size lets height transition to/from the `auto` keyword. */
+:root {
+  interpolate-size: allow-keywords;
+}
+
+.live-edit-form,
+.live-add-form,
+.live-transcript__pane {
+  transition:
+    opacity var(--duration-normal) var(--ease-out),
+    height var(--duration-normal) var(--ease-out);
+}
+
+@starting-style {
+  .live-edit-form,
+  .live-add-form,
+  .live-transcript__pane {
+    opacity: 0;
+    height: 0;
+  }
+}
+
+/* Add bar: the buttons fade in when the inline add form closes again. */
+.live-add-bar__buttons {
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+@starting-style {
+  .live-add-bar__buttons {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .live-ending-overlay__spinner {
     animation-duration: 2.4s;
+  }
+
+  /* Honour the OS setting: no entrance/accordion motion, just presence. */
+  .live-item,
+  .live-edit-form,
+  .live-add-form,
+  .live-transcript__pane,
+  .live-add-bar__buttons {
+    transition: none;
   }
 }
 
@@ -1039,7 +1083,20 @@ body::before {
   outline: none;
   transition:
     box-shadow var(--duration-fast) var(--ease-out),
-    background-color var(--duration-fast) var(--ease-out);
+    background-color var(--duration-fast) var(--ease-out),
+    opacity var(--duration-normal) var(--ease-out),
+    transform var(--duration-normal) var(--ease-out);
+}
+
+/* Enter animation (ADR 0037): a new item fades + slides up on arrival. CSS
+   @starting-style replaces framer-motion's initial/animate. There is no exit
+   or reorder animation by design — in a live note-taker screen those read as
+   noise; an arriving item earning a glance is the only motion worth keeping. */
+@starting-style {
+  .live-item {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
 /* Proposed: pencil dashes, tentative */

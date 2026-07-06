@@ -21,12 +21,12 @@
  *   Delete → dismiss
  *   E      → open inline edit
  *
- * Framer Motion:
- *   - Items animate in (slide-up + fade) on arrival
- *   - Items animate out (fade + collapse) on retraction
+ * Animation (ADR 0037): entrance (slide-up + fade), the inline-form/transcript
+ * accordions, and the add-bar crossfade are pure CSS (@starting-style +
+ * interpolate-size, in app.css). There is deliberately no exit or reorder
+ * animation — see the ADR.
  */
 
-import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useState } from 'react'
 
 import { OffAgenda } from '@shared/domain/types'
@@ -113,12 +113,7 @@ function ItemCard({
   )
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -4, transition: { duration: 0.18 } }}
-      transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+    <div
       className={`live-item live-item--${kind} ${isProposed ? 'live-item--proposed' : 'live-item--confirmed'}`}
       data-testid={`item-${id}`}
       data-state={state}
@@ -197,7 +192,7 @@ function ItemCard({
           </button>
         </div>
       )}
-    </motion.div>
+    </div>
   )
 }
 
@@ -221,13 +216,7 @@ function EditForm({
   onCancel,
 }: EditFormProps): React.JSX.Element {
   return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: 0.2 }}
-      className="live-edit-form"
-    >
+    <div className="live-edit-form">
       <textarea
         className="live-edit-form__textarea"
         data-testid={`edit-textarea-${editState.id}`}
@@ -270,7 +259,7 @@ function EditForm({
           {t('live.items.cancel')}
         </button>
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -288,13 +277,7 @@ function AddForm({ kind, onSubmit, onCancel }: AddFormProps): React.JSX.Element 
   const [text, setText] = useState('')
 
   return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: 0.2 }}
-      className="live-add-form"
-    >
+    <div className="live-add-form">
       <input
         type="text"
         className="live-add-form__input"
@@ -333,7 +316,7 @@ function AddForm({ kind, onSubmit, onCancel }: AddFormProps): React.JSX.Element 
           {t('live.items.cancel')}
         </button>
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -396,69 +379,63 @@ function AgendaGroup({
       </header>
 
       <div className="live-group__items" role="list">
-        <AnimatePresence mode="popLayout">
-          {allDecisions.map((d) => (
-            <React.Fragment key={d.id}>
-              <ItemCard
-                id={d.id}
-                kind="decision"
-                text={d.rationale}
-                state={d.state}
-                sourceSpanId={d.sourceSpanId}
-                sourceSpanText={transcriptSpanMap.get(d.sourceSpanId)}
-                ownerName={undefined}
-                onConfirm={onConfirm}
-                onDismiss={onDismiss}
-                onEdit={onEdit}
+        {allDecisions.map((d) => (
+          <React.Fragment key={d.id}>
+            <ItemCard
+              id={d.id}
+              kind="decision"
+              text={d.rationale}
+              state={d.state}
+              sourceSpanId={d.sourceSpanId}
+              sourceSpanText={transcriptSpanMap.get(d.sourceSpanId)}
+              ownerName={undefined}
+              onConfirm={onConfirm}
+              onDismiss={onDismiss}
+              onEdit={onEdit}
+            />
+            {editState?.id === d.id && editState.kind === 'decision' && (
+              <EditForm
+                editState={editState}
+                participants={editParticipants}
+                onChange={onEditChange}
+                onSave={onEditSave}
+                onCancel={onEditCancel}
               />
-              <AnimatePresence>
-                {editState?.id === d.id && editState.kind === 'decision' && (
-                  <EditForm
-                    editState={editState}
-                    participants={editParticipants}
-                    onChange={onEditChange}
-                    onSave={onEditSave}
-                    onCancel={onEditCancel}
-                  />
-                )}
-              </AnimatePresence>
-            </React.Fragment>
-          ))}
+            )}
+          </React.Fragment>
+        ))}
 
-          {allActions.map((a) => (
-            <React.Fragment key={a.id}>
-              <ItemCard
-                id={a.id}
-                kind="action"
-                text={
-                  a.description !== undefined && a.description.length > 0
-                    ? a.description
-                    : t('live.items.action.untitled')
-                }
-                state={a.state}
-                sourceSpanId={a.sourceSpanId}
-                sourceSpanText={transcriptSpanMap.get(a.sourceSpanId)}
-                ownerName={
-                  a.owner !== undefined ? (participantMap.get(a.owner) ?? a.owner) : undefined
-                }
-                onConfirm={onConfirm}
-                onDismiss={onDismiss}
-                onEdit={onEdit}
+        {allActions.map((a) => (
+          <React.Fragment key={a.id}>
+            <ItemCard
+              id={a.id}
+              kind="action"
+              text={
+                a.description !== undefined && a.description.length > 0
+                  ? a.description
+                  : t('live.items.action.untitled')
+              }
+              state={a.state}
+              sourceSpanId={a.sourceSpanId}
+              sourceSpanText={transcriptSpanMap.get(a.sourceSpanId)}
+              ownerName={
+                a.owner !== undefined ? (participantMap.get(a.owner) ?? a.owner) : undefined
+              }
+              onConfirm={onConfirm}
+              onDismiss={onDismiss}
+              onEdit={onEdit}
+            />
+            {editState?.id === a.id && editState.kind === 'action' && (
+              <EditForm
+                editState={editState}
+                participants={editParticipants}
+                onChange={onEditChange}
+                onSave={onEditSave}
+                onCancel={onEditCancel}
               />
-              <AnimatePresence>
-                {editState?.id === a.id && editState.kind === 'action' && (
-                  <EditForm
-                    editState={editState}
-                    participants={editParticipants}
-                    onChange={onEditChange}
-                    onSave={onEditSave}
-                    onCancel={onEditCancel}
-                  />
-                )}
-              </AnimatePresence>
-            </React.Fragment>
-          ))}
-        </AnimatePresence>
+            )}
+          </React.Fragment>
+        ))}
       </div>
     </section>
   )
@@ -1045,47 +1022,39 @@ export function LiveScreen(): React.JSX.Element {
           {/* Manual add bar */}
           {/* ------------------------------------------------------------------ */}
           <section className="live-add-bar screen__body">
-            <AnimatePresence mode="wait">
-              {addingKind !== null ? (
-                <AddForm
-                  key={addingKind}
-                  kind={addingKind}
-                  onSubmit={(kind, text) => void handleManualAdd(kind, text)}
-                  onCancel={() => {
-                    setAddingKind(null)
+            {addingKind !== null ? (
+              <AddForm
+                key={addingKind}
+                kind={addingKind}
+                onSubmit={(kind, text) => void handleManualAdd(kind, text)}
+                onCancel={() => {
+                  setAddingKind(null)
+                }}
+              />
+            ) : (
+              <div className="live-add-bar__buttons">
+                <button
+                  type="button"
+                  className="btn btn--secondary live-add-bar__btn"
+                  data-testid="add-decision-btn"
+                  onClick={() => {
+                    setAddingKind('decision')
                   }}
-                />
-              ) : (
-                <motion.div
-                  key="add-buttons"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="live-add-bar__buttons"
                 >
-                  <button
-                    type="button"
-                    className="btn btn--secondary live-add-bar__btn"
-                    data-testid="add-decision-btn"
-                    onClick={() => {
-                      setAddingKind('decision')
-                    }}
-                  >
-                    + {t('live.items.add.decision')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--secondary live-add-bar__btn"
-                    data-testid="add-action-btn"
-                    onClick={() => {
-                      setAddingKind('action')
-                    }}
-                  >
-                    + {t('live.items.add.action')}
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  + {t('live.items.add.decision')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--secondary live-add-bar__btn"
+                  data-testid="add-action-btn"
+                  onClick={() => {
+                    setAddingKind('action')
+                  }}
+                >
+                  + {t('live.items.add.action')}
+                </button>
+              </div>
+            )}
           </section>
 
           {/* ------------------------------------------------------------------ */}
@@ -1111,62 +1080,53 @@ export function LiveScreen(): React.JSX.Element {
             {transcriptOpen ? t('live.transcript.toggle.hide') : t('live.transcript.toggle.show')}
           </button>
 
-          <AnimatePresence>
-            {transcriptOpen && (
-              <motion.div
-                key="transcript-pane"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className="live-transcript__pane"
-              >
-                <h2 className="transcript__heading">{t('live.transcript.heading')}</h2>
-                {transcriptSpans.length === 0 ? (
-                  <p className="transcript__empty" data-testid="transcript-empty">
-                    {t('live.transcript.empty')}
-                  </p>
-                ) : (
-                  <ul className="transcript__list" data-testid="transcript-list">
-                    {transcriptSpans.map((span) => {
-                      const isLowConfidence =
-                        span.confidence !== undefined && span.confidence < LOW_CONFIDENCE_THRESHOLD
-                      return (
-                        <li
-                          key={span.id}
-                          data-testid={`transcript-span-${span.id}`}
-                          data-span-id={span.id}
-                          data-low-confidence={isLowConfidence ? 'true' : undefined}
-                          className={[
-                            'transcript__span',
-                            span.isFinal === false ? 'transcript__span--interim' : '',
-                            isLowConfidence ? 'transcript__span--low-confidence' : '',
-                          ]
-                            .filter(Boolean)
-                            .join(' ')}
-                        >
-                          <span className="transcript__text">{span.text}</span>
-                          {span.isFinal === false && (
-                            <span className="transcript__interim-label">
-                              {t('live.transcript.interim')}
-                            </span>
-                          )}
-                          {isLowConfidence && (
-                            <span
-                              className="transcript__low-confidence-flag"
-                              title={t('live.items.low-confidence')}
-                            >
-                              ~
-                            </span>
-                          )}
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {transcriptOpen && (
+            <div className="live-transcript__pane">
+              <h2 className="transcript__heading">{t('live.transcript.heading')}</h2>
+              {transcriptSpans.length === 0 ? (
+                <p className="transcript__empty" data-testid="transcript-empty">
+                  {t('live.transcript.empty')}
+                </p>
+              ) : (
+                <ul className="transcript__list" data-testid="transcript-list">
+                  {transcriptSpans.map((span) => {
+                    const isLowConfidence =
+                      span.confidence !== undefined && span.confidence < LOW_CONFIDENCE_THRESHOLD
+                    return (
+                      <li
+                        key={span.id}
+                        data-testid={`transcript-span-${span.id}`}
+                        data-span-id={span.id}
+                        data-low-confidence={isLowConfidence ? 'true' : undefined}
+                        className={[
+                          'transcript__span',
+                          span.isFinal === false ? 'transcript__span--interim' : '',
+                          isLowConfidence ? 'transcript__span--low-confidence' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                      >
+                        <span className="transcript__text">{span.text}</span>
+                        {span.isFinal === false && (
+                          <span className="transcript__interim-label">
+                            {t('live.transcript.interim')}
+                          </span>
+                        )}
+                        {isLowConfidence && (
+                          <span
+                            className="transcript__low-confidence-flag"
+                            title={t('live.items.low-confidence')}
+                          >
+                            ~
+                          </span>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
         </section>
       </div>
     </main>
