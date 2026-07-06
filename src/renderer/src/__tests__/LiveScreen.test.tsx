@@ -86,15 +86,6 @@ const SPAN_1: TranscriptSpan = {
   confidence: 0.9,
 }
 
-const LOW_CONFIDENCE_SPAN: TranscriptSpan = {
-  id: 'span-low',
-  text: 'Iets onduidelijks',
-  startMs: 2000,
-  endMs: 4000,
-  isFinal: true,
-  confidence: 0.45,
-}
-
 const PROPOSED_DECISION: ItemsChangedPayload['decisions'][number] = {
   id: 'd-1',
   rationale: 'Release in Q4',
@@ -178,6 +169,7 @@ beforeEach(() => {
     liveMeetingId: 'active-session',
     micPermission: 'unknown',
     transcriptSpans: [],
+    transcriptOpen: true,
     captureMode: 'remote',
     loopbackState: null,
     proposedDecisions: [],
@@ -496,45 +488,9 @@ describe('LiveScreen — item 0018 items UI', () => {
   // Transcript pane collapsed by default
   // -------------------------------------------------------------------------
 
-  it('transcript pane is open by default (it is the live canvas)', async () => {
-    render(<LiveScreen />)
-
-    // A toggle button to collapse it is present...
-    expect(screen.getByTestId('transcript-toggle')).toBeInTheDocument()
-
-    // ...and a pushed span is visible without any interaction.
-    pushSpan(SPAN_1)
-    expect(await screen.findByTestId('transcript-list')).toBeInTheDocument()
-  })
-
-  it('clicking transcript toggle collapses the pane', async () => {
-    const user = userEvent.setup()
-    render(<LiveScreen />)
-
-    pushSpan(SPAN_1)
-    expect(await screen.findByTestId('transcript-list')).toBeInTheDocument()
-
-    const toggle = screen.getByTestId('transcript-toggle')
-    await user.click(toggle)
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('transcript-list')).not.toBeInTheDocument()
-    })
-  })
-
-  // -------------------------------------------------------------------------
-  // Low-confidence span flag
-  // -------------------------------------------------------------------------
-
-  it('low-confidence span gets a visual low-confidence flag', async () => {
-    render(<LiveScreen />)
-
-    // Transcript is open by default, so the span shows without toggling.
-    pushSpan(LOW_CONFIDENCE_SPAN)
-
-    const spanEl = await screen.findByTestId(`transcript-span-${LOW_CONFIDENCE_SPAN.id}`)
-    expect(spanEl).toHaveAttribute('data-low-confidence', 'true')
-  })
+  // Transcript-pane behaviour (open-by-default, collapse, interim/low-confidence
+  // flags) is covered in TranscriptPane.test.tsx now that the pane is its own
+  // store-connected component (A1).
 
   // -------------------------------------------------------------------------
   // Recording-gated bleed class (D4)

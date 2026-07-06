@@ -34,6 +34,7 @@ import { OffAgenda } from '@shared/domain/types'
 import { MarginLeaders } from '../components/MarginLeaders'
 import { NudgePanel } from '../components/NudgePanel'
 import { RunningSummaryPanel } from '../components/RunningSummaryPanel'
+import { TranscriptPane } from '../components/TranscriptPane'
 import { t } from '../i18n'
 import { callApi } from '../lib/callApi'
 import { useAppStore } from '../store/appStore'
@@ -53,12 +54,6 @@ interface EditState {
   text: string
   owner: string
 }
-
-// ---------------------------------------------------------------------------
-// Low-confidence threshold (soft flag, not a hard reject)
-// ---------------------------------------------------------------------------
-
-const LOW_CONFIDENCE_THRESHOLD = 0.6
 
 // ---------------------------------------------------------------------------
 // Item card component
@@ -483,7 +478,9 @@ export function LiveScreen(): React.JSX.Element {
 
   // --- Local UI state ---
   // Transcript is the live canvas: open by default, collapsible via the toggle.
-  const [transcriptOpen, setTranscriptOpen] = useState(true)
+  // Read-only here: TranscriptPane owns the toggle; the orchestrator only needs
+  // the value to redraw the margin leaders when the pane collapses.
+  const transcriptOpen = useAppStore((s) => s.transcriptOpen)
   const [editState, setEditState] = useState<EditState | null>(null)
   const [addingKind, setAddingKind] = useState<ItemKind | null>(null)
   const [endingMeeting, setEndingMeeting] = useState(false)
@@ -1066,68 +1063,7 @@ export function LiveScreen(): React.JSX.Element {
         {/* ------------------------------------------------------------------ */}
         {/* Transcript — the live canvas (left column, open by default) */}
         {/* ------------------------------------------------------------------ */}
-        <section className="live-layout__transcript live-transcript-section screen__body">
-          <button
-            type="button"
-            className="live-transcript__toggle"
-            data-testid="transcript-toggle"
-            aria-expanded={transcriptOpen}
-            onClick={() => {
-              setTranscriptOpen((o) => !o)
-            }}
-          >
-            <span className="live-transcript__toggle-icon">{transcriptOpen ? '▾' : '▸'}</span>
-            {transcriptOpen ? t('live.transcript.toggle.hide') : t('live.transcript.toggle.show')}
-          </button>
-
-          {transcriptOpen && (
-            <div className="live-transcript__pane">
-              <h2 className="transcript__heading">{t('live.transcript.heading')}</h2>
-              {transcriptSpans.length === 0 ? (
-                <p className="transcript__empty" data-testid="transcript-empty">
-                  {t('live.transcript.empty')}
-                </p>
-              ) : (
-                <ul className="transcript__list" data-testid="transcript-list">
-                  {transcriptSpans.map((span) => {
-                    const isLowConfidence =
-                      span.confidence !== undefined && span.confidence < LOW_CONFIDENCE_THRESHOLD
-                    return (
-                      <li
-                        key={span.id}
-                        data-testid={`transcript-span-${span.id}`}
-                        data-span-id={span.id}
-                        data-low-confidence={isLowConfidence ? 'true' : undefined}
-                        className={[
-                          'transcript__span',
-                          span.isFinal === false ? 'transcript__span--interim' : '',
-                          isLowConfidence ? 'transcript__span--low-confidence' : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                      >
-                        <span className="transcript__text">{span.text}</span>
-                        {span.isFinal === false && (
-                          <span className="transcript__interim-label">
-                            {t('live.transcript.interim')}
-                          </span>
-                        )}
-                        {isLowConfidence && (
-                          <span
-                            className="transcript__low-confidence-flag"
-                            title={t('live.items.low-confidence')}
-                          >
-                            ~
-                          </span>
-                        )}
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-          )}
-        </section>
+        <TranscriptPane />
       </div>
     </main>
   )
