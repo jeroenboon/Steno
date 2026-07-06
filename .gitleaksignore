@@ -1,0 +1,7 @@
+# Suppressed gitleaks findings, keyed by exact fingerprint (<commit>:<file>:<rule>:<line>).
+# These are dead, known leaks kept as history noise; history is not rewritten.
+#
+# Deepgram API key leaked in c2a8591 (deepgram.txt), revoked in the Deepgram
+# console 2026-07-05 (audit incident S1). File removed from the tree; the
+# historical commit is left in place per audit guidance.
+c2a85912c3bf9bc7805cb7e9f106f1410cfb738e:deepgram.txt:bare-40-hex-secret:1

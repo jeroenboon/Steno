@@ -1,0 +1,55 @@
+# gitleaks configuration for LiveTranscriber (Steno).
+#
+# Why this file exists (audit finding S1, residual hardening):
+# A Deepgram API key once landed as a bare 40-char lowercase-hex string in a
+# file named `deepgram.txt`. The built-in Deepgram rule keys on the word
+# `deepgram` appearing NEAR the secret in the file CONTENT, so a bare hex blob
+# whose only context is its FILENAME slips straight through — and GitHub push
+# protection has the same blind spot. The custom rule below closes that gap by
+# matching bare 40-hex secrets regardless of surrounding keywords.
+#
+# `useDefault = true` keeps every built-in gitleaks rule; this only ADDS to them.
+
+title = "LiveTranscriber gitleaks config"
+
+[extend]
+useDefault = true
+
+# Known historical leaks that are dead and deliberately NOT purged from history
+# (rewriting shared history is out of scope; the key is revoked) live in the
+# root `.gitleaksignore`, keyed by exact finding fingerprint. gitleaks 8.30
+# rejects a fingerprints-only `[allowlist]` here ("must contain at least one
+# check for: commits, paths, regexes, or stopwords"), and `.gitleaksignore` is
+# the purpose-built, fingerprint-precise suppression that keeps the bare-hex
+# rule firing on anything new.
+
+[[rules]]
+id = "bare-40-hex-secret"
+description = "Bare 40-char lowercase-hex secret with no in-content keyword (e.g. a Deepgram API key dropped into a text file)"
+# 40 lowercase hex chars on a word boundary. Deepgram keys and git SHAs share
+# this shape; the allowlist below carves out the legitimate SHA contexts.
+regex = '''\b[0-9a-f]{40}\b'''
+# Skip low-entropy look-alikes (all-zero placeholders, repeated fixtures). A
+# random hex key sits near the 4.0 ceiling; 3.5 keeps real keys, drops filler.
+entropy = 3.5
+
+  [rules.allowlist]
+  description = "Legitimate 40-hex that is not a secret: dependency lockfiles and SHA-pinned GitHub Actions / git refs."
+  # `line`: allowlist a finding when its whole source line matches — precise
+  # enough to spare `uses: owner/repo@<sha>` pins without blanket-excusing the
+  # workflow files (a real key hidden there would still be caught).
+  regexTarget = "line"
+  regexes = [
+    # SHA-pinned refs: `uses: actions/checkout@9c09...`, `@<40-hex>` git refs.
+    '''@[0-9a-f]{40}\b''',
+  ]
+  paths = [
+    '''(^|/)package-lock\.json$''',
+    '''(^|/)pnpm-lock\.yaml$''',
+    '''(^|/)yarn\.lock$''',
+    # gitleaks' own config: `.gitleaksignore` lists finding fingerprints (each
+    # embeds a 40-hex commit SHA) and `.gitleaks.toml` may reference commit SHAs
+    # in comments — neither is a place a live secret would legitimately live.
+    '''(^|/)\.gitleaksignore$''',
+    '''(^|/)\.gitleaks\.toml$''',
+  ]

@@ -389,9 +389,11 @@ export class LiveExtractionRuntime {
    */
   async endMeeting(meeting: Meeting): Promise<void> {
     if (this._endMeetingCalled) return
-    this._endMeetingCalled = true
 
-    if (this._scheduler === null) return
+    if (this._scheduler === null) {
+      this._endMeetingCalled = true
+      return
+    }
 
     // Stop the slow agenda scheduler before the final pass so it can't fire a
     // late inference turn concurrently with (or after) finalisation.
@@ -401,7 +403,21 @@ export class LiveExtractionRuntime {
     // the agenda, participants and title over the whole transcript before the
     // final pass, so the notes still get a structured, agenda-grouped result
     // (ADR 0029). Import meetings infer themselves, so this is live-only.
-    await this._inferContextOnEnd(meeting)
+    //
+    // Best-effort: inference is a network call, and a transient failure (429,
+    // timeout, expired key) must NOT strand the meeting at finalisation. Degrade
+    // to no inferred context — the final pass below still runs (it degrades on
+    // its own provider errors too) and the caller still transitions Live → Ended.
+    try {
+      await this._inferContextOnEnd(meeting)
+    } catch (err) {
+      // Never log transcript content; only a non-sensitive metadata note.
+      console.error(
+        '[LiveExtractionRuntime] context inference failed at meeting end, ' +
+          'continuing with the final pass without inferred context:',
+        err instanceof Error ? err.message : 'unknown error',
+      )
+    }
 
     // The scheduler's runFinalPass persists Discussion Summaries to dsRepo
     // and calls proposeItems (which triggers items:changed via the interceptor
@@ -425,6 +441,14 @@ export class LiveExtractionRuntime {
 
     // Re-derive nudges after the final pass (items may have changed).
     this._emitNudges()
+
+    // Latch ONLY on success. Setting this eagerly at entry meant a rejection
+    // before the final pass (e.g. inferContext throwing) marked endMeeting "done"
+    // while the final pass never ran, so a retry short-circuited and the meeting
+    // ended with no notes (audit C2). Latching here — after the final pass — makes
+    // a retry re-run it instead. The scheduler's own `_finalPassDone` guard still
+    // prevents a genuine double pass, so the two guards compose safely.
+    this._endMeetingCalled = true
   }
 
   /**

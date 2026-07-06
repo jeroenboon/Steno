@@ -48,3 +48,12 @@ This ADR shares only the **transport plumbing**, which is identical across all t
 - Behaviour is unchanged: every existing provider test (Deepgram, OpenAI Realtime, Azure realtime, Voxtral) passes with only a type-only widening of the test fakes' `onmessage` event `data` from `string` to `unknown` (the honest shape — `ws` delivers Buffers, and the shared decoder already normalised it).
 - `RealtimeSpanStream` has its own test suite driving it through a fake wire + fake socket: span emission, the `reset`/`onOpen` seam, frame encoding + send-only-while-open, multi-span messages, malformed-JSON skip, reconnect-with-backoff, backoff cap, no-reconnect-after-stop, iterator completion, and content never logged (principle #12).
 - Privacy (principle #12) is preserved: auth material lives inside the wire's `connect()` and is never seen by the stream; only non-sensitive lifecycle metadata is logged, prefixed with the wire's `name`.
+
+## Update (2026-07-05) — bounded reconnect + terminal states (audit finding C4)
+
+The original reconnect loop was unbounded and blind to permanent failures: a key revoked mid-meeting (or wrong from the start) reconnect-looped forever while the transcript silently stopped, with no signal to the user. The stream now terminates in two cases:
+
+- **Permanent auth failure.** An auth close code (WebSocket policy-violation `1008`, plus Deepgram's private-range `4001` / `4008`) or a handshake error carrying HTTP `401` / `403` (`ws` surfaces `"Unexpected server response: 401"`) stops retrying immediately — reconnecting into a bad key can never succeed.
+- **Consecutive-failure ceiling.** After `maxConsecutiveFailures` (default 8) closes with no successful open in between, the stream gives up. A successful open resets the tally, so a healthy-but-flaky link never drifts toward it.
+
+On termination the stream stops reconnecting, completes the `spans()` iterator (so consumers don't hang), and fires an injected `onTerminal(state)` callback once with `{ reason: 'auth' | 'max-retries' }`. The callback is the contained seam an ASR provider / the runtime can observe. **Surfacing it to the renderer (the EgressIndicator rail) is deferred**: that needs a runtime-status channel distinct from the settings-derived `EgressState` — a wider IPC/egress change than this finding. Auth-close-code classification lives in the stream (not per-wire) because all three realtime wires cast a raw `ws` socket and share the same signals; if a vendor ever needs bespoke classification, promote it to an optional wire seam method.

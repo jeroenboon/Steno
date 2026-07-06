@@ -225,10 +225,22 @@ export class ImportSessionController {
     const extractionResult = this._buildExtraction(this._settingsStore.current, this._secretStorage)
     const extractionProvider = extractionResult.ok ? extractionResult.provider : null
 
-    // Optionally infer the agenda + participants from the transcript.
+    // Optionally infer the agenda + participants from the transcript. Best-effort:
+    // a transient provider failure (429, timeout, expired key) must NOT strand the
+    // import at finalisation. Degrade to no inferred context — the final pass below
+    // still runs and the meeting still transitions to Ended (audit C2). Mirrors the
+    // guard in LiveExtractionRuntime.endMeeting.
     if (opts?.inferContext === true && extractionProvider?.inferContext !== undefined) {
       this._emitProgress('inferring')
-      await this._inferAndPersistContext(extractionProvider, meetingId)
+      try {
+        await this._inferAndPersistContext(extractionProvider, meetingId)
+      } catch (err) {
+        console.error(
+          '[ImportSessionController] context inference failed, ' +
+            'continuing with the final pass without inferred context:',
+          err instanceof Error ? err.message : 'unknown error',
+        )
+      }
     }
 
     // Run the same final pass as a live meeting (reads ALL persisted spans).
