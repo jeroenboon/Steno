@@ -21,6 +21,7 @@ import { RealClock } from '@shared/providers'
 // file into the build output and hand back a path that resolves in dev and prod.
 import appIconPath from '../../resources/icon.png?asset'
 
+import { createPcmFrameHandler } from './audio/pcmFrameHandler'
 import { buildContentSecurityPolicy } from './csp'
 import { runMigrations } from './db/migrate'
 import { actionRepo } from './db/repos/actionRepo'
@@ -390,14 +391,29 @@ async function registerIpcHandlers(mainWindow: BrowserWindow): Promise<void> {
   })
 
   // One-way channel: renderer sends PCM frames; no invoke/response.
-  // Forwards to whichever bridge is currently active.
-  ipcMain.on('audio:frame', (_event, frame: Uint8Array) => {
-    liveSession.pushAudioFrame(frame)
+  // Forwards to whichever bridge is currently active. The payload is untrusted
+  // binary (annotation is a compile-time claim only), so it is validated at the
+  // boundary — an invalid/over-cap frame is dropped + devlogged, never thrown
+  // (audit S3, ADR 0013).
+  const handleAudioFrame = createPcmFrameHandler({
+    sink: (frame) => {
+      liveSession.pushAudioFrame(frame)
+    },
+    channel: 'audio:frame',
+  })
+  ipcMain.on('audio:frame', (_event, frame: unknown) => {
+    handleAudioFrame(frame)
   })
 
   // One-way channel: renderer streams decoded file PCM during an import.
-  ipcMain.on('import:frame', (_event, frame: Uint8Array) => {
-    importSession.pushFrame(frame)
+  const handleImportFrame = createPcmFrameHandler({
+    sink: (frame) => {
+      importSession.pushFrame(frame)
+    },
+    channel: 'import:frame',
+  })
+  ipcMain.on('import:frame', (_event, frame: unknown) => {
+    handleImportFrame(frame)
   })
 
   const registry = createIpcRegistry({
