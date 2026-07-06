@@ -6,37 +6,37 @@
  *   invoke:    (req) => ipcRenderer.invoke('channel', req) as Promise<Resp>
  *   subscribe: on('channel', l); return () => removeListener('channel', l)
  *
- * The `as Promise<Resp>` was a cast, not a validation — a wrong response from
- * main flowed to the renderer as a typed lie (audit C8). `invoke()` here looks
- * the channel's response schema up in the single-source-of-truth registry
- * (`ipcChannelSchemas` in @shared/ipc) and Zod-parses the response before
- * returning, so a malformed response throws at the boundary (rule #7). The
- * return type is inferred per-channel from the registry, so every window.api
- * method keeps its exact TypeScript type with zero casts at the call site.
+ * `invoke()` collapses that repetition into one generic helper whose return
+ * type is inferred per-channel from the IPC contract, so every window.api method
+ * keeps its exact TypeScript type with zero casts at the call site (audit A5).
  *
- * The request is forwarded as-is (main re-validates it in the ipc-registry, and
- * parsing here would apply schema defaults and change the wire payload). Push
- * channels are validated renderer-side by `onValidated` (src/renderer/.../
- * onValidated.ts); `subscribe()` only owns the listener/unsubscribe plumbing.
+ * IMPORTANT — no runtime Zod here. This preload runs SANDBOXED (sandbox: true,
+ * the ADR 0005 security baseline). A sandboxed preload cannot require Node
+ * modules, so importing `zod` (or anything that pulls the schema graph, e.g.
+ * `ipcChannelSchemas`) makes the whole preload fail to load with "module not
+ * found: zod" — `contextBridge.exposeInMainWorld` never runs, window.api is
+ * undefined, and the renderer blanks. So `invoke()` forwards the response typed
+ * but UNVALIDATED. Response validation, if wanted, belongs on the renderer side
+ * (like push payloads via onValidated), never in the sandboxed preload. Main is
+ * trusted code, so this is only the "rule-consistency" gap the audit (C8) noted,
+ * not a security one. Only type-only imports from @shared/ipc are allowed here
+ * (they are erased at build time and pull no runtime dependency).
  */
 
 import { ipcRenderer } from 'electron'
 
-import { ipcChannelSchemas } from '@shared/ipc'
 import type { IpcChannel, IpcRequest, IpcResponse, UnsubscribeFn } from '@shared/ipc'
 
 /**
- * Invoke a request/response IPC channel and Zod-validate the response.
- *
- * @throws if main returns a payload that violates the channel's response schema.
+ * Invoke a request/response IPC channel. The response is typed per-channel but
+ * forwarded as-is (see the file header: no runtime validation in the sandboxed
+ * preload).
  */
 export async function invoke<C extends IpcChannel>(
   channel: C,
   req: IpcRequest<C>,
 ): Promise<IpcResponse<C>> {
-  const raw: unknown = await ipcRenderer.invoke(channel, req)
-  const { response } = ipcChannelSchemas[channel]
-  return response.parse(raw) as IpcResponse<C>
+  return (await ipcRenderer.invoke(channel, req)) as IpcResponse<C>
 }
 
 /**
