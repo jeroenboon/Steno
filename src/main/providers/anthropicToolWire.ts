@@ -19,7 +19,11 @@
 
 import type Anthropic from '@anthropic-ai/sdk'
 
-import { ExtractionTruncatedError, type ExtractionCall, type ExtractionWire } from './extractionEngine'
+import {
+  ExtractionTruncatedError,
+  type ExtractionCall,
+  type ExtractionWire,
+} from './extractionEngine'
 
 // ---------------------------------------------------------------------------
 // Tool definitions

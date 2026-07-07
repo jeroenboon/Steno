@@ -27,9 +27,11 @@ function response(body: unknown): Response {
 
 describe('OpenAiJsonWire truncation detection', () => {
   it('throws ExtractionTruncatedError on finish_reason "length"', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      response({ choices: [{ finish_reason: 'length', message: { content: '' } }] }),
-    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        response({ choices: [{ finish_reason: 'length', message: { content: '' } }] }),
+      )
     const wire = makeWire(fetchMock)
 
     await expect(

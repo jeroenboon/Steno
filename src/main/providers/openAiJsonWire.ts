@@ -21,7 +21,11 @@
  * logged. Logs carry the non-sensitive `logTag` (e.g. `[OpenAI]`, `[Azure]`).
  */
 
-import { ExtractionTruncatedError, type ExtractionCall, type ExtractionWire } from './extractionEngine'
+import {
+  ExtractionTruncatedError,
+  type ExtractionCall,
+  type ExtractionWire,
+} from './extractionEngine'
 
 // ---------------------------------------------------------------------------
 // Target + options

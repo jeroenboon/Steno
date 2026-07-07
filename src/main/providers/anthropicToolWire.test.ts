@@ -35,7 +35,9 @@ describe('AnthropicToolWire truncation detection', () => {
   it('does not throw on stop_reason "tool_use"', async () => {
     const create = vi.fn().mockResolvedValue({
       stop_reason: 'tool_use',
-      content: [{ type: 'tool_use', name: 'extract_meeting_notes', input: { proposedActions: [] } }],
+      content: [
+        { type: 'tool_use', name: 'extract_meeting_notes', input: { proposedActions: [] } },
+      ],
     })
     const wire = makeWire(create)
 
