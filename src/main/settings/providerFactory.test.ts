@@ -348,4 +348,51 @@ describe('providerFactory local extraction (optional key)', () => {
     if (!result.ok) return
     expect(result.provider.constructor.name).toBe('OpenAICompatibleExtractionProvider')
   })
+
+  it('requests response_format text (newer LM Studio 400s on json_object)', async () => {
+    // The failure Jeroen hit: LM Studio replies HTTP 400
+    // "'response_format.type' must be 'json_schema' or 'text'". The local factory
+    // path must send `text`, not the cloud default `json_object` (ADR 0040).
+    // Spy BEFORE building: the provider binds globalThis.fetch at construction.
+    const bodies: string[] = []
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => {
+      if (init && typeof init.body === 'string') bodies.push(init.body)
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({ proposedDecisions: [], proposedActions: [] }),
+                },
+              },
+            ],
+          }),
+      } as unknown as Response)
+    })
+
+    const result = tryBuildExtractionProvider(LOCAL_EXTRACTION, new MemorySecretStorage())
+    expect(result.ok).toBe(true)
+    if (!result.ok) {
+      fetchSpy.mockRestore()
+      return
+    }
+
+    try {
+      await result.provider.extract({
+        spans: [{ id: 's1', text: 'test', startMs: 0, endMs: 1000 }],
+        agendaItems: [],
+        participants: [],
+        primaryLanguage: 'nl',
+        isFinalPass: false,
+      })
+    } finally {
+      fetchSpy.mockRestore()
+    }
+
+    const body = JSON.parse(bodies[0] ?? '{}') as Record<string, unknown>
+    expect(body.response_format).toEqual({ type: 'text' })
+  })
 })

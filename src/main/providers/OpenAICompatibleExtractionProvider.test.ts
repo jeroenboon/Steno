@@ -77,6 +77,7 @@ function makeProvider(
     baseUrl: string
     model: string
     sendCacheKey: boolean
+    responseFormat: 'json_object' | 'text'
   }> = {},
 ) {
   // apiKey is omitted entirely when overridden to undefined (keyless local
@@ -89,6 +90,7 @@ function makeProvider(
     fetch: fetchImpl,
     ...(apiKey === undefined ? {} : { apiKey }),
     ...(overrides.sendCacheKey === undefined ? {} : { sendCacheKey: overrides.sendCacheKey }),
+    ...(overrides.responseFormat === undefined ? {} : { responseFormat: overrides.responseFormat }),
   }
   return new OpenAICompatibleExtractionProvider(opts)
 }
@@ -281,6 +283,29 @@ describe('OpenAICompatibleExtractionProvider.extract', () => {
     expect('prompt_cache_key' in body).toBe(false)
     // The rest of the body is unchanged: json_object mode still requested.
     expect(body.response_format).toEqual({ type: 'json_object' })
+  })
+
+  it('requests json_object response_format by default (cloud endpoints)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(validExtraction)))
+    const provider = makeProvider(fetchMock)
+
+    await provider.extract(extractionRequest)
+
+    expect(requestBody(fetchMock).response_format).toEqual({ type: 'json_object' })
+  })
+
+  it('requests text response_format when responseFormat is text (local runtimes)', async () => {
+    // Newer LM Studio rejects response_format.type "json_object" with HTTP 400
+    // ("must be 'json_schema' or 'text'"). Local runtimes send `text` and lean on
+    // the tolerant parseJsonLoose instead. See ADR 0040.
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(validExtraction)))
+    const provider = makeProvider(fetchMock, { responseFormat: 'text' })
+
+    const result = await provider.extract(extractionRequest)
+
+    expect(requestBody(fetchMock).response_format).toEqual({ type: 'text' })
+    // The response is still parsed into proposals via parseJsonLoose.
+    expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
   })
 
   it('omits the Authorization header when no apiKey is given (keyless local server)', async () => {

@@ -2,10 +2,12 @@
  * OpenAI-compatible transport wire for the ExtractionEngine (ADR 0034).
  *
  * OpenAI, Mistral, Azure OpenAI and any BYO OpenAI-compatible endpoint all speak
- * the same `chat/completions` wire with JSON mode
- * (`response_format: { type: "json_object" }`). They differ only in the request
- * URL and the auth header (OpenAI/Mistral use `Authorization: Bearer`, Azure uses
- * `api-key`). That difference is captured by the injected `ChatCompletionsTarget`.
+ * the same `chat/completions` wire. Cloud vendors use JSON mode
+ * (`response_format: { type: "json_object" }`); local runtimes send
+ * `{ type: "text" }` because newer LM Studio 400s on `json_object` (see the
+ * `responseFormat` option). They otherwise differ only in the request URL and the
+ * auth header (OpenAI/Mistral use `Authorization: Bearer`, Azure uses `api-key`).
+ * Those differences are captured by the injected `ChatCompletionsTarget`.
  *
  * This wire owns everything transport-specific: building the chat-completions
  * body, the stable `prompt_cache_key`, the POST, pulling the message content out
@@ -52,6 +54,16 @@ export interface OpenAiJsonWireOptions {
    * pass false. See ADR 0040.
    */
   sendCacheKey?: boolean
+  /**
+   * The `response_format.type` to request. Defaults to `'json_object'` (OpenAI /
+   * Azure / Mistral). Newer LM Studio dropped `json_object` and 400s on it
+   * ("'response_format.type' must be 'json_schema' or 'text'"), so local factory
+   * paths pass `'text'` and lean on the tolerant `parseJsonLoose`. `text` is the
+   * universal default, accepted by every OpenAI-compatible server. `json_schema`
+   * is deliberately not used: with reasoning models LM Studio routes the answer
+   * into `reasoning_content` and leaves `content` empty. See ADR 0040.
+   */
+  responseFormat?: 'json_object' | 'text'
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +85,7 @@ export class OpenAiJsonWire implements ExtractionWire {
   private readonly _target: ChatCompletionsTarget
   private readonly _fetch: typeof globalThis.fetch
   private readonly _sendCacheKey: boolean
+  private readonly _responseFormat: 'json_object' | 'text'
 
   constructor(opts: OpenAiJsonWireOptions) {
     this._model = opts.model
@@ -80,6 +93,7 @@ export class OpenAiJsonWire implements ExtractionWire {
     this._target = opts.target
     this._fetch = opts.fetch
     this._sendCacheKey = opts.sendCacheKey ?? true
+    this._responseFormat = opts.responseFormat ?? 'json_object'
   }
 
   /**
@@ -101,7 +115,7 @@ export class OpenAiJsonWire implements ExtractionWire {
   private async _post(systemPrompt: string, userMessage: string): Promise<string | null> {
     const body = JSON.stringify({
       model: this._model,
-      response_format: { type: 'json_object' },
+      response_format: { type: this._responseFormat },
       // Route identical prefixes to the same cache. The rolling cadence sends a
       // byte-identical system prompt (agenda + participants + instructions) every
       // 15-30s, so a stable key derived from it maximises OpenAI/Azure prompt-cache

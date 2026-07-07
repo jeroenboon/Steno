@@ -382,8 +382,11 @@ function buildExtractionProvider(
     case 'local': {
       // Local OpenAI-compatible server (LM Studio / Ollama / llama.cpp). The key
       // is OPTIONAL: a keyless server gets no Authorization header, and a missing
-      // secret must never disable extraction. `prompt_cache_key` is dropped for
-      // local (ADR 0040). Reuses the OpenAI-compatible adapter unchanged.
+      // secret must never disable extraction. `prompt_cache_key` is dropped and
+      // `response_format` is `text` for local: newer LM Studio 400s on
+      // `json_object` ("must be 'json_schema' or 'text'"), and `text` +
+      // parseJsonLoose works across LM Studio / Ollama / llama.cpp (ADR 0040).
+      // Reuses the OpenAI-compatible adapter unchanged.
       const { baseUrl, model, keyRef, displayName } = settings.local
       const apiKey = storage.getSecret(keyRef)
       return new OpenAICompatibleExtractionProvider({
@@ -391,6 +394,7 @@ function buildExtractionProvider(
         model,
         displayName,
         sendCacheKey: false,
+        responseFormat: 'text',
         ...(apiKey === null ? {} : { apiKey }),
       })
     }

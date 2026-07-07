@@ -59,6 +59,12 @@ export interface OpenAICompatibleExtractionProviderOptions {
    * factory paths pass false — see ADR 0040 and OpenAiJsonWire.
    */
   sendCacheKey?: boolean
+  /**
+   * The `response_format.type` to request. Defaults to `'json_object'` (cloud).
+   * Local factory paths pass `'text'` because newer LM Studio 400s on
+   * `json_object` — see ADR 0040 and OpenAiJsonWire.
+   */
+  responseFormat?: 'json_object' | 'text'
 }
 
 // ---------------------------------------------------------------------------
@@ -86,6 +92,7 @@ export class OpenAICompatibleExtractionProvider implements ExtractionProvider {
       },
       fetch: opts.fetch ?? globalThis.fetch,
       ...(opts.sendCacheKey === undefined ? {} : { sendCacheKey: opts.sendCacheKey }),
+      ...(opts.responseFormat === undefined ? {} : { responseFormat: opts.responseFormat }),
     })
 
     this._engine = new ExtractionEngine({ wire, logTag, model: opts.model })

@@ -23,9 +23,14 @@ The branch carries `{ preset, baseUrl, model, keyRef, displayName }` with `prese
 
 LM Studio and Ollama need no key; llama.cpp's `--api-key` and reverse-proxied setups do. Rather than widen `resolveExtractionKeyRef` to `string | null` (which ripples into `getSharedKeyRef`, `SharedKeyNotice`, and the key-presence probe), the local config keeps a required non-empty `keyRef` (default: the preset id) and makes the stored **secret** optional. The factory looks up the key and omits the `Authorization` header when none is stored; `connectionTest` probes `/models` unauthenticated for local instead of returning `no-key`. The optional-key behaviour is thus confined to the factory and the connection test.
 
-### 4. Reuse the wire; drop `prompt_cache_key` locally; quality is a disclosure concern
+### 4. Reuse the wire; local sends `response_format: text` and drops `prompt_cache_key`; quality is a disclosure concern
 
-The local path reuses `OpenAiJsonWire` (json_object mode + `parseJsonLoose` + the engine's retry-degrade already recover sloppy small-model JSON). It omits the non-standard `prompt_cache_key` field: it is a cloud billing optimisation, useless locally (local runtimes do prefix caching automatically), and a strict local server could `400` on the unknown field and silently null out extraction. Small-model quality is handled as **expectations, not code**: a point-of-choice "lokaal = doorgaans lagere extractiekwaliteit" disclosure mirroring the existing cloud disclosure pattern, plus setup docs.
+The local path reuses `OpenAiJsonWire` (`parseJsonLoose` + the engine's retry-degrade already recover sloppy small-model JSON). Two body fields differ from cloud, both confined to the factory's `local` branch:
+
+- **`response_format: { type: 'text' }`, not `'json_object'`.** Newer LM Studio (new engine) dropped `json_object` and returns `HTTP 400 "'response_format.type' must be 'json_schema' or 'text'"`, which failed every rolling turn (validation-fail → retry → same 400 → turn skipped). `text` is the universal OpenAI-compatible default (LM Studio old + new, Ollama, llama.cpp) and `parseJsonLoose` recovers the object from the prompt-instructed JSON output. `json_schema` was rejected as the local default because with reasoning models (e.g. Qwen3) LM Studio routes the answer into `reasoning_content` and leaves `content` empty, so the engine sees nothing.
+- **No `prompt_cache_key`.** A cloud billing optimisation, useless locally (local runtimes do prefix caching automatically), and a strict local server could `400` on the unknown field and silently null out extraction.
+
+Small-model quality is handled as **expectations, not code**: a point-of-choice "lokaal = doorgaans lagere extractiekwaliteit" disclosure mirroring the existing cloud disclosure pattern, plus setup docs.
 
 ### 5. Failure hints live in "Test verbinding" (config-time), not a new runtime channel
 
