@@ -18,9 +18,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock Anthropic SDK so tests run without a browser/Electron environment.
 vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    messages: { create: vi.fn() },
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      messages: { create: vi.fn() },
+    }
+  }),
 }))
 
 // Mock electron so providerFactory can import app.getPath without Electron runtime.
