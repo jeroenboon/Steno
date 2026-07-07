@@ -40,6 +40,26 @@ import {
 import { devlog } from '../devlog'
 
 // ---------------------------------------------------------------------------
+// Terminal signal
+// ---------------------------------------------------------------------------
+
+/**
+ * Thrown by a wire when the model's response was TRUNCATED
+ * (OpenAI-compatible `finish_reason: "length"` / Anthropic
+ * `stop_reason: "max_tokens"`). Distinct from the wire's ordinary `null` return
+ * (a parse/transport miss that the engine retries): a truncation never improves
+ * on a retry, so the engine catches this, fires the Extraction Terminal State,
+ * and skips the retry. Carries no content — the message is a fixed, non-sensitive
+ * marker. See ADR 0042.
+ */
+export class ExtractionTruncatedError extends Error {
+  constructor() {
+    super('extraction output truncated (finish_reason/stop_reason)')
+    this.name = 'ExtractionTruncatedError'
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Wire seam
 // ---------------------------------------------------------------------------
 
