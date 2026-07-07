@@ -40,6 +40,7 @@ const mockApi = {
   onTranscriptSpan: vi.fn(() => () => undefined),
   onItemsChanged: vi.fn(() => () => undefined),
   onAsrTerminal: vi.fn(() => () => undefined),
+  onExtractionTerminal: vi.fn(() => () => undefined),
   meetingList: vi.fn().mockResolvedValue({ meetings: [] }),
   meetingLoad: vi.fn(),
 }

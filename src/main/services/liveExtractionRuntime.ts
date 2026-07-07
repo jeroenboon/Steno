@@ -217,7 +217,9 @@ export class LiveExtractionRuntime {
 
       // Extraction Terminal State (ADR 0042): a truncated model response stops all
       // live LLM interpretation for this meeting and surfaces the stop.
-      this._provider.onTerminal?.((state) => this._handleExtractionTerminal(state))
+      this._provider.onTerminal?.((state) => {
+        this._handleExtractionTerminal(state)
+      })
     } else {
       // Degraded path: no extraction provider — keep transcription + persistence
       this._provider = null
