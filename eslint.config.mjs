@@ -27,7 +27,11 @@ export default tseslint.config(
     },
     settings: {
       react: {
-        version: 'detect',
+        // Pin the React version instead of 'detect'. eslint-plugin-react@7.37.5
+        // (latest; no eslint 10 release exists) detects the version via the
+        // removed ESLint 10 context.getFilename(), which throws. An explicit
+        // version skips detection entirely. Keep in sync with the react dep.
+        version: '19.2',
       },
       'import/resolver': {
         typescript: {
