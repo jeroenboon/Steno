@@ -880,3 +880,67 @@ describe('ASR terminal state (audit C4)', () => {
     expect(sender.sentOn('asr:terminal')).toEqual([{ reason: null }, { reason: 'max-retries' }])
   })
 })
+
+// ---------------------------------------------------------------------------
+// Extraction Terminal State (ADR 0042)
+// ---------------------------------------------------------------------------
+
+describe('LiveExtractionRuntime — extraction terminal state', () => {
+  it('clears any stale extraction:terminal state on construction (reason: null)', () => {
+    const { sender } = buildHarness()
+    expect(sender.sentOn('extraction:terminal')).toEqual([{ reason: null }])
+  })
+
+  it('pushes extraction:terminal when the provider reports truncated output', () => {
+    const { provider, sender } = buildHarness()
+    provider.fireTerminal('output-truncated')
+    // First the reset (null) from construction, then the terminal reason.
+    expect(sender.sentOn('extraction:terminal')).toEqual([
+      { reason: null },
+      { reason: 'output-truncated' },
+    ])
+  })
+
+  it('is idempotent — a second report does not push again', () => {
+    const { provider, sender } = buildHarness()
+    provider.fireTerminal('output-truncated')
+    provider.fireTerminal('output-truncated')
+    expect(sender.sentOn('extraction:terminal')).toEqual([
+      { reason: null },
+      { reason: 'output-truncated' },
+    ])
+  })
+
+  it('stops running rolling turns after termination (tick becomes a no-op)', async () => {
+    const { provider, runtime, sender } = buildHarness()
+    provider.fireTerminal('output-truncated')
+
+    provider.scriptRollingResponse({
+      proposedDecisions: [{ rationale: 'te laat', sourceSpanId: 's1' }],
+      proposedActions: [],
+    })
+    runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    await runtime.tick()
+
+    // No extraction ran: tick short-circuits, so no provider call and no items.
+    expect(sender.sentOn('items:changed')).toHaveLength(0)
+    expect(provider.callCount()).toBe(0)
+  })
+
+  it('skips the final pass on endMeeting after termination but still ends', async () => {
+    const { provider, sender, runtime } = buildHarness()
+    provider.fireTerminal('output-truncated')
+
+    provider.scriptFinalPassResponse({
+      proposedDecisions: [],
+      proposedActions: [],
+      discussionSummaries: [{ agendaItemHint: 'ai-1', text: 'should not appear' }],
+    })
+    runtime.handleSpan(makeSpan('s1', { isFinal: true }))
+    await runtime.endMeeting({ ...MEETING, state: 'ended' })
+
+    // No final pass ran, no summaries emitted.
+    expect(provider.calls().filter((c) => c.isFinalPass)).toHaveLength(0)
+    expect(sender.sentOn('items:summaries')).toHaveLength(0)
+  })
+})

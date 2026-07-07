@@ -32,8 +32,17 @@ import type {
   MeetingId,
   TranscriptSpan,
 } from '@shared/domain'
-import type { AgendaChangedPayload, AsrTerminalPayload, SummaryChangedPayload } from '@shared/ipc'
-import type { AsrTerminalState, ExtractionProvider } from '@shared/providers'
+import type {
+  AgendaChangedPayload,
+  AsrTerminalPayload,
+  ExtractionTerminalPayload,
+  SummaryChangedPayload,
+} from '@shared/ipc'
+import type {
+  AsrTerminalState,
+  ExtractionProvider,
+  ExtractionTerminalState,
+} from '@shared/providers'
 
 import type { IpcSender } from '../audio/AudioCaptureBridge'
 import type { actionRepo } from '../db/repos/actionRepo'
@@ -144,6 +153,12 @@ export class LiveExtractionRuntime {
   private _stopped = false
   private _paused = false
   private _endMeetingCalled = false
+  /**
+   * Set once the extraction provider reported truncated output (ADR 0042). Halts
+   * all live LLM interpretation: tick() becomes a no-op and endMeeting() skips the
+   * final pass. In-memory only, per session.
+   */
+  private _extractionTerminated = false
   /** Latest running summary — in-memory only, not persisted. */
   private _runningSummary = ''
 
@@ -199,6 +214,10 @@ export class LiveExtractionRuntime {
           } satisfies AgendaChangedPayload)
         },
       })
+
+      // Extraction Terminal State (ADR 0042): a truncated model response stops all
+      // live LLM interpretation for this meeting and surfaces the stop.
+      this._provider.onTerminal?.((state) => this._handleExtractionTerminal(state))
     } else {
       // Degraded path: no extraction provider — keep transcription + persistence
       this._provider = null
@@ -215,6 +234,28 @@ export class LiveExtractionRuntime {
     // the renderer from a prior meeting so a stale "transcriptie gestopt" banner
     // never lingers over a healthy new session (audit C4).
     this._sender.send('asr:terminal', { reason: null } satisfies AsrTerminalPayload)
+    // Likewise clear any stale Extraction Terminal State (ADR 0042).
+    this._sender.send('extraction:terminal', { reason: null } satisfies ExtractionTerminalPayload)
+  }
+
+  // -------------------------------------------------------------------------
+  // Extraction terminal state (ADR 0042)
+  // -------------------------------------------------------------------------
+
+  /**
+   * The extraction provider reported truncated output: the chosen model is
+   * unsuitable for live extraction. Stop all live LLM interpretation (tick() and
+   * the final pass) and surface the stop on the EgressIndicator. The transcript
+   * keeps recording. Idempotent — only the first report acts. Reason-only push;
+   * never a key or content.
+   */
+  private _handleExtractionTerminal(state: ExtractionTerminalState): void {
+    if (this._extractionTerminated) return
+    this._extractionTerminated = true
+    this._agendaScheduler?.pause()
+    this._sender.send('extraction:terminal', {
+      reason: state.reason,
+    } satisfies ExtractionTerminalPayload)
   }
 
   // -------------------------------------------------------------------------
@@ -269,6 +310,8 @@ export class LiveExtractionRuntime {
    */
   async tick(): Promise<void> {
     if (this._stopped || this._paused) return
+    // Extraction terminated (truncated model): no more live LLM interpretation.
+    if (this._extractionTerminated) return
     if (this._core === null) return
 
     await this._core.tick(this._contextOwner.routingContext())
@@ -354,6 +397,15 @@ export class LiveExtractionRuntime {
     if (this._endMeetingCalled) return
 
     if (this._core === null) {
+      this._endMeetingCalled = true
+      return
+    }
+
+    // Extraction terminated (truncated model, ADR 0042): skip the final pass and
+    // end-of-meeting inference — the same unsuitable model would only truncate them
+    // too. The meeting still ends (the controller does the Live → Ended transition);
+    // the transcript and any already-Proposed items are kept.
+    if (this._extractionTerminated) {
       this._endMeetingCalled = true
       return
     }

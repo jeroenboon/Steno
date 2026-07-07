@@ -134,4 +134,24 @@ describe('preload bridge — subscribe helper (audit A5)', () => {
     unsub()
     expect(removeListener).toHaveBeenCalledWith('asr:terminal', listener)
   })
+
+  it('registers onExtractionTerminal on the extraction:terminal channel and unsubscribes (ADR 0042)', async () => {
+    const api = await loadApi()
+
+    const received: unknown[] = []
+    const unsub = api.onExtractionTerminal((payload) => {
+      received.push(payload)
+    })
+
+    const call = on.mock.calls.find(([channel]) => channel === 'extraction:terminal')
+    expect(call).toBeDefined()
+    const listener = call?.[1] as (event: unknown, payload: unknown) => void
+
+    const payload = { reason: 'output-truncated' }
+    listener({}, payload)
+    expect(received).toEqual([payload])
+
+    unsub()
+    expect(removeListener).toHaveBeenCalledWith('extraction:terminal', listener)
+  })
 })
