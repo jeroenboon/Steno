@@ -11,6 +11,24 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    # Hold majors that the surrounding ecosystem can't satisfy yet. Each of
+    # these breaks the DoD gate on install/native/lint and can never merge
+    # until the blocking dependency catches up — drop the entry when it does.
+    ignore:
+      # electron 43 needs better-sqlite3 prebuilds for ABI 148; 12.11.1 stops
+      # at ABI 146 (electron 42). Building from source needs a toolchain we
+      # deliberately don't have in CI. Unblock when better-sqlite3 ships an
+      # electron-43 prebuilt.
+      - dependency-name: 'electron'
+        update-types: ['version-update:semver-major']
+      # eslint 10 is rejected by eslint-plugin-import@2.32 (peer caps at
+      # eslint 9). Unblock when eslint-plugin-import declares eslint 10 support.
+      - dependency-name: 'eslint'
+        update-types: ['version-update:semver-major']
+      # @vitejs/plugin-react 6.x requires vite@^8; we're on vite 6 (vitest 3 /
+      # electron-vite 5 cap at vite 7). Unblock with the vite 8 migration.
+      - dependency-name: '@vitejs/plugin-react'
+        update-types: ['version-update:semver-major']
     groups:
       dev-dependencies:
         dependency-type: development
