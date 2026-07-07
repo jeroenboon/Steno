@@ -243,6 +243,8 @@ const nl = {
   'settings.local.baseUrl.placeholder': 'http://localhost:1234/v1',
   'settings.local.model.label': 'Model',
   'settings.local.model.placeholder': 'bijv. het model dat je server geladen heeft',
+  'settings.local.model.hint':
+    "Kies bij voorkeur een instruct-model. 'Reasoning'-modellen die zichtbaar nadenken zijn vaak ongeschikt voor live-extractie: hun denkwerk kan het antwoord afkappen, waarna de live-notulen stoppen. Gebruik een model met een ruim contextvenster (richtlijn ≥ 8k).",
   'settings.local.key.label': 'API-sleutel (optioneel)',
   'settings.local.key.placeholder': 'alleen indien je server er om vraagt',
   'settings.local.key.optional':

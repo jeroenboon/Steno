@@ -137,6 +137,9 @@ export function LocalExtractionCard(props: LocalExtractionCardProps): React.JSX.
           editField('model', v)
         }}
       />
+      <p className="settings-local-extraction__hint" data-testid="local-model-hint">
+        {t('settings.local.model.hint')}
+      </p>
 
       <KeyField
         idBase="local"
