@@ -33,6 +33,7 @@ import {
   inferSourceToText,
   type ExtractionRequest,
   type ExtractionResponse,
+  type ExtractionTerminalState,
   type InferContextInput,
   type InferredContext,
 } from '@shared/providers'
@@ -105,6 +106,13 @@ export interface ExtractionEngineOptions {
   logTag: string
   /** Model identifier, for non-sensitive devlog metadata. */
   model: string
+  /**
+   * Fired once when the wire reports truncated output (`ExtractionTruncatedError`).
+   * The adapter relays this to its `ExtractionProvider.onTerminal` seam so the
+   * runtime can stop live interpretation and surface the Extraction Terminal
+   * State. Optional — omitted by callers that do not care (ADR 0042).
+   */
+  onTerminal?: (state: ExtractionTerminalState) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -115,23 +123,34 @@ export class ExtractionEngine {
   private readonly _wire: ExtractionWire
   private readonly _logTag: string
   private readonly _model: string
+  private readonly _onTerminal: ((state: ExtractionTerminalState) => void) | undefined
 
   constructor(opts: ExtractionEngineOptions) {
     this._wire = opts.wire
     this._logTag = opts.logTag
     this._model = opts.model
+    this._onTerminal = opts.onTerminal
   }
 
   async extract(request: ExtractionRequest): Promise<ExtractionResponse> {
-    const first = await this._callAndCoerce(request)
-    if (first !== null) return first
+    try {
+      const first = await this._callAndCoerce(request)
+      if (first !== null) return first
 
-    console.error(`${this._logTag} Validation failed, retrying`)
-    const retry = await this._callAndCoerce(request)
-    if (retry !== null) return retry
+      console.error(`${this._logTag} Validation failed, retrying`)
+      const retry = await this._callAndCoerce(request)
+      if (retry !== null) return retry
 
-    console.error(`${this._logTag} Retry failed, skipping turn`)
-    return { proposedDecisions: [], proposedActions: [] }
+      console.error(`${this._logTag} Retry failed, skipping turn`)
+      return { proposedDecisions: [], proposedActions: [] }
+    } catch (err) {
+      if (!(err instanceof ExtractionTruncatedError)) throw err
+      // Truncated output: fire the terminal signal and degrade to empty WITHOUT a
+      // retry (a truncation never improves on a second identical call, ADR 0042).
+      console.error(`${this._logTag} Output truncated, stopping live extraction`)
+      this._onTerminal?.({ reason: 'output-truncated' })
+      return { proposedDecisions: [], proposedActions: [] }
+    }
   }
 
   async inferContext(input: InferContextInput): Promise<InferredContext> {
@@ -140,15 +159,22 @@ export class ExtractionEngine {
 
     const known = input.knownAgendaItems ?? []
 
-    const first = await this._callAndValidateInfer(content, known)
-    if (first !== null) return excludeCoveredAgendaItems(first, known)
+    try {
+      const first = await this._callAndValidateInfer(content, known)
+      if (first !== null) return excludeCoveredAgendaItems(first, known)
 
-    console.error(`${this._logTag} Context inference failed, retrying`)
-    const retry = await this._callAndValidateInfer(content, known)
-    if (retry !== null) return excludeCoveredAgendaItems(retry, known)
+      console.error(`${this._logTag} Context inference failed, retrying`)
+      const retry = await this._callAndValidateInfer(content, known)
+      if (retry !== null) return excludeCoveredAgendaItems(retry, known)
 
-    console.error(`${this._logTag} Context inference retry failed, returning empty`)
-    return { agendaItems: [], participants: [] }
+      console.error(`${this._logTag} Context inference retry failed, returning empty`)
+      return { agendaItems: [], participants: [] }
+    } catch (err) {
+      if (!(err instanceof ExtractionTruncatedError)) throw err
+      console.error(`${this._logTag} Output truncated, stopping live extraction`)
+      this._onTerminal?.({ reason: 'output-truncated' })
+      return { agendaItems: [], participants: [] }
+    }
   }
 
   private async _callAndCoerce(request: ExtractionRequest): Promise<ExtractionResponse | null> {
