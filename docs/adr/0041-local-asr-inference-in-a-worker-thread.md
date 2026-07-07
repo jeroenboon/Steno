@@ -1,6 +1,6 @@
 # ADR 0041 — Local ASR inference runs in a worker_thread
 
-**Status:** proposed (spike on `perf/local-asr-worker-offload`, pending in-app verification)
+**Status:** accepted (in-app verified in dev; packaging follow-up tracked below)
 **Relates to:** ADR 0001 (local ONNX ASR), ADR 0005 (process discipline)
 
 ## Context
@@ -49,7 +49,17 @@ and required at runtime from node_modules). The spawner resolves it via
   already finishes the tail). This "lazy" transcript is acceptable but needs a
   visible progress signal and a backlog cap — tracked as a follow-up (P1), along
   with deferring/batching extraction under local load (P2).
-- **Open (why this is still `proposed`):** the emitted-worker path is verified at
-  build level (the file lands in `out/main/`) and end-to-end under Node with real
-  audio, but not yet inside the running Electron app with live mic capture and a
-  packaged build. That is the first thing to confirm before accepting this ADR.
+- **In-app verified (dev):** the emitted worker spawns from `out/main/` inside the
+  running Electron main process with live mic capture; the freeze is gone and
+  transcription flows (audio local, notes cloud). This is what moves the ADR to
+  accepted.
+- **Follow-up — packaging (not yet done):** the repo currently has no
+  electron-builder config or packaging script; the app only runs via
+  `electron-vite build` → `out/`. The spawner resolves the worker with
+  `join(__dirname, 'sherpaDecodeWorker.mjs')`, which works in the `out/` layout but
+  will **not** work once the app is packaged into `app.asar`: Node cannot spawn a
+  worker from inside an asar, and sherpa-onnx's runtime assets cannot load from it
+  either. When packaging is introduced, both the worker entry and sherpa-onnx must
+  be `asarUnpack`'d (or shipped via `extraResources`) and the spawn path pointed at
+  the unpacked location. Tracked as a separate issue — deliberately out of scope for
+  this perf spike.

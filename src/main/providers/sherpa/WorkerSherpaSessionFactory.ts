@@ -185,13 +185,16 @@ class WorkerSherpaSession implements SherpaSession {
 
 /**
  * Spawn the real decode worker. The worker entry is a sibling module resolved
- * relative to this file.
+ * relative to this file: the electron-vite main build emits
+ * `sherpaDecodeWorker.mjs` next to the bundled main entry (verified in dev inside
+ * the running Electron app).
  *
- * NOTE (spike / needs in-app verification): the worker-path resolution below
- * assumes the electron-vite main build emits `sherpaDecodeWorker.mjs` next to the
- * bundled main entry. If the packaged/dev build resolves it elsewhere, adjust the
- * emit (vite asset copy or a `?worker`/`new URL(...)` import) — this is the one
- * seam the unit tests do not cover.
+ * PACKAGING CAVEAT (see ADR 0041 follow-up): `join(__dirname, ...)` resolves inside
+ * `out/main/` today, but once the app is packaged into `app.asar` this path points
+ * into the asar — Node cannot spawn a worker from there, and sherpa-onnx cannot load
+ * its runtime assets from there either. When electron-builder packaging is set up,
+ * `asarUnpack` (or `extraResources`) the worker + sherpa-onnx and point this spawn
+ * at the unpacked location. This is the one seam the unit tests do not cover.
  */
 function defaultSpawn(): SherpaWorkerHandle {
   const worker = new Worker(join(__dirname, 'sherpaDecodeWorker.mjs'))
