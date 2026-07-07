@@ -45,6 +45,7 @@ import { OpenAIBatchAsrProvider } from '../providers/OpenAIBatchAsrProvider'
 import { OpenAICompatibleExtractionProvider } from '../providers/OpenAICompatibleExtractionProvider'
 import { OpenAIRealtimeAsrProvider } from '../providers/OpenAIRealtimeAsrProvider'
 import { ModelDownloader } from '../providers/sherpa/ModelDownloader'
+import { WorkerSherpaSessionFactory } from '../providers/sherpa/WorkerSherpaSessionFactory'
 
 import type { SecretStorage } from './SecretStorage'
 import type {
@@ -195,7 +196,14 @@ function buildAsrProvider(
             'Open Instellingen en download het model eerst.',
         )
       }
-      return new LocalAsrProvider({ modelDir, language: settings.primaryLanguage })
+      // Run inference in a worker_thread so the synchronous WASM decode never
+      // blocks the main process event loop (the "Not Responding" freeze). The
+      // provider's async contract is unchanged. See WorkerSherpaSessionFactory.
+      return new LocalAsrProvider({
+        modelDir,
+        language: settings.primaryLanguage,
+        sessionFactory: new WorkerSherpaSessionFactory(settings.primaryLanguage),
+      })
     }
 
     case 'deepgram': {
