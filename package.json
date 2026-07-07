@@ -33,7 +33,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.55.1",
+    "@anthropic-ai/sdk": "^0.110.0",
     "better-sqlite3": "^12.11.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
