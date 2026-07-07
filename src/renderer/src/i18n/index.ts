@@ -39,6 +39,8 @@ const nl = {
   // ASR terminal state — live transcription stopped for good (audit C4)
   'egress.asr.stopped.auth': 'Transcriptie gestopt: sleutel geweigerd',
   'egress.asr.stopped.max-retries': 'Transcriptie gestopt: verbinding verbroken',
+  // Extraction terminal state — live note extraction stopped for good (ADR 0042)
+  'egress.extraction.stopped.output-truncated': 'Notulen gestopt: model ongeschikt',
 
   // Draft screen (item 0014)
   'draft.paste.heading': 'Agenda plakken',
@@ -241,6 +243,8 @@ const nl = {
   'settings.local.baseUrl.placeholder': 'http://localhost:1234/v1',
   'settings.local.model.label': 'Model',
   'settings.local.model.placeholder': 'bijv. het model dat je server geladen heeft',
+  'settings.local.model.hint':
+    "Kies bij voorkeur een instruct-model. 'Reasoning'-modellen die zichtbaar nadenken zijn vaak ongeschikt voor live-extractie: hun denkwerk kan het antwoord afkappen, waarna de live-notulen stoppen. Gebruik een model met een ruim contextvenster (richtlijn ≥ 8k).",
   'settings.local.key.label': 'API-sleutel (optioneel)',
   'settings.local.key.placeholder': 'alleen indien je server er om vraagt',
   'settings.local.key.optional':

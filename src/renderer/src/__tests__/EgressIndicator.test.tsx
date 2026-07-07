@@ -110,4 +110,21 @@ describe('EgressIndicator — ASR terminal state (audit C4)', () => {
     rerender(<EgressIndicator egressState={state} terminalReason={null} />)
     expect(screen.queryByTestId('egress-terminal')).not.toBeInTheDocument()
   })
+
+  // Extraction terminal state (ADR 0042)
+
+  it('shows the extraction terminal message additively as an assertive live region', () => {
+    render(<EgressIndicator egressState={state} extractionTerminalReason="output-truncated" />)
+    const el = screen.getByTestId('egress-extraction-terminal')
+    expect(el).toHaveTextContent('Notulen gestopt: model ongeschikt')
+    expect(el).toHaveAttribute('role', 'status')
+    expect(el).toHaveAttribute('aria-live', 'assertive')
+    // The normal badge is still present.
+    expect(screen.getByTestId('egress-indicator')).toBeInTheDocument()
+  })
+
+  it('shows no extraction terminal message when the reason is null', () => {
+    render(<EgressIndicator egressState={state} extractionTerminalReason={null} />)
+    expect(screen.queryByTestId('egress-extraction-terminal')).not.toBeInTheDocument()
+  })
 })

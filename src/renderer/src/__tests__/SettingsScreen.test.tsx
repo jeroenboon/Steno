@@ -797,6 +797,8 @@ describe('SettingsScreen — local extraction', () => {
       expect(screen.getByTestId('local-base-url')).toBeDefined()
       expect(screen.getByTestId('local-model')).toBeDefined()
     })
+    // The instruct-model hint is shown next to the model field (ADR 0042).
+    expect(screen.getByTestId('local-model-hint').textContent).toContain('instruct-model')
   })
 
   it('persists extractionProvider "local" with the entered base URL + model on save', async () => {

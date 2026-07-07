@@ -34,7 +34,9 @@ Small-model quality is handled as **expectations, not code**: a point-of-choice 
 
 ### 5. Failure hints live in "Test verbinding" (config-time), not a new runtime channel
 
-Local failures are common and user-fixable (server off, model not loaded, wrong port, key needed). `connectionTest` gains local-aware Dutch copy mapping `network` / `404` / `401`/`403` to concrete hints. Runtime extraction failure stays silent-no-items as it is for every provider today; a runtime "extraction stopped" signal (analogous to ASR Terminal State) is explicitly out of scope for this feature.
+Local failures are common and user-fixable (server off, model not loaded, wrong port, key needed). `connectionTest` gains local-aware Dutch copy mapping `network` / `404` / `401`/`403` to concrete hints. Runtime extraction failure stays silent-no-items as it is for every provider today; a runtime "extraction stopped" signal (analogous to ASR Terminal State) was explicitly out of scope for this feature.
+
+**Superseded (2026-07-07):** the first real local run surfaced a failure this could not cover — a reasoning model that truncates its answer (`finish_reason: length`) produces no notes silently. That runtime "extraction stopped" signal is now built as the **Extraction Terminal State** (ADR 0042), reversing the out-of-scope note above. A static instruct-model hint on the local extraction card is added there too.
 
 ## Consequences
 

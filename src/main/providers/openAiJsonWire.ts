@@ -21,7 +21,11 @@
  * logged. Logs carry the non-sensitive `logTag` (e.g. `[OpenAI]`, `[Azure]`).
  */
 
-import type { ExtractionCall, ExtractionWire } from './extractionEngine'
+import {
+  ExtractionTruncatedError,
+  type ExtractionCall,
+  type ExtractionWire,
+} from './extractionEngine'
 
 // ---------------------------------------------------------------------------
 // Target + options
@@ -143,6 +147,15 @@ export class OpenAiJsonWire implements ExtractionWire {
     }
 
     const json: unknown = await response.json()
+
+    // Truncated output: the model hit its budget mid-answer. Its result cannot be
+    // trusted, and a retry never helps, so throw a distinct error the engine turns
+    // into an Extraction Terminal State rather than a retried empty turn (ADR 0042).
+    if (extractFinishReason(json) === 'length') {
+      console.error(`${this._logTag} Output truncated (finish_reason: length)`)
+      throw new ExtractionTruncatedError()
+    }
+
     const content = extractContent(json)
     if (content === null) {
       console.error(`${this._logTag} No content in response`)
@@ -215,4 +228,15 @@ function extractContent(json: unknown): string | null {
   if (message === null || typeof message !== 'object') return null
   const content = (message as Record<string, unknown>).content
   return typeof content === 'string' ? content : null
+}
+
+/** The first choice's `finish_reason` (e.g. `'stop'` / `'length'`), or null. */
+function extractFinishReason(json: unknown): string | null {
+  if (json === null || typeof json !== 'object') return null
+  const choices = (json as Record<string, unknown>).choices
+  if (!Array.isArray(choices) || choices.length === 0) return null
+  const first: unknown = choices[0]
+  if (first === null || typeof first !== 'object') return null
+  const reason = (first as Record<string, unknown>).finish_reason
+  return typeof reason === 'string' ? reason : null
 }

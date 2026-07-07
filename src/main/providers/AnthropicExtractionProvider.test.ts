@@ -128,6 +128,26 @@ describe('AnthropicExtractionProvider', () => {
   })
 
   // -------------------------------------------------------------------------
+  // Extraction Terminal State (ADR 0042)
+  // -------------------------------------------------------------------------
+
+  it('fires onTerminal once and skips the retry on stop_reason max_tokens', async () => {
+    mockCreate.mockResolvedValue({ type: 'message', content: [], stop_reason: 'max_tokens' })
+
+    const provider = makeProvider()
+    const onTerminal = vi.fn()
+    provider.onTerminal(onTerminal)
+
+    const result = await provider.extract(rollingRequest)
+
+    expect(result).toEqual({ proposedDecisions: [], proposedActions: [] })
+    expect(onTerminal).toHaveBeenCalledTimes(1)
+    expect(onTerminal).toHaveBeenCalledWith({ reason: 'output-truncated' })
+    // No retry — a truncation never improves on a second identical call.
+    expect(mockCreate).toHaveBeenCalledTimes(1)
+  })
+
+  // -------------------------------------------------------------------------
   // Final pass: also returns discussion summaries
   // -------------------------------------------------------------------------
 

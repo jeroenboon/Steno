@@ -32,6 +32,7 @@ import type {
   ExtractionProvider,
   ExtractionRequest,
   ExtractionResponse,
+  ExtractionTerminalState,
   InferContextInput,
   InferredContext,
 } from '@shared/providers'
@@ -73,6 +74,8 @@ export interface OpenAICompatibleExtractionProviderOptions {
 
 export class OpenAICompatibleExtractionProvider implements ExtractionProvider {
   private readonly _engine: ExtractionEngine
+  /** Single Extraction Terminal State observer, set via onTerminal() (ADR 0042). */
+  private _onTerminal: ((state: ExtractionTerminalState) => void) | undefined
 
   constructor(opts: OpenAICompatibleExtractionProviderOptions) {
     const baseUrl = opts.baseUrl.replace(/\/$/, '') // strip trailing slash
@@ -95,7 +98,17 @@ export class OpenAICompatibleExtractionProvider implements ExtractionProvider {
       ...(opts.responseFormat === undefined ? {} : { responseFormat: opts.responseFormat }),
     })
 
-    this._engine = new ExtractionEngine({ wire, logTag, model: opts.model })
+    this._engine = new ExtractionEngine({
+      wire,
+      logTag,
+      model: opts.model,
+      onTerminal: (state) => this._onTerminal?.(state),
+    })
+  }
+
+  /** Register the Extraction Terminal State observer (ADR 0042). */
+  onTerminal(cb: (state: ExtractionTerminalState) => void): void {
+    this._onTerminal = cb
   }
 
   async extract(request: ExtractionRequest): Promise<ExtractionResponse> {

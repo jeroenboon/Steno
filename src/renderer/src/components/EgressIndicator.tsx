@@ -14,7 +14,7 @@
 import React from 'react'
 
 import type { EgressState } from '@shared/ipc'
-import type { AsrTerminalReason } from '@shared/providers'
+import type { AsrTerminalReason, ExtractionTerminalReason } from '@shared/providers'
 import { buildDisclosureCopy } from '@shared/settings/egressState'
 
 import { t, type TranslationKey } from '../i18n'
@@ -30,12 +30,22 @@ export interface EgressIndicatorProps {
    * indicator additively shows why. Null/undefined = normal state, no message.
    */
   terminalReason?: AsrTerminalReason | null
+  /**
+   * When set, live note extraction has stopped permanently (ADR 0042) and the
+   * indicator additively shows why. Null/undefined = normal state, no message.
+   */
+  extractionTerminalReason?: ExtractionTerminalReason | null
 }
 
-/** Dutch message per terminal reason. Externalised via i18n (keyboard/SR read). */
+/** Dutch message per ASR terminal reason. Externalised via i18n (keyboard/SR read). */
 const TERMINAL_MESSAGE_KEY: Record<AsrTerminalReason, TranslationKey> = {
   auth: 'egress.asr.stopped.auth',
   'max-retries': 'egress.asr.stopped.max-retries',
+}
+
+/** Dutch message per extraction terminal reason. */
+const EXTRACTION_TERMINAL_MESSAGE_KEY: Record<ExtractionTerminalReason, TranslationKey> = {
+  'output-truncated': 'egress.extraction.stopped.output-truncated',
 }
 
 // ---------------------------------------------------------------------------
@@ -45,6 +55,7 @@ const TERMINAL_MESSAGE_KEY: Record<AsrTerminalReason, TranslationKey> = {
 export function EgressIndicator({
   egressState,
   terminalReason,
+  extractionTerminalReason,
 }: EgressIndicatorProps): React.JSX.Element {
   const { badgeText } = buildDisclosureCopy(egressState)
 
@@ -72,6 +83,20 @@ export function EgressIndicator({
           aria-live="assertive"
         >
           {t(TERMINAL_MESSAGE_KEY[terminalReason])}
+        </span>
+      )}
+      {/*
+       * Extraction terminal state (ADR 0042): the chosen model truncated its
+       * output and live note extraction stopped. Additive, like the ASR notice.
+       */}
+      {extractionTerminalReason != null && (
+        <span
+          data-testid="egress-extraction-terminal"
+          className="egress-indicator__terminal"
+          role="status"
+          aria-live="assertive"
+        >
+          {t(EXTRACTION_TERMINAL_MESSAGE_KEY[extractionTerminalReason])}
         </span>
       )}
     </div>

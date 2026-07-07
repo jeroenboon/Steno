@@ -19,7 +19,12 @@ import { captureConsole } from '@shared/testing/captureConsole'
 
 import { initDevlog, resetDevlog } from '../devlog'
 
-import { ExtractionEngine, type ExtractionCall, type ExtractionWire } from './extractionEngine'
+import {
+  ExtractionEngine,
+  ExtractionTruncatedError,
+  type ExtractionCall,
+  type ExtractionWire,
+} from './extractionEngine'
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -70,6 +75,23 @@ function fakeWire(candidates: unknown[]): ExtractionWire & {
 
 function makeEngine(wire: ExtractionWire): ExtractionEngine {
   return new ExtractionEngine({ wire, logTag: '[Fake]', model: 'fake-model' })
+}
+
+/**
+ * A fake wire whose every call throws ExtractionTruncatedError, recording how
+ * many times it was called (to assert the retry is skipped).
+ */
+function truncatingWire(): ExtractionWire & { count: number } {
+  const w = {
+    count: 0,
+    extractInstruction: 'FAKE_EXTRACT_INSTRUCTION',
+    inferInstruction: 'FAKE_INFER_INSTRUCTION',
+    callStructured(): Promise<unknown> {
+      w.count += 1
+      return Promise.reject(new ExtractionTruncatedError())
+    },
+  }
+  return w
 }
 
 afterEach(() => {
@@ -294,5 +316,50 @@ describe('ExtractionEngine — devlog', () => {
     const turn = lines.find((l) => l.event === 'turn')
     expect(turn?.content?.request).toContain('begroting')
     expect(turn?.content?.response).toContain('Begroting goedgekeurd')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Extraction Terminal State (ADR 0042)
+// ---------------------------------------------------------------------------
+
+describe('ExtractionEngine truncation → terminal', () => {
+  it('extract(): fires onTerminal once, skips the retry, and returns empty', async () => {
+    const wire = truncatingWire()
+    const onTerminal = vi.fn()
+    const engine = new ExtractionEngine({ wire, logTag: '[Fake]', model: 'fake-model', onTerminal })
+
+    const result = await engine.extract(extractionRequest)
+
+    expect(result).toEqual({ proposedDecisions: [], proposedActions: [] })
+    expect(onTerminal).toHaveBeenCalledTimes(1)
+    expect(onTerminal).toHaveBeenCalledWith({ reason: 'output-truncated' })
+    // No retry: exactly one wire call, unlike the ordinary null-failure path.
+    expect(wire.count).toBe(1)
+  })
+
+  it('inferContext(): fires onTerminal once, skips the retry, and returns empty', async () => {
+    const wire = truncatingWire()
+    const onTerminal = vi.fn()
+    const engine = new ExtractionEngine({ wire, logTag: '[Fake]', model: 'fake-model', onTerminal })
+
+    const result = await engine.inferContext({ source: { spans } })
+
+    expect(result).toEqual({ agendaItems: [], participants: [] })
+    expect(onTerminal).toHaveBeenCalledTimes(1)
+    expect(wire.count).toBe(1)
+  })
+
+  it('degrades to empty even without an onTerminal callback', async () => {
+    const engine = new ExtractionEngine({
+      wire: truncatingWire(),
+      logTag: '[Fake]',
+      model: 'fake-model',
+    })
+
+    await expect(engine.extract(extractionRequest)).resolves.toEqual({
+      proposedDecisions: [],
+      proposedActions: [],
+    })
   })
 })

@@ -104,6 +104,12 @@ const api: RendererApi = {
 
   onAsrTerminal: (cb) => subscribe('asr:terminal', cb),
 
+  // ---------------------------------------------------------------------------
+  // Extraction terminal state (ADR 0042)
+  // ---------------------------------------------------------------------------
+
+  onExtractionTerminal: (cb) => subscribe('extraction:terminal', cb),
+
   summaryQuery: (req) => invoke('summary:query', req),
 
   meetingEnd: (req) => invoke('meeting:end', req),

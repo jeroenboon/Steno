@@ -10,7 +10,7 @@
 import { z } from 'zod'
 
 import { MeetingSchema } from '../domain'
-import { AsrTerminalReasonSchema } from '../providers'
+import { AsrTerminalReasonSchema, ExtractionTerminalReasonSchema } from '../providers'
 
 import type { IpcChannelSchema, UnsubscribeFn } from './common'
 
@@ -88,6 +88,31 @@ export const AsrTerminalPayloadSchema = z.object({
 })
 
 export type AsrTerminalPayload = z.infer<typeof AsrTerminalPayloadSchema>
+
+// ---------------------------------------------------------------------------
+// extraction:terminal — main → renderer push event (ADR 0042)
+//
+// Emitted when live note extraction stops permanently for the meeting because
+// the model returned truncated output (`finish_reason: length` /
+// `stop_reason: max_tokens`), so the always-visible EgressIndicator can tell the
+// note-taker that the chosen model is unsuitable — the transcript keeps
+// recording. `reason: null` clears the state: main emits it when a NEW live
+// session starts. The extraction-side sibling of asr:terminal.
+//
+// Privacy (principle #11/#12): the payload carries ONLY the reason enum — never
+// a key, prompt, or any transcript content.
+//
+// Pattern: webContents.send('extraction:terminal', payload) on main (from the
+//          live runtime); ipcRenderer.on('extraction:terminal', listener) in
+//          preload, exposed as window.api.onExtractionTerminal(cb).
+// ---------------------------------------------------------------------------
+
+export const ExtractionTerminalPayloadSchema = z.object({
+  /** The terminal reason, or null to clear the state (new session started). */
+  reason: ExtractionTerminalReasonSchema.nullable(),
+})
+
+export type ExtractionTerminalPayload = z.infer<typeof ExtractionTerminalPayloadSchema>
 
 // ---------------------------------------------------------------------------
 // summary:query — invoke channel (item 0020)
@@ -205,6 +230,14 @@ export interface SessionApi {
    * shows the stop reason on the EgressIndicator. Returns an unsubscribe function.
    */
   onAsrTerminal: (cb: (payload: AsrTerminalPayload) => void) => UnsubscribeFn
+  /**
+   * Subscribe to extraction terminal-state events pushed from main (ADR 0042).
+   * Fired when live note extraction stops permanently because the model returned
+   * truncated output (`output-truncated`), and with `reason: null` when a new
+   * session starts (clears the state). The UI shows the stop on the
+   * EgressIndicator. Returns an unsubscribe function.
+   */
+  onExtractionTerminal: (cb: (payload: ExtractionTerminalPayload) => void) => UnsubscribeFn
   /**
    * Ask a free-form question grounded in the current transcript (item 0020).
    * Main calls provider.query() and returns a plain-text answer.

@@ -16,6 +16,7 @@ import type { TranscriptSpan } from '../domain/types'
 
 import type { ExtractionRequest, ExtractionResponse, InferredContext } from './dtos'
 import type { ExtractionProvider, InferContextInput } from './ExtractionProvider'
+import type { ExtractionTerminalState } from './extractionTerminalState'
 
 export class FakeExtractionProvider implements ExtractionProvider {
   private _rollingScripts: ExtractionResponse[] = []
@@ -27,6 +28,7 @@ export class FakeExtractionProvider implements ExtractionProvider {
   private _queryCalls: { spans: TranscriptSpan[]; question: string }[] = []
   private _inferContextResponse: InferredContext | null = null
   private _inferContextCalls: InferContextInput[] = []
+  private _onTerminal: ((state: ExtractionTerminalState) => void) | undefined
 
   /**
    * Enqueue a scripted response for the next rolling (non-final-pass) call.
@@ -127,5 +129,15 @@ export class FakeExtractionProvider implements ExtractionProvider {
   inferContext(input: InferContextInput): Promise<InferredContext> {
     this._inferContextCalls.push(input)
     return Promise.resolve(this._inferContextResponse ?? { agendaItems: [], participants: [] })
+  }
+
+  /** Register the Extraction Terminal State observer (ADR 0042). */
+  onTerminal(cb: (state: ExtractionTerminalState) => void): void {
+    this._onTerminal = cb
+  }
+
+  /** Simulate the provider reporting truncated output (ADR 0042). */
+  fireTerminal(reason: ExtractionTerminalState['reason'] = 'output-truncated'): void {
+    this._onTerminal?.({ reason })
   }
 }
