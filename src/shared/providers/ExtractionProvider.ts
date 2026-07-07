@@ -23,6 +23,7 @@
 import type { TranscriptSpan } from '../domain/types'
 
 import type { ExtractionRequest, ExtractionResponse, InferredContext } from './dtos'
+import type { ExtractionTerminalState } from './extractionTerminalState'
 
 /**
  * Input to {@link ExtractionProvider.inferContext}.
@@ -92,4 +93,14 @@ export interface ExtractionProvider {
    * (same pattern as summarise/query). See ADR 0026 and ADR 0029.
    */
   inferContext?(input: InferContextInput): Promise<InferredContext>
+
+  /**
+   * Register a single observer for the Extraction Terminal State: fired once when
+   * the provider returns truncated output (`finish_reason: length` /
+   * `stop_reason: max_tokens`) and live extraction must stop. The runtime wires
+   * this to halt the cadence and surface the stop. The sibling of
+   * `ASRProvider.onTerminal`. Optional — guard with `provider.onTerminal !== undefined`
+   * (same pattern as summarise/query). See ADR 0042.
+   */
+  onTerminal?(cb: (state: ExtractionTerminalState) => void): void
 }

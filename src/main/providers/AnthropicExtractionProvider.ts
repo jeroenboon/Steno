@@ -33,6 +33,7 @@ import type {
   ExtractionProvider,
   ExtractionRequest,
   ExtractionResponse,
+  ExtractionTerminalState,
   InferContextInput,
   InferredContext,
 } from '@shared/providers'
@@ -67,6 +68,8 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
   private readonly _client: Anthropic
   private readonly _rollingModel: string
   private readonly _engine: ExtractionEngine
+  /** Single Extraction Terminal State observer, set via onTerminal() (ADR 0042). */
+  private _onTerminal: ((state: ExtractionTerminalState) => void) | undefined
 
   constructor(options: AnthropicExtractionProviderOptions) {
     this._client = new Anthropic({ apiKey: options.apiKey })
@@ -79,7 +82,12 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
       finalPassModel,
       logTag: LOG_TAG,
     })
-    this._engine = new ExtractionEngine({ wire, logTag: LOG_TAG, model: this._rollingModel })
+    this._engine = new ExtractionEngine({
+      wire,
+      logTag: LOG_TAG,
+      model: this._rollingModel,
+      onTerminal: (state) => this._onTerminal?.(state),
+    })
   }
 
   async extract(request: ExtractionRequest): Promise<ExtractionResponse> {
@@ -88,6 +96,11 @@ export class AnthropicExtractionProvider implements ExtractionProvider {
 
   async inferContext(input: InferContextInput): Promise<InferredContext> {
     return this._engine.inferContext(input)
+  }
+
+  /** Register the Extraction Terminal State observer (ADR 0042). */
+  onTerminal(cb: (state: ExtractionTerminalState) => void): void {
+    this._onTerminal = cb
   }
 
   // ---------------------------------------------------------------------------

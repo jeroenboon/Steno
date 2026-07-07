@@ -308,6 +308,28 @@ describe('OpenAICompatibleExtractionProvider.extract', () => {
     expect(result.proposedDecisions[0]?.rationale).toBe('Begroting goedgekeurd')
   })
 
+  it('fires onTerminal once and skips the retry on a truncated response', async () => {
+    // finish_reason: length → the model was cut off mid-answer (ADR 0042).
+    const truncated = {
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({ choices: [{ finish_reason: 'length', message: { content: '' } }] }),
+    } as unknown as Response
+    const fetchMock = vi.fn().mockResolvedValue(truncated)
+    const provider = makeProvider(fetchMock)
+    const onTerminal = vi.fn()
+    provider.onTerminal(onTerminal)
+
+    const result = await provider.extract(extractionRequest)
+
+    expect(result).toEqual({ proposedDecisions: [], proposedActions: [] })
+    expect(onTerminal).toHaveBeenCalledTimes(1)
+    expect(onTerminal).toHaveBeenCalledWith({ reason: 'output-truncated' })
+    // No retry — a truncation never improves on a second identical call.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('omits the Authorization header when no apiKey is given (keyless local server)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse(JSON.stringify(validExtraction)))
     const provider = makeProvider(fetchMock, { apiKey: undefined })
