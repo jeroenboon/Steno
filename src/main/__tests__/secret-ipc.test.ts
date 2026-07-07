@@ -14,9 +14,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 // Mock the Anthropic SDK so tests run in Node without a real HTTP client.
 vi.mock('@anthropic-ai/sdk', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    messages: { create: vi.fn() },
-  })),
+  default: vi.fn().mockImplementation(function () {
+    return {
+      messages: { create: vi.fn() },
+    }
+  }),
 }))
 
 import { DEFAULT_SETTINGS } from '../../shared/settings/settingsSchema'

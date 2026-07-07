@@ -21,9 +21,11 @@ import { useAppStore } from '../store/appStore'
 // Mock the import service so no real decode/stream happens.
 const mockStreamFile = vi.fn()
 vi.mock('../services/AudioFileImportService', () => ({
-  AudioFileImportService: vi.fn().mockImplementation(() => ({
-    streamFile: mockStreamFile,
-  })),
+  AudioFileImportService: vi.fn().mockImplementation(function () {
+    return {
+      streamFile: mockStreamFile,
+    }
+  }),
 }))
 
 let progressCb: ((evt: ImportProgressEvent) => void) | null = null

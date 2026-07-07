@@ -12,7 +12,7 @@
  * webContents sender are the only collaborators.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest'
 
 import type { TranscriptSpan } from '@shared/domain/types'
 import { FakeASRProvider } from '@shared/providers'
@@ -25,7 +25,7 @@ import { AudioCaptureBridge } from './AudioCaptureBridge'
 
 /** Minimal fake webContents sender — records what was sent. */
 function makeWebContentsSender(): {
-  send: ReturnType<typeof vi.fn>
+  send: Mock<(channel: string, span: TranscriptSpan) => void>
   sentSpans: () => TranscriptSpan[]
 } {
   const calls: TranscriptSpan[] = []
