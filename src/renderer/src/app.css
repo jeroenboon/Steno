@@ -9,9 +9,36 @@
  * the egress badge, the pencil/ink transcript).
  */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/*
+  Tailwind v4 migration (was `@tailwind base/components/utilities`).
+  The rich custom theme stays in the v3-style `tailwind.config.js`, loaded here
+  via `@config`. The theme maps token utilities (e.g. `bg-surface-1`) onto the
+  `--color-*` CSS variables defined in tokens.css. Porting it into a v4 `@theme`
+  block is not viable: Tailwind's color namespace is itself `--color-*`, so the
+  tokens would collide with (and self-reference) the theme keys. `@config`
+  reproduces the exact v3 resolution and keeps every token intact.
+*/
+@config '../../../tailwind.config.js';
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
 
 /* --- Base reset --- */
 
