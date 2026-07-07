@@ -19,7 +19,7 @@
 
 import type Anthropic from '@anthropic-ai/sdk'
 
-import type { ExtractionCall, ExtractionWire } from './extractionEngine'
+import { ExtractionTruncatedError, type ExtractionCall, type ExtractionWire } from './extractionEngine'
 
 // ---------------------------------------------------------------------------
 // Tool definitions
@@ -195,6 +195,13 @@ export class AnthropicToolWire implements ExtractionWire {
     response: Awaited<ReturnType<Anthropic['messages']['create']>>,
     toolName: string,
   ): unknown {
+    // Truncated output: the model hit max_tokens mid-answer, so its result cannot
+    // be trusted and a retry never helps. Throw a distinct error the engine turns
+    // into an Extraction Terminal State rather than a retried empty turn (ADR 0042).
+    if ('stop_reason' in response && response.stop_reason === 'max_tokens') {
+      console.error(`${this._logTag} Output truncated (stop_reason: max_tokens)`)
+      throw new ExtractionTruncatedError()
+    }
     if (!('content' in response) || !Array.isArray(response.content)) return null
     const block = response.content.find((b) => b.type === 'tool_use')
     if (block?.type !== 'tool_use') {
