@@ -39,6 +39,8 @@ const nl = {
   // ASR terminal state — live transcription stopped for good (audit C4)
   'egress.asr.stopped.auth': 'Transcriptie gestopt: sleutel geweigerd',
   'egress.asr.stopped.max-retries': 'Transcriptie gestopt: verbinding verbroken',
+  // Extraction terminal state — live note extraction stopped for good (ADR 0042)
+  'egress.extraction.stopped.output-truncated': 'Notulen gestopt: model ongeschikt',
 
   // Draft screen (item 0014)
   'draft.paste.heading': 'Agenda plakken',

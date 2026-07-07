@@ -14,7 +14,11 @@
 import React, { useEffect, useState } from 'react'
 
 import type { EgressState } from '@shared/ipc'
-import { AsrTerminalPayloadSchema, ItemsChangedPayloadSchema } from '@shared/ipc'
+import {
+  AsrTerminalPayloadSchema,
+  ExtractionTerminalPayloadSchema,
+  ItemsChangedPayloadSchema,
+} from '@shared/ipc'
 import { resolveAsrKeyRef, resolveExtractionKeyRef } from '@shared/settings/keyRefs'
 
 import { EgressIndicator } from './components/EgressIndicator'
@@ -82,6 +86,8 @@ export function App(): React.JSX.Element {
   const reconcileItems = useAppStore((s) => s.reconcileItems)
   const asrTerminalReason = useAppStore((s) => s.asrTerminalReason)
   const setAsrTerminalReason = useAppStore((s) => s.setAsrTerminalReason)
+  const extractionTerminalReason = useAppStore((s) => s.extractionTerminalReason)
+  const setExtractionTerminalReason = useAppStore((s) => s.setExtractionTerminalReason)
 
   const [egressState, setEgressState] = useState<EgressState>(DEFAULT_EGRESS)
   const [keysConfigured, setKeysConfigured] = useState<boolean | null>(null)
@@ -148,6 +154,19 @@ export function App(): React.JSX.Element {
     })
   }, [setAsrTerminalReason])
 
+  // Extraction terminal state (ADR 0042). Main pushes the stop reason when the
+  // model truncates its output (unsuitable for live extraction) and reason=null
+  // when a new session starts. The EgressIndicator renders it additively.
+  useEffect(() => {
+    return onValidated(
+      window.api.onExtractionTerminal,
+      ExtractionTerminalPayloadSchema,
+      (payload) => {
+        setExtractionTerminalReason(payload.reason)
+      },
+    )
+  }, [setExtractionTerminalReason])
+
   // A live recording session is in progress (not merely a meeting loaded for
   // Review) — this is what enables the Live tab, shows the live dot, and locks
   // the Draft tab.
@@ -188,7 +207,11 @@ export function App(): React.JSX.Element {
           })}
         </nav>
 
-        <EgressIndicator egressState={egressState} terminalReason={asrTerminalReason} />
+        <EgressIndicator
+          egressState={egressState}
+          terminalReason={asrTerminalReason}
+          extractionTerminalReason={extractionTerminalReason}
+        />
       </header>
 
       {/* No-key banner — shown once we know keys are missing */}
